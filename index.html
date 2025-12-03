@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chat UI</title>
+    <link rel="stylesheet" href="styles/styles.css">
+    <!-- Подключение иконок через Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" integrity="sha512-pV5Ku0qCZJ7J28dWtZ3GZq7Nv7mGzO8Bq7i5F06FtWbGN6L3lYw55g6RQ2R+5f59b3W5f6f4T1v5v5v3eT7fWg==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+</head>
+<body>
+    <div class="app-container">
+        <!-- 1. Левая панель навигации -->
+        <aside class="sidebar">
+            <i class="fas fa-home" aria-label="Главная"></i>
+            <i class="fas fa-comments" aria-label="Чаты"></i>
+            <i class="fas fa-user-friends" aria-label="Контакты"></i>
+            <i class="fas fa-cog" aria-label="Настройки"></i>
+        </aside>
+
+        <!-- 2. Панель списка чатов -->
+        <section class="chat-list-panel">
+            <div class="chat-list-search">
+                <i class="fas fa-search" aria-hidden="true"></i>
+                <input type="text" placeholder="Поиск по чатам" aria-label="Поиск по чатам">
+            </div>
+            <div class="chat-list">
+                <!-- Пример активного чата -->
+                <div class="chat-item active">
+                    <div class="chat-item-avatar">S</div>
+                    <div class="chat-item-info">
+                        <div class="chat-item-name">Skylar Rossar</div>
+                        <div class="chat-item-preview">Привет! Как добрались?</div>
+                    </div>
+                </div>
+                <!-- Другие чаты -->
+                <div class="chat-item">
+                    <div class="chat-item-avatar">A</div>
+                    <div class="chat-item-info">
+                        <div class="chat-item-name">Alex Morgan</div>
+                        <div class="chat-item-preview">Посмотри этот файл</div>
+                    </div>
+                </div>
+                <div class="chat-item">
+                    <div class="chat-item-avatar">J</div>
+                    <div class="chat-item-info">
+                        <div class="chat-item-name">Jordan Lee</div>
+                        <div class="chat-item-preview">Созвонимся завтра?</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 3. Основной чат -->
+        <main class="chat-main">
+            <header class="chat-header">
+                <div class="chat-header-avatar">S</div>
+                <div class="chat-header-info">
+                    <div class="chat-header-name">Skylar Rossar</div>
+                    <div class="chat-header-status">Онлайн</div>
+                </div>
+            </header>
+            <div class="chat-messages">
+                <div class="message received">
+                    Привет! Как добрались до места?
+                </div>
+                <div class="message sent">
+                    Всё отлично, уже на месте. Спасибо!
+                </div>
+                <div class="message received">
+                    Отлично! Отдыхай, а завтра начнём.
+                </div>
+            </div>
+            <div class="chat-input-container">
+                <input type="text" class="chat-input" placeholder="Напишите сообщение..." aria-label="Сообщение">
+                <button class="chat-send-btn" aria-label="Отправить">
+                    <i class="fas fa-paper-plane" aria-hidden="true"></i>
+                </button>
+            </div>
+        </main>
+
+        <!-- 4. Панель общих медиа и файлов -->
+        <aside class="shared-media-panel">
+            <!-- Общие медиа -->
+            <section>
+                <div class="panel-header">
+                    <h3>Shared Media</h3>
+                    <a href="#" class="see-all">See All</a>
+                </div>
+                <div class="shared-media-grid">
+                    <div class="shared-media-item" style="background: linear-gradient(45deg, #e05e83, #c53c65);"></div>
+                    <div class="shared-media-item" style="background: linear-gradient(45deg, #a482f7, #6641e7);"></div>
+                    <div class="shared-media-item" style="background: linear-gradient(45deg, #f7d460, #e9b343);"></div>
+                    <div class="shared-media-item" style="background: linear-gradient(45deg, #f07e5b, #e05739);"></div>
+                    <div class="shared-media-item" style="background: linear-gradient(45deg, #4da49b, #337a72);"></div>
+                    <div class="shared-media-item" style="background: linear-gradient(45deg, #8c8c8c, #5a5a5a);"></div>
+                </div>
+            </section>
+
+            <!-- Общие файлы -->
+            <section>
+                <div class="panel-header">
+                    <h3>Shared Files</h3>
+                    <a href="#" class="see-all">See All</a>
+                </div>
+                <div class="shared-files-list">
+                    <div class="shared-file-item">
+                        <div class="shared-file-icon sketch">SK</div>
+                        <div class="shared-file-info">
+                            <div class="shared-file-name">UARM_sketch</div>
+                            <div class="shared-file-size">04.20.21 • 200mb</div>
+                        </div>
+                        <i class="fas fa-download download-icon" aria-label="Скачать файл"></i>
+                    </div>
+                    <div class="shared-file-item">
+                        <div class="shared-file-icon zip">ZIP</div>
+                        <div class="shared-file-info">
+                            <div class="shared-file-name">pathrock_folder</div>
+                            <div class="shared-file-size">04.20.21 • 100mb</div>
+                        </div>
+                        <i class="fas fa-download download-icon" aria-label="Скачать файл"></i>
+                    </div>
+                    <div class="shared-file-item">
+                        <div class="shared-file-icon pdf">PDF</div>
+                        <div class="shared-file-info">
+                            <div class="shared-file-name">pathrock_brandbook.pdf</div>
+                            <div class="shared-file-size">04.20.21 • 20mb</div>
+                        </div>
+                        <i class="fas fa-download download-icon" aria-label="Скачать файл"></i>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Общие ссылки -->
+            <section>
+                <div class="panel-header">
+                    <h3>Shared Links</h3>
+                    <a href="#" class="see-all">See All</a>
+                </div>
+                <div class="shared-files-list">
+                    <div class="shared-file-item">
+                        <div class="shared-file-icon" style="background-color: #2a2a4b;">
+                            <i class="fas fa-link" style="color: white;" aria-hidden="true"></i>
+                        </div>
+                        <div class="shared-file-info">
+                            <div class="shared-file-name">Banking UI Kit. Dark Mode.</div>
+                            <div class="shared-file-size">dribbble.com/...</div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </aside>
+    </div>
+</body>
+</html>

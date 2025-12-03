@@ -1,0 +1,437 @@
+/* styles.css */
+
+/* Сброс стилей и настройка шрифта */
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+:root {
+    /* Основные цвета */
+    --color-bg-dark: #1e1e2d;
+    --color-panel-bg: rgba(22, 22, 35, 0.8);
+    --color-text-light: #f0f0f5;
+    --color-text-dim: #7f8c9b;
+    --color-accent-blue: #007aff;
+    --color-border-alpha: rgba(255, 255, 255, 0.05);
+    --shadow-heavy: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+    --blur-medium: blur(10px);
+}
+
+body {
+    background: linear-gradient(135deg, #0f0a20 0%, #301934 50%, #0c1638 100%);
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    padding: 20px;
+    margin: 0;
+    line-height: 1.6;
+}
+
+.app-container {
+    width: 90vw;
+    height: 90vh;
+    min-width: 1000px;
+    min-height: 600px;
+    display: grid;
+    grid-template-columns: 50px 280px 1fr 280px;
+    overflow: hidden;
+    border-radius: 20px;
+    background-color: var(--color-panel-bg);
+    border: 1px solid var(--color-border-alpha);
+    box-shadow: var(--shadow-heavy);
+    backdrop-filter: var(--blur-medium);
+    -webkit-backdrop-filter: var(--blur-medium);
+    color: var(--color-text-light);
+}
+
+/* 1. Левая панель - иконки */
+.sidebar {
+    background-color: rgba(255, 255, 255, 0.03);
+    padding: 15px 0;
+    border-right: 1px solid var(--color-border-alpha);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 20px;
+}
+
+.sidebar svg,
+.sidebar i {
+    width: 24px;
+    height: 24px;
+    color: var(--color-text-dim);
+    transition: color 0.3s ease, transform 0.2s ease;
+    cursor: pointer;
+    text-align: center;
+    font-size: 18px;
+}
+
+.sidebar svg:hover,
+.sidebar i:hover {
+    color: var(--color-text-light);
+    transform: scale(1.1);
+}
+
+/* 2. Панель со списком чатов */
+.chat-list-panel {
+    padding: 20px 0;
+    border-right: 1px solid var(--color-border-alpha);
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+.chat-list-search {
+    padding: 0 20px 10px;
+    position: relative;
+}
+
+.chat-list-search input {
+    width: 100%;
+    padding: 10px 14px 10px 36px;
+    border-radius: 12px;
+    border: 1px solid var(--color-border-alpha);
+    background-color: rgba(255, 255, 255, 0.05);
+    color: var(--color-text-light);
+    font-size: 14px;
+    outline: none;
+}
+
+.chat-list-search input::placeholder {
+    color: var(--color-text-dim);
+}
+
+.chat-list-search i,
+.chat-list-search svg {
+    position: absolute;
+    left: 34px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--color-text-dim);
+    font-size: 14px;
+}
+
+.chat-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    overflow-y: auto;
+    padding: 0 10px;
+    flex: 1;
+}
+
+.chat-item {
+    padding: 12px 16px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+}
+
+.chat-item:hover {
+    background-color: rgba(255, 255, 255, 0.05);
+}
+
+.chat-item.active {
+    background-color: rgba(0, 122, 255, 0.2);
+    border-left: 3px solid var(--color-accent-blue);
+}
+
+.chat-item-avatar {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background-color: #3a3a5a;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+    font-size: 16px;
+    color: white;
+}
+
+.chat-item-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.chat-item-name {
+    font-size: 14px;
+    font-weight: 500;
+    margin-bottom: 2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.chat-item-preview {
+    font-size: 12px;
+    color: var(--color-text-dim);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* 3. Основной чат */
+.chat-main {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.chat-header {
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--color-border-alpha);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.chat-header-avatar {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background-color: #3a3a5a;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+    color: white;
+}
+
+.chat-header-info {
+    flex: 1;
+}
+
+.chat-header-name {
+    font-size: 16px;
+    font-weight: 600;
+}
+
+.chat-header-status {
+    font-size: 12px;
+    color: var(--color-text-dim);
+}
+
+.chat-messages {
+    flex: 1;
+    padding: 20px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    background-color: rgba(15, 10, 32, 0.3);
+}
+
+.message {
+    max-width: 70%;
+    padding: 10px 14px;
+    border-radius: 14px 14px 14px 0;
+    font-size: 14px;
+    line-height: 1.4;
+    word-wrap: break-word;
+}
+
+.message.received {
+    align-self: flex-start;
+    background-color: rgba(255, 255, 255, 0.05);
+    color: var(--color-text-light);
+}
+
+.message.sent {
+    align-self: flex-end;
+    background-color: var(--color-accent-blue);
+    color: white;
+    border-radius: 14px 14px 0 14px;
+}
+
+.chat-input-container {
+    padding: 16px 20px;
+    border-top: 1px solid var(--color-border-alpha);
+    display: flex;
+    gap: 10px;
+}
+
+.chat-input {
+    flex: 1;
+    padding: 12px 16px;
+    border-radius: 18px;
+    border: 1px solid var(--color-border-alpha);
+    background-color: rgba(255, 255, 255, 0.05);
+    color: var(--color-text-light);
+    font-size: 14px;
+    outline: none;
+}
+
+.chat-input:focus {
+    border-color: var(--color-accent-blue);
+}
+
+.chat-send-btn {
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    background-color: var(--color-accent-blue);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+    border: none;
+    outline: none;
+}
+
+.chat-send-btn i,
+.chat-send-btn svg {
+    color: white;
+    font-size: 16px;
+}
+
+.chat-send-btn:hover {
+    background-color: #0056b3;
+}
+
+/* 4. Панель с общими медиа */
+.shared-media-panel {
+    background-color: rgba(255, 255, 255, 0.03);
+    padding: 20px;
+    border-left: 1px solid var(--color-border-alpha);
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 25px;
+}
+
+.panel-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 10px;
+}
+
+.panel-header h3 {
+    font-size: 16px;
+    color: var(--color-text-light);
+    font-weight: 600;
+    margin: 0;
+}
+
+.panel-header .see-all {
+    font-size: 12px;
+    color: var(--color-accent-blue);
+    text-decoration: none;
+    font-weight: 500;
+}
+
+.panel-header .see-all:hover {
+    text-decoration: underline;
+}
+
+.shared-media-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 5px;
+}
+
+.shared-media-item {
+    width: 100%;
+    aspect-ratio: 1;
+    border-radius: 8px;
+    background: linear-gradient(135deg, #ff8060, #d93d5a);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-size: 0;
+    cursor: pointer;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+    transition: transform 0.2s ease;
+}
+
+.shared-media-item:hover {
+    transform: scale(1.05);
+}
+
+.shared-files-list {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+.shared-file-item {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    padding: 10px 0;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+}
+
+.shared-file-item:hover {
+    background-color: rgba(255, 255, 255, 0.05);
+    border-radius: 6px;
+}
+
+.shared-file-icon {
+    width: 32px;
+    height: 40px;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    font-weight: bold;
+    color: white;
+    background-color: #5d61ff;
+    position: relative;
+}
+
+.shared-file-icon::after {
+    content: "";
+    position: absolute;
+    bottom: 2px;
+    right: 2px;
+    width: 6px;
+    height: 6px;
+    background-color: rgba(255, 255, 255, 0.4);
+    border-radius: 50%;
+}
+
+.shared-file-icon.pdf { background-color: #e55c6e; }
+.shared-file-icon.sketch { background-color: #f7a00f; }
+.shared-file-icon.zip { background-color: #6a6a8c; }
+
+.shared-file-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.shared-file-name {
+    font-size: 14px;
+    font-weight: 500;
+    margin-bottom: 2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.shared-file-size {
+    font-size: 12px;
+    color: var(--color-text-dim);
+}
+
+.shared-file-item .download-icon {
+    color: var(--color-text-dim);
+    font-size: 16px;
+    transition: color 0.2s ease;
+}
+
+.shared-file-item .download-icon:hover {
+    color: var(--color-accent-blue);
+}
