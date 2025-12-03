@@ -5,47 +5,55 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Chat UI</title>
     <link rel="stylesheet" href="styles/styles.css">
-    <!-- Подключение иконок через Font Awesome -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" integrity="sha512-pV5Ku0qCZJ7J28dWtZ3GZq7Nv7mGzO8Bq7i5F06FtWbGN6L3lYw55g6RQ2R+5f59b3W5f6f4T1v5v5v3eT7fWg==" crossorigin="anonymous" referrerpolicy="no-referrer" />
 </head>
 <body>
     <div class="app-container">
         <!-- 1. Левая панель навигации -->
         <aside class="sidebar">
-            <i class="fas fa-home" aria-label="Главная"></i>
-            <i class="fas fa-comments" aria-label="Чаты"></i>
-            <i class="fas fa-user-friends" aria-label="Контакты"></i>
-            <i class="fas fa-cog" aria-label="Настройки"></i>
+            <i class="ai-home" aria-label="Главная"></i>
+            <i class="ai-chat-bubble" aria-label="Чаты"></i>
+            <i class="ai-people-group" aria-label="Контакты"></i>
+            <i class="ai-gear" aria-label="Настройки"></i>
         </aside>
 
         <!-- 2. Панель списка чатов -->
         <section class="chat-list-panel">
             <div class="chat-list-search">
-                <i class="fas fa-search" aria-hidden="true"></i>
+                <i class="ai-search" aria-hidden="true"></i>
                 <input type="text" placeholder="Поиск по чатам" aria-label="Поиск по чатам">
             </div>
             <div class="chat-list">
-                <!-- Пример активного чата -->
-                <div class="chat-item active">
+                <div class="chat-item active" 
+                     data-chat-id="chat-skylar" 
+                     data-chat-name="Skylar Rossar" 
+                     data-chat-status="Онлайн" 
+                     data-chat-avatar="S">
                     <div class="chat-item-avatar">S</div>
                     <div class="chat-item-info">
                         <div class="chat-item-name">Skylar Rossar</div>
                         <div class="chat-item-preview">Привет! Как добрались?</div>
                     </div>
                 </div>
-                <!-- Другие чаты -->
-                <div class="chat-item">
-                    <div class="chat-item-avatar">A</div>
+                <div class="chat-item" 
+                     data-chat-id="chat-alex" 
+                     data-chat-name="Alex Morgan" 
+                     data-chat-status="Отсутствует" 
+                     data-chat-avatar="A">
+                    <div class="chat-item-avatar">T</div>
                     <div class="chat-item-info">
-                        <div class="chat-item-name">Alex Morgan</div>
-                        <div class="chat-item-preview">Посмотри этот файл</div>
+                        <div class="chat-item-name">Username Tango</div>
+                        <div class="chat-item-preview">Check it.</div>
                     </div>
                 </div>
-                <div class="chat-item">
-                    <div class="chat-item-avatar">J</div>
+                <div class="chat-item" 
+                     data-chat-id="chat-jordan" 
+                     data-chat-name="Jordan Lee" 
+                     data-chat-status="Печатает..." 
+                     data-chat-avatar="J">
+                    <div class="chat-item-avatar">K</div>
                     <div class="chat-item-info">
-                        <div class="chat-item-name">Jordan Lee</div>
-                        <div class="chat-item-preview">Созвонимся завтра?</div>
+                        <div class="chat-item-name">Username Kilo</div>
+                        <div class="chat-item-preview">Lowercase?</div>
                     </div>
                 </div>
             </div>
@@ -54,34 +62,34 @@
         <!-- 3. Основной чат -->
         <main class="chat-main">
             <header class="chat-header">
-                <div class="chat-header-avatar">S</div>
+                <div class="chat-header-avatar">A</div>
                 <div class="chat-header-info">
-                    <div class="chat-header-name">Skylar Rossar</div>
+                    <div class="chat-header-name">Username Ajax</div>
                     <div class="chat-header-status">Онлайн</div>
                 </div>
             </header>
             <div class="chat-messages">
                 <div class="message received">
-                    Привет! Как добрались до места?
+                    Test Message 1
                 </div>
                 <div class="message sent">
-                    Всё отлично, уже на месте. Спасибо!
+                    Test Answer 1
                 </div>
                 <div class="message received">
-                    Отлично! Отдыхай, а завтра начнём.
+                    Test Message 2
                 </div>
             </div>
             <div class="chat-input-container">
                 <input type="text" class="chat-input" placeholder="Напишите сообщение..." aria-label="Сообщение">
                 <button class="chat-send-btn" aria-label="Отправить">
-                    <i class="fas fa-paper-plane" aria-hidden="true"></i>
+                    <i class="ai-send" aria-hidden="true"></i>
                 </button>
             </div>
         </main>
 
-        <!-- 4. Панель общих медиа и файлов -->
+        <!-- 4. Панель общих медиа -->
         <aside class="shared-media-panel">
-            <!-- Общие медиа -->
+            <!-- Shared Media -->
             <section>
                 <div class="panel-header">
                     <h3>Shared Media</h3>
@@ -97,7 +105,7 @@
                 </div>
             </section>
 
-            <!-- Общие файлы -->
+            <!-- Shared Files -->
             <section>
                 <div class="panel-header">
                     <h3>Shared Files</h3>
@@ -110,7 +118,7 @@
                             <div class="shared-file-name">UARM_sketch</div>
                             <div class="shared-file-size">04.20.21 • 200mb</div>
                         </div>
-                        <i class="fas fa-download download-icon" aria-label="Скачать файл"></i>
+                        <i class="ai-download download-icon" aria-label="Скачать файл"></i>
                     </div>
                     <div class="shared-file-item">
                         <div class="shared-file-icon zip">ZIP</div>
@@ -118,7 +126,7 @@
                             <div class="shared-file-name">pathrock_folder</div>
                             <div class="shared-file-size">04.20.21 • 100mb</div>
                         </div>
-                        <i class="fas fa-download download-icon" aria-label="Скачать файл"></i>
+                        <i class="ai-download download-icon" aria-label="Скачать файл"></i>
                     </div>
                     <div class="shared-file-item">
                         <div class="shared-file-icon pdf">PDF</div>
@@ -126,12 +134,12 @@
                             <div class="shared-file-name">pathrock_brandbook.pdf</div>
                             <div class="shared-file-size">04.20.21 • 20mb</div>
                         </div>
-                        <i class="fas fa-download download-icon" aria-label="Скачать файл"></i>
+                        <i class="ai-download download-icon" aria-label="Скачать файл"></i>
                     </div>
                 </div>
             </section>
 
-            <!-- Общие ссылки -->
+            <!-- Shared Links -->
             <section>
                 <div class="panel-header">
                     <h3>Shared Links</h3>
@@ -140,16 +148,20 @@
                 <div class="shared-files-list">
                     <div class="shared-file-item">
                         <div class="shared-file-icon" style="background-color: #2a2a4b;">
-                            <i class="fas fa-link" style="color: white;" aria-hidden="true"></i>
+                            <i class="ai-link" style="color: white;" aria-hidden="true"></i>
                         </div>
                         <div class="shared-file-info">
-                            <div class="shared-file-name">Banking UI Kit. Dark Mode.</div>
-                            <div class="shared-file-size">dribbble.com/...</div>
+                            <div class="shared-file-name">UI Kit. Dark Mode.</div>
+                            <div class="shared-file-size">github.com/h4root/</div>
                         </div>
                     </div>
                 </div>
             </section>
         </aside>
     </div>
+
+    <!-- Подключение скрипта, не менять, все работает идеально -->
+    <script src="js/script.js"></script>
+    <script src="https://unpkg.com/akar-icons-fonts"></script>
 </body>
 </html>

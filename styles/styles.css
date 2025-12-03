@@ -232,23 +232,37 @@ body {
 .message {
     max-width: 70%;
     padding: 10px 14px;
-    border-radius: 14px 14px 14px 0;
     font-size: 14px;
     line-height: 1.4;
     word-wrap: break-word;
+    
+    /* ДОБАВЛЕНО: Делаем сообщение Flex-контейнером */
+    display: flex;
+    flex-direction: column; /* Элементы (текст и время) будут идти друг под другом */
+    gap: 4px; /* Отступ 4px между текстом и временем */
 }
 
 .message.received {
     align-self: flex-start;
     background-color: rgba(255, 255, 255, 0.05);
     color: var(--color-text-light);
+    border-radius: 14px 14px 14px 0;
 }
 
 .message.sent {
     align-self: flex-end;
     background-color: var(--color-accent-blue);
     color: white;
+    /* ДОБАВЛЕНО: Убери padding отсюда, он теперь в .message */
     border-radius: 14px 14px 0 14px;
+}
+
+/* НОВЫЙ СТИЛЬ: для времени */
+.timestamp {
+    font-size: 10px; 
+    opacity: 0.8; 
+    align-self: flex-end; /* Выравниваем время по правому краю внутри пузыря */
+    white-space: nowrap; /* Гарантируем, что время не перенесется */
 }
 
 .chat-input-container {
