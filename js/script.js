@@ -196,7 +196,6 @@ function sendImageMessage(url) {
     ws.send(JSON.stringify(message));
     displayMessage(CURRENT_USER_NAME, url, new Date().toLocaleTimeString(), false, CURRENT_USER_ID, 'image');
 }
-
 function displayMessage(sender, content, timestamp, isSystem = false, senderId = null, type = 'text') {
     const messageDiv = document.createElement('div');
     messageDiv.classList.add('message');
@@ -215,7 +214,7 @@ function displayMessage(sender, content, timestamp, isSystem = false, senderId =
         }
 
         const contentWrapper = document.createElement('div');
-
+        
         if (!isSent) {
             const nameSpan = document.createElement('div');
             nameSpan.style.fontWeight = 'bold';
@@ -227,15 +226,15 @@ function displayMessage(sender, content, timestamp, isSystem = false, senderId =
 
         if (type === 'image') {
             const img = document.createElement('img');
-            img.src = content;
+            img.src = content; 
             img.classList.add('message-image');
-            img.loading = 'lazy';
+            img.loading = "lazy";
             img.onclick = () => openImageViewer(content);
             contentWrapper.appendChild(img);
         } else {
             const textSpan = document.createElement('span');
             textSpan.classList.add('message-text-content');
-            textSpan.textContent = content || '';
+            textSpan.textContent = content || ''; 
             contentWrapper.appendChild(textSpan);
         }
 
@@ -446,7 +445,7 @@ function initImageViewer() {
     const modalHtml = `
         <div id="image-viewer-modal" class="image-viewer-modal">
             <span class="image-viewer-close">&times;</span>
-            <img class="image-viewer-content" id="image-viewer-img">
+            <img class="image-viewer-content" id="image-viewer-img" alt="Просмотр изображения">
         </div>
     `;
     document.body.insertAdjacentHTML('beforeend', modalHtml);
@@ -464,14 +463,18 @@ function initImageViewer() {
             imageViewerModal.style.display = 'none';
         }
     };
-}
 
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && imageViewerModal.style.display === 'flex') {
+            imageViewerModal.style.display = 'none';
+        }
+    });
+}
 function openImageViewer(src) {
     if (!imageViewerModal) initImageViewer();
     imageViewerImg.src = src;
     imageViewerModal.style.display = 'flex';
 }
-
 document.addEventListener('DOMContentLoaded', () => {
     initImageViewer();
 });
