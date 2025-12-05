@@ -47,8 +47,7 @@
                 <i class="ai-search" aria-hidden="true"></i>
                 <input type="text" placeholder="Поиск по чатам" aria-label="Поиск по чатам" class="disabled-link" readonly>
             </div>
-            <div class="chat-list">
-                </div>
+            <div class="chat-list"></div>
         </section>
 
         <main class="chat-main">
@@ -60,17 +59,15 @@
                 </div>
             </header>
             <div class="chat-messages">
-                <div class="message received">
-                    Test Message 1
-                </div>
-                <div class="message sent">
-                    Test Answer 1
-                </div>
-                <div class="message received">
-                    Test Message 2
-                </div>
+                <div class="message received">Test Message 1</div>
+                <div class="message sent">Test Answer 1</div>
+                <div class="message received">Test Message 2</div>
             </div>
             <div class="chat-input-container">
+                <button class="chat-attach-btn" aria-label="Прикрепить файл">
+                    <i class="ai-paperclip"></i>
+                </button>
+                <input type="file" id="file-input" accept="image/*" style="display: none;">
                 <input type="text" class="chat-input" placeholder="Напишите сообщение..." aria-label="Сообщение">
                 <button class="chat-send-btn" aria-label="Отправить">
                     <i class="ai-send" aria-hidden="true"></i>

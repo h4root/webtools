@@ -142,3 +142,4 @@ vite.config.ts.timestamp-*
 package.json
 package-lock.json
 users.json
+uploads/*

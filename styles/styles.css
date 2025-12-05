@@ -250,6 +250,14 @@ body {
     line-height: 1.4;
 }
 
+.message-image {
+    max-width: 100%;
+    border-radius: 8px;
+    margin-top: 5px;
+    cursor: pointer;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
 .timestamp {
     font-size: 10px;
     opacity: 0.8;
@@ -263,6 +271,30 @@ body {
     border-top: 1px solid var(--color-border-alpha);
     display: flex;
     gap: 10px;
+    align-items: center;
+}
+
+.chat-attach-btn {
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    background-color: transparent;
+    border: 1px solid var(--color-border-alpha);
+    color: var(--color-text-dim);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.chat-attach-btn:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+    color: var(--color-text-light);
+}
+
+.chat-attach-btn i {
+    font-size: 20px;
 }
 
 .chat-input {
@@ -406,17 +438,9 @@ body {
     border-radius: 50%;
 }
 
-.shared-file-icon.pdf {
-    background-color: #e55c6e;
-}
-
-.shared-file-icon.sketch {
-    background-color: #f7a00f;
-}
-
-.shared-file-icon.zip {
-    background-color: #6a6a8c;
-}
+.shared-file-icon.pdf { background-color: #e55c6e; }
+.shared-file-icon.sketch { background-color: #f7a00f; }
+.shared-file-icon.zip { background-color: #6a6a8c; }
 
 .shared-file-info {
     flex: 1;
@@ -453,8 +477,7 @@ body {
     cursor: not-allowed !important;
 }
 
-.sidebar i.disabled-link:hover,
-.sidebar svg.disabled-link:hover {
+.sidebar i.disabled-link:hover {
     color: var(--color-text-dim);
     transform: none;
 }
@@ -556,4 +579,61 @@ body {
 
 .auth-modal .switch-link a:hover {
     text-decoration: underline;
+}
+.message-image {
+    max-width: 200px;
+    max-height: 200px;
+    width: auto;
+    height: auto;
+    object-fit: cover;
+    border-radius: 12px;
+    margin-top: 6px;
+    cursor: zoom-in;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+    display: block;
+    background-color: rgba(0, 0, 0, 0.1);
+}
+
+.image-viewer-modal {
+    display: none;
+    position: fixed;
+    z-index: 5000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.9);
+    align-items: center;
+    justify-content: center;
+    backdrop-filter: blur(5px);
+}
+
+.image-viewer-content {
+    max-width: 90%;
+    max-height: 90%;
+    border-radius: 4px;
+    box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+    animation: imageZoom 0.3s ease;
+}
+
+.image-viewer-close {
+    position: absolute;
+    top: 20px;
+    right: 30px;
+    color: #f1f1f1;
+    font-size: 40px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: 0.3s;
+    line-height: 1;
+    z-index: 5001;
+}
+
+.image-viewer-close:hover {
+    color: var(--color-accent-blue);
+}
+
+@keyframes imageZoom {
+    from { transform: scale(0.9); opacity: 0; }
+    to { transform: scale(1); opacity: 1; }
 }

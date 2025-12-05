@@ -8,13 +8,17 @@ const app = express();
 const port = process.env.PORT || 3000;
 const USERS_FILE = path.join(__dirname, 'users.json');
 const ALLOWED_DOMAINS = [
-    'gmail.com', 'yandex.ru', 'ya.ru', 
-    'mail.ru', 'bk.ru', 'inbox.ru', 'list.ru', 
+    'gmail.com', 'yandex.ru', 'ya.ru',
+    'mail.ru', 'bk.ru', 'inbox.ru', 'list.ru',
     'outlook.com', 'hotmail.com', 'yahoo.com', 'icloud.com', 'rambler.ru'
 ];
 
+// 1. ВАЖНО: Увеличиваем лимит входящих данных ДО объявления маршрутов
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+
 app.use(express.static(path.join(__dirname)));
-app.use(express.json());
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 if (!fs.existsSync(USERS_FILE)) {
     fs.writeFileSync(USERS_FILE, JSON.stringify([]));
@@ -28,6 +32,37 @@ function validateEmail(email) {
 
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
+});
+
+// Маршрут загрузки
+app.post('/api/upload', (req, res) => {
+    const { image, name } = req.body;
+
+    if (!image || !name) {
+        return res.status(400).json({ error: 'Нет данных изображения или имени' });
+    }
+
+    try {
+        // Универсальный regex: удаляет любой префикс (jpeg, png, webp)
+        const base64Data = image.replace(/^data:image\/\w+;base64,/, "");
+        const buffer = Buffer.from(base64Data, 'base64');
+
+        const uploadDir = path.join(__dirname, 'uploads');
+        if (!fs.existsSync(uploadDir)) {
+            fs.mkdirSync(uploadDir);
+        }
+
+        // Генерируем уникальное имя файла, чтобы не перезатереть старые
+        const uniqueName = `img_${Date.now()}_${name}`;
+        const filePath = path.join(uploadDir, uniqueName);
+        
+        fs.writeFileSync(filePath, buffer);
+
+        res.json({ url: `/uploads/${uniqueName}` });
+    } catch (err) {
+        console.error('Ошибка загрузки:', err);
+        res.status(500).json({ error: 'Ошибка сохранения файла' });
+    }
 });
 
 app.post('/api/register', (req, res) => {
@@ -82,7 +117,6 @@ app.post('/api/login', (req, res) => {
 app.get('/api/users', (req, res) => {
     try {
         const users = JSON.parse(fs.readFileSync(USERS_FILE));
-        // Отправляем только безопасные данные (без паролей и email)
         const safeUsers = users.map(u => ({
             id: u.id,
             name: u.name
@@ -112,7 +146,8 @@ wss.on('connection', (ws) => {
         let data;
         try {
             data = JSON.parse(messageString);
-            if (!data.sender || !data.text) return;
+            // Пропускаем валидацию text, если есть content (для картинок)
+            if (!data.sender || (!data.text && !data.content)) return;
         } catch (e) {
             return;
         }
