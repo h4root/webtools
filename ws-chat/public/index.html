@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ws-chat</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div id="gate" class="gate">
+    <form id="nick-form" class="nick-form">
+      <h1>ws-chat</h1>
+      <input id="nick-input" placeholder="никнейм" maxlength="24" autocomplete="off" autofocus>
+      <button type="submit">войти</button>
+      <p id="gate-error" class="gate-error"></p>
+    </form>
+  </div>
+
+  <main id="app" class="app" hidden>
+    <aside class="sidebar">
+      <div class="me" id="me"></div>
+      <ul class="channels" id="channels"></ul>
+    </aside>
+    <section class="chat">
+      <header class="chat-header" id="chat-header"># public</header>
+      <div class="log" id="log"></div>
+      <form class="composer" id="composer">
+        <input id="text-input" placeholder="сообщение…" autocomplete="off" maxlength="2000">
+        <button type="submit">→</button>
+      </form>
+    </section>
+  </main>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
