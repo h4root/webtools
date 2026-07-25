@@ -74,6 +74,16 @@ describe('Hub', () => {
     expect(chatCount(c, 'psst')).toBe(0);
   });
 
+  it('маршрутизирует ЛС без учёта регистра ника', () => {
+    const a = makeClient('a');
+    const b = makeClient('b');
+    hub.join(a, 'alice');
+    hub.join(b, 'Bob');
+    hub.handle(a, JSON.stringify({ type: 'direct', to: 'bob', text: 'hey' }));
+    expect(chatCount(a, 'hey')).toBe(1);
+    expect(chatCount(b, 'hey')).toBe(1);
+  });
+
   it('возвращает ошибку при личном сообщении несуществующему нику', () => {
     const a = makeClient('a');
     hub.join(a, 'alice');

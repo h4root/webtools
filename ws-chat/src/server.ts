@@ -20,13 +20,19 @@ const publicDir = join(dirname(fileURLToPath(import.meta.url)), '..', 'public');
 const app = express();
 app.use(express.static(publicDir));
 
+const HEARTBEAT_MS = 30000;
+
 const server = createServer(app);
 const wss = new WebSocketServer({ server, maxPayload: TEXT_MAX * 4 });
 const hub = new Hub();
 
 let nextId = 1;
+const alive = new WeakMap<WebSocket, boolean>();
 
 wss.on('connection', (ws) => {
+  alive.set(ws, true);
+  ws.on('pong', () => alive.set(ws, true));
+
   const client: Client = {
     id: String(nextId++),
     nick: null,
@@ -42,6 +48,20 @@ wss.on('connection', (ws) => {
     ws.terminate();
   });
 });
+
+const heartbeat = setInterval(() => {
+  for (const ws of wss.clients) {
+    if (alive.get(ws) === false) {
+      ws.terminate();
+      continue;
+    }
+    alive.set(ws, false);
+    ws.ping();
+  }
+}, HEARTBEAT_MS);
+heartbeat.unref();
+
+wss.on('close', () => clearInterval(heartbeat));
 
 server.listen(PORT, HOST, () => {
   console.log(`chat server on http://${HOST}:${PORT}`);

@@ -74,7 +74,8 @@ export class Hub {
   }
 
   private sendDirect(client: Client, toNick: string, text: string): void {
-    const targets = [...this.clients].filter((c) => c.nick === toNick);
+    const lower = toNick.toLowerCase();
+    const targets = [...this.clients].filter((c) => c.nick?.toLowerCase() === lower);
     if (targets.length === 0) {
       client.send({ type: 'error', reason: `${toNick} не в сети` });
       return;
@@ -84,7 +85,7 @@ export class Hub {
       type: 'chat',
       channel: 'direct',
       from: client.nick!,
-      to: toNick,
+      to: targets[0].nick!,
       text,
       ts: Date.now(),
     };
