@@ -4,6 +4,10 @@
   "private": true,
   "type": "module",
   "description": "P2P-передача файлов между устройствами в локальной сети через браузер",
+  "exports": {
+    ".": "./src/index.ts",
+    "./client": "./public/lan-drop.js"
+  },
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "start": "tsx src/server.ts",

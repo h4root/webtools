@@ -37,14 +37,55 @@ npm start       # прод
 
 ## Структура
 
+Бэкенд и фронтенд разделены на переиспользуемое ядро и тонкий standalone-слой, чтобы оба можно было встроить в чужое приложение (например в [[ws-chat]]).
+
 ```
 src/
   protocol.ts     типы и валидация клиентских сообщений
   names.ts        генерация автоимён устройств
-  signaling.ts    Signaling — реестр пиров и релей сигналинга
-  server.ts       express + WebSocket, heartbeat, graceful shutdown
+  signaling.ts    Signaling — реестр пиров и релей сигналинга (чистая логика)
+  attach.ts       attachSignaling(wss) — вешает сигналинг на любой WebSocketServer
+  index.ts        точка входа пакета (реэкспорт публичного API)
+  server.ts       standalone: express + статика + WebSocketServer + attachSignaling
 public/
-  index.html app.js styles.css   WebRTC-передача в браузере
+  lan-drop.js     mountLanDrop(container, { url }) — виджет + WebRTC
+  app.js          standalone: монтирует виджет в страницу
+  index.html styles.css
+```
+
+## Интеграция в другое приложение
+
+Пакет отдаёт два входа (`package.json` → `exports`): `.` — бэкенд, `./client` — фронтенд-виджет. Оба не зависят от конкретного сервера/страницы.
+
+**Бэкенд** — примонтировать сигналинг рядом с другим WS-приложением на одном HTTP-сервере, разведя их по пути через `noServer`:
+
+```ts
+import { WebSocketServer } from 'ws';
+import { attachSignaling } from 'lan-drop';
+
+const dropWss = new WebSocketServer({ noServer: true });
+attachSignaling(dropWss);
+
+// ...своя WSS для чата на другом пути...
+server.on('upgrade', (req, socket, head) => {
+  const { pathname } = new URL(req.url ?? '/', 'http://localhost');
+  if (pathname === '/drop') {
+    dropWss.handleUpgrade(req, socket, head, (ws) => dropWss.emit('connection', ws));
+  } else {
+    socket.destroy();
+  }
+});
+```
+
+**Фронтенд** — смонтировать виджет в любой контейнер, указав WS-url этого пути:
+
+```js
+import { mountLanDrop } from 'lan-drop/client';
+
+const drop = mountLanDrop(document.getElementById('drop'), {
+  url: `ws://${location.host}/drop`,
+});
+// drop.destroy() — снять виджет и закрыть соединения
 ```
 
 ## Тесты
