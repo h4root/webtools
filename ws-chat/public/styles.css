@@ -158,24 +158,31 @@ button {
 }
 
 .row {
-  max-width: 70%;
+  align-self: flex-start;
+  width: fit-content;
+  max-width: 72%;
   padding: 6px 10px;
   background: var(--panel);
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: 12px;
+  border-bottom-left-radius: 4px;
   white-space: pre-wrap;
-  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
 .row.mine {
   align-self: flex-end;
   background: var(--mine);
   border-color: #275f42;
+  border-radius: 12px;
+  border-bottom-right-radius: 4px;
 }
 
 .row.system {
   align-self: center;
+  width: auto;
   max-width: none;
+  padding: 2px 0;
   background: none;
   border: none;
   color: var(--dim);

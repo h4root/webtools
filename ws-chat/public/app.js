@@ -146,13 +146,16 @@ function renderLog() {
       row.textContent = entry.text;
     } else {
       row.className = entry.mine ? 'row mine' : 'row';
-      const who = document.createElement('span');
-      who.className = 'who';
-      who.textContent = entry.mine ? 'you' : entry.from;
+      if (!entry.mine) {
+        const who = document.createElement('span');
+        who.className = 'who';
+        who.textContent = entry.from;
+        row.appendChild(who);
+      }
       const text = document.createElement('span');
       text.className = 'text';
       text.textContent = entry.text;
-      row.append(who, text);
+      row.appendChild(text);
     }
     logEl.appendChild(row);
   }
