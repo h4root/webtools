@@ -1,0 +1,98 @@
+# lan-drop
+
+P2P-передача файлов между устройствами в одной локальной сети прямо из браузера. Файлы идут напрямую между устройствами по WebRTC DataChannel — сервер только сводит пиров и пересылает сигналинг, байты файлов через него не проходят.
+
+Архитектура повторяет подход [Snapdrop](https://github.com/RobinLinus/snapdrop) / [PairDrop](https://github.com/schlagmichdoch/PairDrop): устройства получают автоимя и обмениваются WebRTC-сигналингом через WebSocket. Инстанс рассчитан на одну сеть (self-hosted на LAN), поэтому все подключённые к серверу видят друг друга — без группировки по подсети, которая ломается на IPv6.
+
+## Запуск
+
+```bash
+cd lan-drop
+cp .env.example .env
+npm install
+npm run dev     # http://localhost:3000
+npm start       # прод
+```
+
+Откройте адрес на двух устройствах в одной сети: `http://<ip-хоста>:3000`. Устройства увидят друг друга — нажмите на плитку, чтобы отправить файлы.
+
+## Конфигурация
+
+| Переменная | По умолчанию | Назначение                        |
+|------------|--------------|-----------------------------------|
+| `PORT`     | `3000`       | Порт HTTP/WebSocket-сервера.      |
+| `HOST`     | `0.0.0.0`    | Адрес привязки (LAN — `0.0.0.0`). |
+
+## Как это работает
+
+```
+устройство A ──signal(offer/ice)──▶ сервер ──▶ устройство B
+устройство A ◀──signal(answer/ice)── сервер ◀── устройство B
+устройство A ◀═══════ WebRTC DataChannel (файлы) ═══════▶ устройство B
+```
+
+- Все подключённые к серверу устройства видят друг друга (`src/signaling.ts`) — инстанс поднят внутри одной сети, отдельные комнаты не нужны.
+- Сигнал (`signal`) пересылается только конкретному адресату по его id, не широковещательно.
+- `iceServers` пуст: на LAN хватает host-кандидатов, трафик не покидает сеть и не зависит от внешних STUN.
+
+## Структура
+
+Бэкенд и фронтенд разделены на переиспользуемое ядро и тонкий standalone-слой, чтобы оба можно было встроить в чужое приложение (например в [[ws-chat]]).
+
+```
+src/
+  protocol.ts     типы и валидация клиентских сообщений
+  names.ts        генерация автоимён устройств
+  signaling.ts    Signaling — реестр пиров и релей сигналинга (чистая логика)
+  attach.ts       attachSignaling(wss) — вешает сигналинг на любой WebSocketServer
+  index.ts        точка входа пакета (реэкспорт публичного API)
+  server.ts       standalone: express + статика + WebSocketServer + attachSignaling
+public/
+  lan-drop.js     mountLanDrop(container, { url }) — виджет + WebRTC
+  app.js          standalone: монтирует виджет в страницу
+  index.html styles.css
+```
+
+## Интеграция в другое приложение
+
+Пакет отдаёт два входа (`package.json` → `exports`): `.` — бэкенд, `./client` — фронтенд-виджет. Оба не зависят от конкретного сервера/страницы.
+
+**Бэкенд** — примонтировать сигналинг рядом с другим WS-приложением на одном HTTP-сервере, разведя их по пути через `noServer`:
+
+```ts
+import { WebSocketServer } from 'ws';
+import { attachSignaling } from 'lan-drop';
+
+const dropWss = new WebSocketServer({ noServer: true });
+attachSignaling(dropWss);
+
+// ...своя WSS для чата на другом пути...
+server.on('upgrade', (req, socket, head) => {
+  const { pathname } = new URL(req.url ?? '/', 'http://localhost');
+  if (pathname === '/drop') {
+    dropWss.handleUpgrade(req, socket, head, (ws) => dropWss.emit('connection', ws));
+  } else {
+    socket.destroy();
+  }
+});
+```
+
+**Фронтенд** — смонтировать виджет в любой контейнер, указав WS-url этого пути:
+
+```js
+import { mountLanDrop } from 'lan-drop/client';
+
+const drop = mountLanDrop(document.getElementById('drop'), {
+  url: `ws://${location.host}/drop`,
+});
+// drop.destroy() — снять виджет и закрыть соединения
+```
+
+## Тесты
+
+```bash
+npm test
+npm run typecheck
+```
+
+Логика сигналинга и утилиты покрыты юнит-тестами (vitest); WebRTC-часть — тонкий UI-слой в `public/`.

@@ -1,0 +1,137 @@
+:root {
+  --bg: #0c0f0d;
+  --panel: #121613;
+  --line: #1f2a22;
+  --fg: #d7e2d9;
+  --dim: #6f8577;
+  --accent: #35d07f;
+  --err: #d0553f;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: 'JetBrains Mono', 'Courier New', monospace;
+  font-size: 14px;
+}
+
+.top {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--line);
+}
+
+.top h1 {
+  margin: 0;
+  color: var(--accent);
+  font-size: 18px;
+}
+
+.lan-drop {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 24px;
+  padding: 32px 20px;
+}
+
+.lan-drop-me {
+  color: var(--dim);
+}
+
+.lan-drop-hint {
+  margin: 0;
+  color: var(--dim);
+  text-align: center;
+}
+
+.lan-drop-peers {
+  flex: 1;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  align-content: center;
+  justify-content: center;
+}
+
+.peer {
+  width: 132px;
+  height: 132px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: var(--panel);
+  cursor: pointer;
+  transition: border-color 0.15s, transform 0.15s;
+}
+
+.peer:hover {
+  border-color: var(--accent);
+  transform: scale(1.04);
+}
+
+.lan-drop-transfers {
+  align-self: stretch;
+  list-style: none;
+  margin: 0;
+  padding: 12px 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border-top: 1px solid var(--line);
+}
+
+.lan-drop-transfers:empty {
+  display: none;
+}
+
+.transfer {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.transfer-label {
+  color: var(--dim);
+}
+
+.transfer.ok .transfer-label {
+  color: var(--accent);
+}
+
+.transfer.err .transfer-label {
+  color: var(--err);
+}
+
+.bar {
+  height: 4px;
+  background: var(--line);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.fill {
+  height: 100%;
+  width: 0;
+  background: var(--accent);
+  transition: width 0.1s linear;
+}
+
+.transfer.err .fill {
+  background: var(--err);
+}
