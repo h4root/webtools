@@ -1,6 +1,5 @@
 import { describe, it, expect } from 'vitest';
 import { parseClientMessage, SIGNAL_MAX } from './protocol.ts';
-import { roomForAddress } from './rooms.ts';
 import { generateName } from './names.ts';
 
 describe('parseClientMessage', () => {
@@ -22,22 +21,6 @@ describe('parseClientMessage', () => {
     expect(parseClientMessage(JSON.stringify({ type: 'signal', to: '2' }))).toBeNull();
     const huge = { type: 'signal', to: '2', data: 'x'.repeat(SIGNAL_MAX + 1) };
     expect(parseClientMessage(JSON.stringify(huge))).toBeNull();
-  });
-});
-
-describe('roomForAddress', () => {
-  it('группирует IPv4 по /24', () => {
-    expect(roomForAddress('192.168.1.10')).toBe('192.168.1');
-    expect(roomForAddress('192.168.1.55')).toBe('192.168.1');
-  });
-
-  it('снимает префикс IPv4-mapped IPv6', () => {
-    expect(roomForAddress('::ffff:10.0.0.42')).toBe('10.0.0');
-  });
-
-  it('возвращает адрес как есть для IPv6 и unknown для пустого', () => {
-    expect(roomForAddress('fe80::1')).toBe('fe80::1');
-    expect(roomForAddress(undefined)).toBe('unknown');
   });
 });
 

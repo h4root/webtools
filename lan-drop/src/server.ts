@@ -5,7 +5,6 @@ import { dirname, join } from 'node:path';
 import express from 'express';
 import { WebSocketServer, WebSocket } from 'ws';
 import { Signaling, type Peer } from './signaling.ts';
-import { roomForAddress } from './rooms.ts';
 import { generateName } from './names.ts';
 import { SIGNAL_MAX } from './protocol.ts';
 
@@ -31,14 +30,13 @@ const signaling = new Signaling();
 let nextId = 1;
 const alive = new WeakMap<WebSocket, boolean>();
 
-wss.on('connection', (ws, req) => {
+wss.on('connection', (ws) => {
   alive.set(ws, true);
   ws.on('pong', () => alive.set(ws, true));
 
   const id = String(nextId++);
   const peer: Peer = {
     id,
-    roomId: roomForAddress(req.socket.remoteAddress),
     name: generateName(Number(id)),
     send(message) {
       if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(message));

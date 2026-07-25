@@ -4,11 +4,10 @@ import type { ServerMessage } from './protocol.ts';
 
 type TestPeer = Peer & { inbox: ServerMessage[] };
 
-function makePeer(id: string, roomId: string): TestPeer {
+function makePeer(id: string): TestPeer {
   const inbox: ServerMessage[] = [];
   return {
     id,
-    roomId,
     name: `peer-${id}`,
     inbox,
     send(message) {
@@ -32,26 +31,18 @@ describe('Signaling', () => {
     hub = new Signaling();
   });
 
-  it('шлёт welcome и список соседей по комнате', () => {
-    const a = makePeer('1', 'lan');
-    const b = makePeer('2', 'lan');
+  it('шлёт welcome и список уже подключённых пиров', () => {
+    const a = makePeer('1');
+    const b = makePeer('2');
     hub.join(a);
     hub.join(b);
     expect(a.inbox.some((m) => m.type === 'welcome' && m.id === '1')).toBe(true);
     expect(lastPeers(b)).toEqual(['1']);
   });
 
-  it('не показывает пиров из другой комнаты', () => {
-    const a = makePeer('1', 'lan-a');
-    const b = makePeer('2', 'lan-b');
-    hub.join(a);
-    hub.join(b);
-    expect(lastPeers(b)).toEqual([]);
-  });
-
-  it('уведомляет соседей о входе и выходе', () => {
-    const a = makePeer('1', 'lan');
-    const b = makePeer('2', 'lan');
+  it('уведомляет остальных о входе и выходе', () => {
+    const a = makePeer('1');
+    const b = makePeer('2');
     hub.join(a);
     hub.join(b);
     expect(a.inbox.some((m) => m.type === 'peer-joined' && m.peer.id === '2')).toBe(true);
@@ -59,10 +50,10 @@ describe('Signaling', () => {
     expect(a.inbox.at(-1)).toEqual({ type: 'peer-left', id: '2' });
   });
 
-  it('пересылает сигнал только адресату в той же комнате', () => {
-    const a = makePeer('1', 'lan');
-    const b = makePeer('2', 'lan');
-    const c = makePeer('3', 'lan');
+  it('пересылает сигнал только адресату', () => {
+    const a = makePeer('1');
+    const b = makePeer('2');
+    const c = makePeer('3');
     hub.join(a);
     hub.join(b);
     hub.join(c);
@@ -71,25 +62,22 @@ describe('Signaling', () => {
     expect(c.inbox.some((m) => m.type === 'signal')).toBe(false);
   });
 
-  it('запрещает сигнал в чужую комнату', () => {
-    const a = makePeer('1', 'lan-a');
-    const b = makePeer('2', 'lan-b');
-    hub.join(a);
-    hub.join(b);
-    hub.handle(a, JSON.stringify({ type: 'signal', to: '2', data: { sdp: 'x' } }));
-    expect(a.inbox.at(-1)).toEqual({ type: 'error', reason: 'Пир недоступен' });
-    expect(b.inbox.some((m) => m.type === 'signal')).toBe(false);
-  });
-
   it('возвращает ошибку на сигнал несуществующему пиру', () => {
-    const a = makePeer('1', 'lan');
+    const a = makePeer('1');
     hub.join(a);
     hub.handle(a, JSON.stringify({ type: 'signal', to: '99', data: {} }));
     expect(a.inbox.at(-1)).toEqual({ type: 'error', reason: 'Пир недоступен' });
   });
 
+  it('возвращает ошибку на сигнал самому себе', () => {
+    const a = makePeer('1');
+    hub.join(a);
+    hub.handle(a, JSON.stringify({ type: 'signal', to: '1', data: {} }));
+    expect(a.inbox.at(-1)).toEqual({ type: 'error', reason: 'Пир недоступен' });
+  });
+
   it('игнорирует битые сообщения', () => {
-    const a = makePeer('1', 'lan');
+    const a = makePeer('1');
     hub.join(a);
     hub.handle(a, '{not json');
     expect(a.inbox.at(-1)).toEqual({ type: 'error', reason: 'Некорректное сообщение' });
