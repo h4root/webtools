@@ -1,0 +1,7 @@
+- id: leakcheck
+  name: leakcheck (scan for hardcoded secrets)
+  description: Fail the commit if a hardcoded secret or high-entropy string is found in staged files.
+  entry: leakcheck --staged
+  language: python
+  pass_filenames: false
+  always_run: true
