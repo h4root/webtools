@@ -1,3 +1,5 @@
+import { createVoice } from './voice.js';
+
 const gate = document.getElementById('gate');
 const nickForm = document.getElementById('nick-form');
 const nickInput = document.getElementById('nick-input');
@@ -9,6 +11,9 @@ const chatHeader = document.getElementById('chat-header');
 const logEl = document.getElementById('log');
 const composer = document.getElementById('composer');
 const textInput = document.getElementById('text-input');
+const voiceToggle = document.getElementById('voice-toggle');
+const voiceMute = document.getElementById('voice-mute');
+const voiceUsers = document.getElementById('voice-users');
 
 const PUBLIC = 'public';
 const RECONNECT_MS = 2000;
@@ -18,10 +23,21 @@ let pendingNick = '';
 let joined = false;
 let activeChannel = PUBLIC;
 let online = [];
+let voiceActive = false;
 const history = new Map([[PUBLIC, []]]);
 const unread = new Map();
 let ws = null;
 let reconnectTimer = null;
+
+function wsSend(message) {
+  if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(message));
+}
+
+const voice = createVoice({
+  send: wsSend,
+  onState: renderVoice,
+  onError: (reason) => pushMessage(activeChannel, { system: true, text: `⚠ ${reason}` }),
+});
 
 function wsUrl() {
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
@@ -40,7 +56,10 @@ function connect() {
     }
     handleServer(message);
   });
-  ws.addEventListener('close', scheduleReconnect);
+  ws.addEventListener('close', () => {
+    voice.reset();
+    scheduleReconnect();
+  });
   ws.addEventListener('error', () => ws.close());
 }
 
@@ -78,6 +97,15 @@ function handleServer(message) {
     case 'error':
       if (!joined) gateError.textContent = message.reason;
       else pushMessage(activeChannel, { system: true, text: `⚠ ${message.reason}` });
+      break;
+    case 'voice-roster':
+      voice.handleRoster(message.users);
+      break;
+    case 'voice-signal':
+      voice.handleSignal(message.from, message.data);
+      break;
+    case 'voice-presence':
+      voice.handlePresence(message.users);
       break;
   }
 }
@@ -137,6 +165,23 @@ function renderChannels() {
   }
 }
 
+function renderVoice(state) {
+  voiceActive = state.active;
+  voiceToggle.textContent = state.active ? '📴 Выйти' : '🎙 Голос';
+  voiceToggle.classList.toggle('active', state.active);
+
+  voiceMute.hidden = !state.active;
+  voiceMute.textContent = state.muted ? '🔇 Микро выкл' : '🔊 Микро вкл';
+  voiceMute.classList.toggle('muted', state.muted);
+
+  voiceUsers.replaceChildren();
+  for (const nick of state.users) {
+    const li = document.createElement('li');
+    li.textContent = nick === myNick ? `${nick} (вы)` : nick;
+    voiceUsers.appendChild(li);
+  }
+}
+
 function renderLog() {
   logEl.replaceChildren();
   for (const entry of history.get(activeChannel) ?? []) {
@@ -174,6 +219,13 @@ nickForm.addEventListener('submit', (event) => {
     connect();
   }
 });
+
+voiceToggle.addEventListener('click', () => {
+  if (voiceActive) voice.leave();
+  else voice.join();
+});
+
+voiceMute.addEventListener('click', () => voice.toggleMute());
 
 composer.addEventListener('submit', (event) => {
   event.preventDefault();
