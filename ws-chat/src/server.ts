@@ -5,7 +5,7 @@ import { dirname, join } from 'node:path';
 import express from 'express';
 import { WebSocketServer, WebSocket } from 'ws';
 import { Hub, type Client } from './chat.ts';
-import { TEXT_MAX } from './protocol.ts';
+import { TEXT_MAX, SIGNAL_MAX } from './protocol.ts';
 
 const PORT = Number(process.env.PORT ?? 3000);
 const HOST = process.env.HOST ?? '0.0.0.0';
@@ -23,7 +23,7 @@ app.use(express.static(publicDir));
 const HEARTBEAT_MS = 30000;
 
 const server = createServer(app);
-const wss = new WebSocketServer({ server, maxPayload: TEXT_MAX * 4 });
+const wss = new WebSocketServer({ server, maxPayload: Math.max(TEXT_MAX * 4, SIGNAL_MAX * 2) });
 const hub = new Hub();
 
 let nextId = 1;

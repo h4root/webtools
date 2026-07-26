@@ -10,6 +10,7 @@ const NICK_PATTERN = /^[\p{L}\p{N} _.-]+$/u;
 
 export class Hub {
   private readonly clients = new Set<Client>();
+  private readonly voice = new Set<Client>();
 
   join(client: Client, nick: string): void {
     const trimmed = nick.trim();
@@ -31,12 +32,14 @@ export class Hub {
 
   leave(client: Client): void {
     if (!this.clients.delete(client)) return;
+    const wasInVoice = this.voice.delete(client);
     const nick = client.nick;
     client.nick = null;
     if (nick) {
       this.broadcast({ type: 'system', text: `${nick} вышел` });
       this.broadcastPresence();
     }
+    if (wasInVoice) this.broadcastVoicePresence();
   }
 
   handle(client: Client, raw: string): void {
@@ -56,11 +59,42 @@ export class Hub {
       return;
     }
 
-    if (message.type === 'public') {
-      this.sendPublic(client, message.text);
-    } else {
-      this.sendDirect(client, message.to, message.text);
+    switch (message.type) {
+      case 'public':
+        this.sendPublic(client, message.text);
+        break;
+      case 'direct':
+        this.sendDirect(client, message.to, message.text);
+        break;
+      case 'voice-join':
+        this.voiceJoin(client);
+        break;
+      case 'voice-leave':
+        this.voiceLeave(client);
+        break;
+      case 'voice-signal':
+        this.voiceSignal(client, message.to, message.data);
+        break;
     }
+  }
+
+  private voiceJoin(client: Client): void {
+    if (this.voice.has(client)) return;
+    const present = this.voiceNicks();
+    this.voice.add(client);
+    client.send({ type: 'voice-roster', users: present });
+    this.broadcastVoicePresence();
+  }
+
+  private voiceLeave(client: Client): void {
+    if (this.voice.delete(client)) this.broadcastVoicePresence();
+  }
+
+  private voiceSignal(client: Client, toNick: string, data: unknown): void {
+    if (!this.voice.has(client)) return;
+    const lower = toNick.toLowerCase();
+    const target = [...this.voice].find((c) => c.nick?.toLowerCase() === lower);
+    target?.send({ type: 'voice-signal', from: client.nick!, data });
   }
 
   private sendPublic(client: Client, text: string): void {
@@ -110,8 +144,19 @@ export class Hub {
       .sort((a, b) => a.localeCompare(b));
   }
 
+  private voiceNicks(): string[] {
+    return [...this.voice]
+      .map((c) => c.nick)
+      .filter((nick): nick is string => nick !== null)
+      .sort((a, b) => a.localeCompare(b));
+  }
+
   private broadcastPresence(): void {
     this.broadcast({ type: 'presence', users: this.onlineNicks() });
+  }
+
+  private broadcastVoicePresence(): void {
+    this.broadcast({ type: 'voice-presence', users: this.voiceNicks() });
   }
 
   private broadcast(message: ServerMessage): void {

@@ -1,10 +1,14 @@
 export const NICK_MAX = 24;
 export const TEXT_MAX = 2000;
+export const SIGNAL_MAX = 16384;
 
 export type ClientMessage =
   | { type: 'hello'; nick: string }
   | { type: 'public'; text: string }
-  | { type: 'direct'; to: string; text: string };
+  | { type: 'direct'; to: string; text: string }
+  | { type: 'voice-join' }
+  | { type: 'voice-leave' }
+  | { type: 'voice-signal'; to: string; data: unknown };
 
 export type ChatChannel = 'public' | 'direct';
 
@@ -13,7 +17,10 @@ export type ServerMessage =
   | { type: 'presence'; users: string[] }
   | { type: 'chat'; channel: ChatChannel; from: string; to?: string; text: string; ts: number }
   | { type: 'system'; text: string }
-  | { type: 'error'; reason: string };
+  | { type: 'error'; reason: string }
+  | { type: 'voice-roster'; users: string[] }
+  | { type: 'voice-presence'; users: string[] }
+  | { type: 'voice-signal'; from: string; data: unknown };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
@@ -41,6 +48,15 @@ export function parseClientMessage(raw: string): ClientMessage | null {
       return isBoundedString(data.to, NICK_MAX) && isBoundedString(data.text, TEXT_MAX)
         ? { type: 'direct', to: data.to.trim(), text: data.text }
         : null;
+    case 'voice-join':
+      return { type: 'voice-join' };
+    case 'voice-leave':
+      return { type: 'voice-leave' };
+    case 'voice-signal':
+      if (!isBoundedString(data.to, NICK_MAX)) return null;
+      if (data.data === undefined) return null;
+      if (JSON.stringify(data.data).length > SIGNAL_MAX) return null;
+      return { type: 'voice-signal', to: data.to.trim(), data: data.data };
     default:
       return null;
   }
