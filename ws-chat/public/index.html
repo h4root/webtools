@@ -29,12 +29,44 @@
       </div>
     </aside>
     <section class="chat">
-      <header class="chat-header" id="chat-header"># public</header>
+      <header class="chat-header">
+        <span id="chat-title"># public</span>
+        <button type="button" class="call-btn" id="call-btn" hidden>📞 Позвонить</button>
+      </header>
       <div class="log" id="log"></div>
       <form class="composer" id="composer">
         <input id="text-input" placeholder="сообщение…" autocomplete="off" maxlength="2000">
         <button type="submit">→</button>
       </form>
+    </section>
+
+    <div class="call-incoming" id="call-incoming" hidden>
+      <span class="call-incoming-text" id="call-incoming-text"></span>
+      <div class="call-incoming-actions">
+        <button type="button" class="call-accept" id="call-accept">Принять</button>
+        <button type="button" class="call-decline" id="call-decline">Отклонить</button>
+      </div>
+    </div>
+
+    <section class="call-panel" id="call-panel" hidden>
+      <div class="call-parties">
+        <div class="party" id="party-me">
+          <span class="ring"></span>
+          <span class="pname">вы</span>
+          <span class="meter"><i></i></span>
+        </div>
+        <div class="party" id="party-peer">
+          <span class="ring"></span>
+          <span class="pname" id="peer-name"></span>
+          <span class="meter"><i></i></span>
+        </div>
+      </div>
+      <div class="call-status" id="call-status"></div>
+      <div class="call-stats" id="call-stats"></div>
+      <div class="call-actions">
+        <button type="button" class="call-mute" id="call-mute">🔊 Микро вкл</button>
+        <button type="button" class="call-hangup" id="call-hangup">Завершить</button>
+      </div>
     </section>
   </main>
 

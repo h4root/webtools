@@ -194,3 +194,49 @@ describe('Hub voice', () => {
     expect(lastVoicePresence(b)).toEqual([]);
   });
 });
+
+describe('Hub private call', () => {
+  let hub: Hub;
+
+  beforeEach(() => {
+    hub = new Hub();
+  });
+
+  it('пересылает приглашение адресату с ником звонящего', () => {
+    const a = makeClient('a');
+    const b = makeClient('b');
+    hub.join(a, 'alice');
+    hub.join(b, 'bob');
+    hub.handle(a, JSON.stringify({ type: 'call-invite', to: 'bob' }));
+    expect(b.inbox.at(-1)).toEqual({ type: 'call-invite', from: 'alice' });
+  });
+
+  it('сообщает звонящему, если адресат не в сети', () => {
+    const a = makeClient('a');
+    hub.join(a, 'alice');
+    hub.handle(a, JSON.stringify({ type: 'call-invite', to: 'ghost' }));
+    expect(a.inbox.at(-1)).toEqual({ type: 'call-end', from: 'ghost', reason: 'offline' });
+  });
+
+  it('пересылает accept, signal и end адресату', () => {
+    const a = makeClient('a');
+    const b = makeClient('b');
+    hub.join(a, 'alice');
+    hub.join(b, 'bob');
+    hub.handle(b, JSON.stringify({ type: 'call-accept', to: 'alice' }));
+    expect(a.inbox.at(-1)).toEqual({ type: 'call-accept', from: 'bob' });
+    hub.handle(a, JSON.stringify({ type: 'call-signal', to: 'bob', data: { kind: 'offer' } }));
+    expect(b.inbox.at(-1)).toEqual({ type: 'call-signal', from: 'alice', data: { kind: 'offer' } });
+    hub.handle(b, JSON.stringify({ type: 'call-end', to: 'alice' }));
+    expect(a.inbox.at(-1)).toEqual({ type: 'call-end', from: 'bob' });
+  });
+
+  it('передаёт причину отклонения', () => {
+    const a = makeClient('a');
+    const b = makeClient('b');
+    hub.join(a, 'alice');
+    hub.join(b, 'bob');
+    hub.handle(b, JSON.stringify({ type: 'call-decline', to: 'alice', reason: 'busy' }));
+    expect(a.inbox.at(-1)).toEqual({ type: 'call-decline', from: 'bob', reason: 'busy' });
+  });
+});
