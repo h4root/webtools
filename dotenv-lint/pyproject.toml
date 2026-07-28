@@ -1,0 +1,23 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "dotenv-lint"
+version = "0.1.0"
+description = "Сверка .env с .env.example: пропущенные ключи, плейсхолдеры и слабые значения. Zero runtime dependencies."
+requires-python = ">=3.11"
+authors = [{ name = "h4root" }]
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[project.scripts]
+dotenv-lint = "dotenv_lint.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/dotenv_lint"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
