@@ -1,4 +1,5 @@
 import { createVoice } from './voice.js';
+import { createCall } from './call.js';
 
 const gate = document.getElementById('gate');
 const nickForm = document.getElementById('nick-form');
@@ -7,13 +8,26 @@ const gateError = document.getElementById('gate-error');
 const appEl = document.getElementById('app');
 const meEl = document.getElementById('me');
 const channelsEl = document.getElementById('channels');
-const chatHeader = document.getElementById('chat-header');
+const chatTitle = document.getElementById('chat-title');
 const logEl = document.getElementById('log');
 const composer = document.getElementById('composer');
 const textInput = document.getElementById('text-input');
 const voiceToggle = document.getElementById('voice-toggle');
 const voiceMute = document.getElementById('voice-mute');
 const voiceUsers = document.getElementById('voice-users');
+const callBtn = document.getElementById('call-btn');
+const callIncoming = document.getElementById('call-incoming');
+const callIncomingText = document.getElementById('call-incoming-text');
+const callAccept = document.getElementById('call-accept');
+const callDecline = document.getElementById('call-decline');
+const callPanel = document.getElementById('call-panel');
+const peerName = document.getElementById('peer-name');
+const partyMe = document.getElementById('party-me');
+const partyPeer = document.getElementById('party-peer');
+const callStatus = document.getElementById('call-status');
+const callStats = document.getElementById('call-stats');
+const callMute = document.getElementById('call-mute');
+const callHangup = document.getElementById('call-hangup');
 
 const PUBLIC = 'public';
 const RECONNECT_MS = 2000;
@@ -24,6 +38,7 @@ let joined = false;
 let activeChannel = PUBLIC;
 let online = [];
 let voiceActive = false;
+let callPhase = 'idle';
 const history = new Map([[PUBLIC, []]]);
 const unread = new Map();
 let ws = null;
@@ -36,6 +51,13 @@ function wsSend(message) {
 const voice = createVoice({
   send: wsSend,
   onState: renderVoice,
+  onError: (reason) => pushMessage(activeChannel, { system: true, text: `⚠ ${reason}` }),
+});
+
+const call = createCall({
+  send: wsSend,
+  onState: renderCall,
+  onLevels: renderLevels,
   onError: (reason) => pushMessage(activeChannel, { system: true, text: `⚠ ${reason}` }),
 });
 
@@ -58,6 +80,7 @@ function connect() {
   });
   ws.addEventListener('close', () => {
     voice.reset();
+    call.hangup();
     scheduleReconnect();
   });
   ws.addEventListener('error', () => ws.close());
@@ -81,6 +104,7 @@ function handleServer(message) {
     case 'presence':
       online = message.users.filter((nick) => nick !== myNick);
       renderChannels();
+      call.handlePresence(message.users);
       break;
     case 'chat': {
       const channel = message.channel === 'public' ? PUBLIC : otherParty(message);
@@ -106,6 +130,13 @@ function handleServer(message) {
       break;
     case 'voice-presence':
       voice.handlePresence(message.users);
+      break;
+    case 'call-invite':
+    case 'call-accept':
+    case 'call-decline':
+    case 'call-end':
+    case 'call-signal':
+      call.handleMessage(message);
       break;
   }
 }
@@ -136,10 +167,16 @@ function pushMessage(channel, entry) {
 function setActive(channel) {
   activeChannel = channel;
   unread.set(channel, 0);
-  chatHeader.textContent = channel === PUBLIC ? '# public' : `@ ${channel}`;
+  chatTitle.textContent = channel === PUBLIC ? '# public' : `@ ${channel}`;
   renderChannels();
   renderLog();
+  updateCallButton();
   textInput.focus();
+}
+
+function updateCallButton() {
+  const canCall = callPhase === 'idle' && activeChannel !== PUBLIC && online.includes(activeChannel);
+  callBtn.hidden = !canCall;
 }
 
 function renderChannels() {
@@ -163,6 +200,7 @@ function renderChannels() {
     item.addEventListener('click', () => setActive(channel));
     channelsEl.appendChild(item);
   }
+  updateCallButton();
 }
 
 function renderVoice(state) {
@@ -180,6 +218,61 @@ function renderVoice(state) {
     li.textContent = nick === myNick ? `${nick} (вы)` : nick;
     voiceUsers.appendChild(li);
   }
+}
+
+function renderCall(state) {
+  callPhase = state.phase;
+  const inCall = state.phase === 'outgoing' || state.phase === 'active';
+
+  callIncoming.hidden = state.phase !== 'incoming';
+  if (state.phase === 'incoming') callIncomingText.textContent = `${state.peer} звонит…`;
+
+  callPanel.hidden = !inCall;
+  if (inCall) {
+    peerName.textContent = state.peer ?? '';
+    callStatus.textContent = state.phase === 'outgoing' ? 'Звоним…' : 'На связи';
+    callMute.hidden = state.phase !== 'active';
+    callMute.textContent = state.muted ? '🔇 Микро выкл' : '🔊 Микро вкл';
+    callMute.classList.toggle('muted', state.muted);
+    renderStats(state.stats);
+  } else {
+    setMeter(partyMe, 0, false);
+    setMeter(partyPeer, 0, false);
+  }
+
+  updateCallButton();
+}
+
+function renderStats(stats) {
+  callStats.replaceChildren();
+  if (!stats) return;
+  const dot = document.createElement('span');
+  dot.className = `q-dot ${stats.quality}`;
+  const text = document.createElement('span');
+  text.textContent = formatStats(stats);
+  callStats.append(dot, text);
+}
+
+function formatStats(s) {
+  const parts = [];
+  if (s.rttMs != null) parts.push(`${s.rttMs} мс`);
+  if (s.protocol) parts.push(s.protocol);
+  if (s.localType && s.remoteType) parts.push(`${s.localType}↔${s.remoteType}`);
+  if (s.codec) parts.push(s.codec);
+  if (s.lossPct != null) parts.push(`потери ${s.lossPct}%`);
+  if (s.jitterMs != null) parts.push(`джиттер ${s.jitterMs} мс`);
+  if (s.kbps != null) parts.push(`${s.kbps} кбит/с`);
+  return parts.join(' · ');
+}
+
+function setMeter(party, level, speaking) {
+  party.querySelector('.meter > i').style.width = `${Math.min(100, Math.round(level * 140))}%`;
+  party.querySelector('.ring').classList.toggle('speaking', speaking);
+}
+
+function renderLevels(levels) {
+  setMeter(partyMe, levels.local, levels.localSpeaking);
+  setMeter(partyPeer, levels.remote, levels.remoteSpeaking);
 }
 
 function renderLog() {
@@ -226,6 +319,12 @@ voiceToggle.addEventListener('click', () => {
 });
 
 voiceMute.addEventListener('click', () => voice.toggleMute());
+
+callBtn.addEventListener('click', () => call.invite(activeChannel));
+callAccept.addEventListener('click', () => call.accept());
+callDecline.addEventListener('click', () => call.decline());
+callMute.addEventListener('click', () => call.toggleMute());
+callHangup.addEventListener('click', () => call.hangup());
 
 composer.addEventListener('submit', (event) => {
   event.preventDefault();

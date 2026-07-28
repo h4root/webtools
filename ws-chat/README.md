@@ -28,17 +28,30 @@ npm start       # прод
 - `iceServers` пуст: на LAN хватает host-кандидатов, трафик не покидает сеть.
 - Рассчитано на небольшую группу (mesh); для десятков участников нужен был бы SFU.
 
+## Приватный звонок
+
+В личке (DM с ником) есть кнопка «Позвонить» - отдельный **1-на-1 звонок в стиле Discord** поверх того же сигналинга: приглашение → входящий баннер с «Принять / Отклонить» → соединение. Звонящий шлёт offer после приёма (нет glare). Если ник не в сети - звонящий получает `call-end` с `reason: offline`; если абонент уже в звонке - автоматический `call-decline` с `reason: busy`.
+
+Панель звонка (справа-снизу, живёт поверх любого канала) показывает:
+
+- **Кто говорит** - зелёное кольцо у активного участника (детект речи через WebAudio `AnalyserNode`, RMS по потоку локально).
+- **Аудио-индикатор** - шкала уровня по каждому участнику.
+- **Задержку и качество** - из `RTCPeerConnection.getStats()` раз в секунду: RTT (мс), потери, джиттер, битрейт, кодек (opus), и **используемый транспорт** - протокол (UDP/TCP) и типы ICE-кандидатов (`host` / `srflx` / `relay`). Точка слева меняет цвет: зелёная (хорошо) / жёлтая (норм) / красная (плохо).
+
+Всё P2P, `iceServers` пуст - на LAN это host-кандидаты по UDP.
+
 ## Структура
 
 ```
 src/
   protocol.ts   типы сообщений + валидация входящих
-  chat.ts       Hub - роутинг public / direct + сигналинг голоса
-  chat.test.ts  тесты роутинга и голоса
+  chat.ts       Hub - роутинг public / direct + сигналинг голоса и звонка
+  chat.test.ts  тесты роутинга, голоса и звонка
   server.ts     Express (раздаёт public/) + WebSocketServer
 public/
   app.js        клиент чата
-  voice.js      mesh WebRTC-аудио (createVoice)
+  voice.js      mesh WebRTC-аудио группового голоса (createVoice)
+  call.js       приватный 1-на-1 звонок + индикаторы и статистика (createCall)
   index.html styles.css
 ```
 
@@ -51,8 +64,10 @@ public/
 - `{ "type": "direct", "to": "bob", "text": "…" }`
 - `{ "type": "voice-join" }` / `{ "type": "voice-leave" }`
 - `{ "type": "voice-signal", "to": "bob", "data": … }` - SDP/ICE конкретному нику
+- `{ "type": "call-invite" | "call-accept" | "call-decline" | "call-end", "to": "bob" }` - управление приватным звонком
+- `{ "type": "call-signal", "to": "bob", "data": … }` - SDP/ICE звонка
 
-Сервер → клиент: `welcome`, `presence`, `chat`, `system`, `error`, `voice-roster` (кто уже в голосе - новичок шлёт им offer), `voice-presence`, `voice-signal`.
+Сервер → клиент: `welcome`, `presence`, `chat`, `system`, `error`, `voice-roster` (кто уже в голосе - новичок шлёт им offer), `voice-presence`, `voice-signal`, и зеркальные `call-*` с полем `from` (плюс `reason` у `call-end`/`call-decline`: `offline` / `busy`).
 
 ## Тесты
 

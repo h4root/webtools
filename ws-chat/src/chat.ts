@@ -75,7 +75,30 @@ export class Hub {
       case 'voice-signal':
         this.voiceSignal(client, message.to, message.data);
         break;
+      case 'call-invite': {
+        const target = this.findByNick(message.to);
+        if (target) target.send({ type: 'call-invite', from: client.nick! });
+        else client.send({ type: 'call-end', from: message.to, reason: 'offline' });
+        break;
+      }
+      case 'call-accept':
+        this.findByNick(message.to)?.send({ type: 'call-accept', from: client.nick! });
+        break;
+      case 'call-decline':
+        this.findByNick(message.to)?.send({ type: 'call-decline', from: client.nick!, reason: message.reason });
+        break;
+      case 'call-end':
+        this.findByNick(message.to)?.send({ type: 'call-end', from: client.nick! });
+        break;
+      case 'call-signal':
+        this.findByNick(message.to)?.send({ type: 'call-signal', from: client.nick!, data: message.data });
+        break;
     }
+  }
+
+  private findByNick(nick: string): Client | undefined {
+    const lower = nick.toLowerCase();
+    return [...this.clients].find((c) => c.nick?.toLowerCase() === lower);
   }
 
   private voiceJoin(client: Client): void {
