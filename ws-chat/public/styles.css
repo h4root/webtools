@@ -562,8 +562,8 @@ button {
 
 .settings-popup {
   position: fixed;
-  left: 16px;
-  bottom: 64px;
+  left: 232px;
+  bottom: 16px;
   width: 260px;
   display: flex;
   flex-direction: column;
