@@ -14,6 +14,13 @@ const DEFAULTS = {
   noiseSuppression: true,
   autoGainControl: true,
   font: 'jetbrains',
+  motion: 'system',
+};
+
+export const MOTIONS = {
+  system: 'Система',
+  on: 'Вкл',
+  off: 'Выкл',
 };
 
 function load() {
@@ -26,6 +33,7 @@ function load() {
 
 const state = load();
 const listeners = new Set();
+const motionListeners = new Set();
 
 function persist() {
   localStorage.setItem(STORE_KEY, JSON.stringify(state));
@@ -33,6 +41,10 @@ function persist() {
 
 function notify() {
   for (const cb of listeners) cb();
+}
+
+function notifyMotion() {
+  for (const cb of motionListeners) cb();
 }
 
 export const settings = {
@@ -53,8 +65,24 @@ export const settings = {
   onChange(cb) {
     listeners.add(cb);
   },
+  onMotionChange(cb) {
+    motionListeners.add(cb);
+  },
   applyFont() {
     document.documentElement.style.setProperty('--font', FONTS[state.font].stack);
+  },
+  motion() {
+    return state.motion;
+  },
+  animationsEnabled() {
+    if (state.motion === 'on') return true;
+    if (state.motion === 'off') return false;
+    return !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  },
+  applyMotion() {
+    const root = document.documentElement.classList;
+    root.toggle('motion-on', state.motion === 'on');
+    root.toggle('motion-off', state.motion === 'off');
   },
 };
 
@@ -78,6 +106,7 @@ async function listDevices() {
 
 export function mountSettings(root) {
   settings.applyFont();
+  settings.applyMotion();
 
   const toggle = document.createElement('button');
   toggle.type = 'button';
@@ -111,6 +140,27 @@ export function mountSettings(root) {
       ),
     );
     popup.append(section('Шрифт', fontSelect()));
+    popup.append(section('Анимации', motionSelect()));
+  }
+
+  function motionSelect() {
+    const wrap = document.createElement('div');
+    wrap.className = 'settings-fonts';
+    for (const [key, label] of Object.entries(MOTIONS)) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = label;
+      b.className = key === state.motion ? 'active' : '';
+      b.addEventListener('click', () => {
+        state.motion = key;
+        persist();
+        settings.applyMotion();
+        notifyMotion();
+        render();
+      });
+      wrap.appendChild(b);
+    }
+    return wrap;
   }
 
   function set(key, value) {

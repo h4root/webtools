@@ -1,7 +1,7 @@
 import { createVoice } from './voice.js';
 import { createCall } from './call.js';
 import { icon, setButton } from './icons.js';
-import { mountSettings } from './settings.js';
+import { mountSettings, settings } from './settings.js';
 import autoAnimate from './vendor/auto-animate.mjs';
 
 const gate = document.getElementById('gate');
@@ -281,7 +281,12 @@ function renderLevels(levels) {
   setMeter(partyPeer, levels.remote, levels.remoteSpeaking);
 }
 
-const logAnimation = autoAnimate(logEl, { duration: 180 });
+const logAnimation = autoAnimate(logEl, { duration: 180, disrespectUserMotionPreference: true });
+
+function applyMotionState() {
+  if (settings.animationsEnabled()) logAnimation.enable();
+  else logAnimation.disable();
+}
 
 function createRow(entry) {
   const row = document.createElement('div');
@@ -314,7 +319,7 @@ function renderLog() {
   logEl.replaceChildren();
   for (const entry of history.get(activeChannel) ?? []) logEl.appendChild(createRow(entry));
   logEl.scrollTop = logEl.scrollHeight;
-  logAnimation.enable();
+  applyMotionState();
 }
 
 nickForm.addEventListener('submit', (event) => {
@@ -394,6 +399,8 @@ function initUI() {
   const { toggle } = mountSettings(settingsEl);
   setButton(toggle, 'gear');
   makeDraggable(callPanel, callGrip);
+  settings.onMotionChange(applyMotionState);
+  applyMotionState();
 }
 
 initUI();
