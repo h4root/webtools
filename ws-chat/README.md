@@ -65,8 +65,11 @@ public/
   settings.js   попап настроек: устройства, эффекты, шрифт (localStorage)
   icons.js      инлайн akar-icons
   fonts/        забандленные woff2 (JetBrains Mono / Victor Mono / IBM Plex Mono)
+  vendor/       auto-animate.mjs (@formkit/auto-animate, MIT) - анимация ленты
   index.html styles.css
 ```
+
+Анимации: появление сообщений через [@formkit/auto-animate](https://github.com/formkit/auto-animate) (MIT, забандлен локально в `public/vendor/`), остальное - CSS-кейфреймы (вход панелей/попапа, пульс входящего звонка и кольца «говорит», ховеры). Всё выключается при `prefers-reduced-motion`.
 
 ## Протокол (JSON поверх WebSocket)
 

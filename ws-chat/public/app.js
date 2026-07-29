@@ -2,6 +2,7 @@ import { createVoice } from './voice.js';
 import { createCall } from './call.js';
 import { icon, setButton } from './icons.js';
 import { mountSettings } from './settings.js';
+import autoAnimate from './vendor/auto-animate.mjs';
 
 const gate = document.getElementById('gate');
 const nickForm = document.getElementById('nick-form');
@@ -162,7 +163,7 @@ function pushMessage(channel, entry) {
   if (!history.has(channel)) history.set(channel, []);
   history.get(channel).push(entry);
   if (channel === activeChannel) {
-    renderLog();
+    appendRow(entry);
   } else {
     unread.set(channel, (unread.get(channel) ?? 0) + 1);
   }
@@ -280,29 +281,40 @@ function renderLevels(levels) {
   setMeter(partyPeer, levels.remote, levels.remoteSpeaking);
 }
 
-function renderLog() {
-  logEl.replaceChildren();
-  for (const entry of history.get(activeChannel) ?? []) {
-    const row = document.createElement('div');
-    if (entry.system) {
-      row.className = 'row system';
-      row.textContent = entry.text;
-    } else {
-      row.className = entry.mine ? 'row mine' : 'row';
-      if (!entry.mine) {
-        const who = document.createElement('span');
-        who.className = 'who';
-        who.textContent = entry.from;
-        row.appendChild(who);
-      }
-      const text = document.createElement('span');
-      text.className = 'text';
-      text.textContent = entry.text;
-      row.appendChild(text);
+const logAnimation = autoAnimate(logEl, { duration: 180 });
+
+function createRow(entry) {
+  const row = document.createElement('div');
+  if (entry.system) {
+    row.className = 'row system';
+    row.textContent = entry.text;
+  } else {
+    row.className = entry.mine ? 'row mine' : 'row';
+    if (!entry.mine) {
+      const who = document.createElement('span');
+      who.className = 'who';
+      who.textContent = entry.from;
+      row.appendChild(who);
     }
-    logEl.appendChild(row);
+    const text = document.createElement('span');
+    text.className = 'text';
+    text.textContent = entry.text;
+    row.appendChild(text);
   }
+  return row;
+}
+
+function appendRow(entry) {
+  logEl.appendChild(createRow(entry));
   logEl.scrollTop = logEl.scrollHeight;
+}
+
+function renderLog() {
+  logAnimation.disable();
+  logEl.replaceChildren();
+  for (const entry of history.get(activeChannel) ?? []) logEl.appendChild(createRow(entry));
+  logEl.scrollTop = logEl.scrollHeight;
+  logAnimation.enable();
 }
 
 nickForm.addEventListener('submit', (event) => {
