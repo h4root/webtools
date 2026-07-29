@@ -626,3 +626,90 @@ button {
   border-color: var(--accent);
   color: var(--accent);
 }
+
+/* Auto-layout: flex-дети должны сжиматься и усекаться, а не вылезать за рамки */
+.chat {
+  min-width: 0;
+}
+
+#chat-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.call-btn {
+  flex-shrink: 0;
+}
+
+.channel {
+  min-width: 0;
+}
+
+.channel > span:first-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.badge {
+  flex-shrink: 0;
+}
+
+.voice-toggle,
+.voice-mute {
+  min-width: 0;
+}
+
+.voice-users li {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.voice-toggle > span,
+.voice-mute > span,
+.call-btn > span,
+.call-mute > span,
+.call-hangup > span,
+.call-accept > span,
+.call-decline > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.composer input {
+  min-width: 0;
+}
+
+#send-btn {
+  flex-shrink: 0;
+}
+
+.call-panel {
+  max-width: calc(100vw - 36px);
+}
+
+.call-incoming {
+  max-width: calc(100vw - 36px);
+}
+
+.call-incoming-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.call-incoming-actions {
+  flex-shrink: 0;
+}
+
+.settings-popup {
+  max-width: calc(100vw - 32px);
+}
