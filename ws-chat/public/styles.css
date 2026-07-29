@@ -530,6 +530,10 @@ button {
   background: var(--line);
 }
 
+.settings {
+  display: contents;
+}
+
 .settings-toggle {
   position: fixed;
   left: 16px;
