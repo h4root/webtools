@@ -156,6 +156,9 @@ button {
 }
 
 .voice {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
   padding: 10px;
   border-top: 1px solid var(--line);
 }
@@ -187,12 +190,16 @@ button {
 }
 
 .voice-users {
-  margin: 8px 0 0;
+  margin: 0;
   padding: 0;
   list-style: none;
   display: flex;
   flex-direction: column;
   gap: 4px;
+}
+
+.voice-users:empty {
+  display: none;
 }
 
 .voice-users li {
