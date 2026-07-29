@@ -18,7 +18,11 @@ if (!Number.isInteger(PORT) || PORT < 1 || PORT > 65535) {
 const publicDir = join(dirname(fileURLToPath(import.meta.url)), '..', 'public');
 
 const app = express();
-app.use(express.static(publicDir));
+app.use(
+  express.static(publicDir, {
+    setHeaders: (res) => res.setHeader('Cache-Control', 'no-cache'),
+  }),
+);
 
 const HEARTBEAT_MS = 30000;
 
