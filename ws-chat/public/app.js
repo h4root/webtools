@@ -1,5 +1,7 @@
 import { createVoice } from './voice.js';
 import { createCall } from './call.js';
+import { icon, setButton } from './icons.js';
+import { mountSettings } from './settings.js';
 
 const gate = document.getElementById('gate');
 const nickForm = document.getElementById('nick-form');
@@ -28,6 +30,9 @@ const callStatus = document.getElementById('call-status');
 const callStats = document.getElementById('call-stats');
 const callMute = document.getElementById('call-mute');
 const callHangup = document.getElementById('call-hangup');
+const callGrip = document.getElementById('call-grip');
+const sendBtn = document.getElementById('send-btn');
+const settingsEl = document.getElementById('settings');
 
 const PUBLIC = 'public';
 const RECONNECT_MS = 2000;
@@ -51,14 +56,14 @@ function wsSend(message) {
 const voice = createVoice({
   send: wsSend,
   onState: renderVoice,
-  onError: (reason) => pushMessage(activeChannel, { system: true, text: `⚠ ${reason}` }),
+  onError: (reason) => pushMessage(activeChannel, { system: true, text: reason }),
 });
 
 const call = createCall({
   send: wsSend,
   onState: renderCall,
   onLevels: renderLevels,
-  onError: (reason) => pushMessage(activeChannel, { system: true, text: `⚠ ${reason}` }),
+  onError: (reason) => pushMessage(activeChannel, { system: true, text: reason }),
 });
 
 function wsUrl() {
@@ -120,7 +125,7 @@ function handleServer(message) {
       break;
     case 'error':
       if (!joined) gateError.textContent = message.reason;
-      else pushMessage(activeChannel, { system: true, text: `⚠ ${message.reason}` });
+      else pushMessage(activeChannel, { system: true, text: message.reason });
       break;
     case 'voice-roster':
       voice.handleRoster(message.users);
@@ -205,11 +210,11 @@ function renderChannels() {
 
 function renderVoice(state) {
   voiceActive = state.active;
-  voiceToggle.textContent = state.active ? '📴 Выйти' : '🎙 Голос';
+  setButton(voiceToggle, state.active ? 'cross' : 'microphone', state.active ? 'Выйти' : 'Голос');
   voiceToggle.classList.toggle('active', state.active);
 
   voiceMute.hidden = !state.active;
-  voiceMute.textContent = state.muted ? '🔇 Микро выкл' : '🔊 Микро вкл';
+  setButton(voiceMute, state.muted ? 'sound-off' : 'microphone', state.muted ? 'Выкл' : 'Микро');
   voiceMute.classList.toggle('muted', state.muted);
 
   voiceUsers.replaceChildren();
@@ -232,7 +237,7 @@ function renderCall(state) {
     peerName.textContent = state.peer ?? '';
     callStatus.textContent = state.phase === 'outgoing' ? 'Звоним…' : 'На связи';
     callMute.hidden = state.phase !== 'active';
-    callMute.textContent = state.muted ? '🔇 Микро выкл' : '🔊 Микро вкл';
+    setButton(callMute, state.muted ? 'sound-off' : 'microphone', state.muted ? 'Выкл' : 'Микро');
     callMute.classList.toggle('muted', state.muted);
     renderStats(state.stats);
   } else {
@@ -337,3 +342,46 @@ composer.addEventListener('submit', (event) => {
   ws.send(JSON.stringify(message));
   textInput.value = '';
 });
+
+function makeDraggable(panel, handle) {
+  let dragging = false;
+  let offsetX = 0;
+  let offsetY = 0;
+
+  handle.addEventListener('pointerdown', (event) => {
+    dragging = true;
+    const rect = panel.getBoundingClientRect();
+    offsetX = event.clientX - rect.left;
+    offsetY = event.clientY - rect.top;
+    panel.style.right = 'auto';
+    panel.style.bottom = 'auto';
+    panel.style.left = `${rect.left}px`;
+    panel.style.top = `${rect.top}px`;
+    handle.setPointerCapture(event.pointerId);
+  });
+  handle.addEventListener('pointermove', (event) => {
+    if (!dragging) return;
+    const x = Math.max(0, Math.min(window.innerWidth - panel.offsetWidth, event.clientX - offsetX));
+    const y = Math.max(0, Math.min(window.innerHeight - panel.offsetHeight, event.clientY - offsetY));
+    panel.style.left = `${x}px`;
+    panel.style.top = `${y}px`;
+  });
+  handle.addEventListener('pointerup', (event) => {
+    dragging = false;
+    handle.releasePointerCapture(event.pointerId);
+  });
+}
+
+function initUI() {
+  setButton(voiceToggle, 'microphone', 'Голос');
+  setButton(callBtn, 'phone', 'Позвонить');
+  setButton(callAccept, 'phone', 'Принять');
+  setButton(callDecline, 'cross', 'Отклонить');
+  setButton(callHangup, 'phone', 'Завершить');
+  setButton(sendBtn, 'chevron-right');
+  const { toggle } = mountSettings(settingsEl);
+  setButton(toggle, 'gear');
+  makeDraggable(callPanel, callGrip);
+}
+
+initUI();

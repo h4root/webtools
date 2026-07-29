@@ -1,5 +1,6 @@
+import { settings, applySink } from './settings.js';
+
 const RTC_CONFIG = { iceServers: [] };
-const MIC_CONSTRAINTS = { audio: { echoCancellation: true, noiseSuppression: true }, video: false };
 
 export function createVoice({ send, onState, onError }) {
   const calls = new Map();
@@ -24,9 +25,11 @@ export function createVoice({ send, onState, onError }) {
     const audioEl = document.createElement('audio');
     audioEl.autoplay = true;
     document.body.appendChild(audioEl);
+    applySink(audioEl);
 
     pc.ontrack = (event) => {
       audioEl.srcObject = event.streams[0];
+      applySink(audioEl);
     };
     pc.onicecandidate = (event) => {
       if (event.candidate) send({ type: 'voice-signal', to: nick, data: { kind: 'ice', candidate: event.candidate } });
@@ -67,7 +70,7 @@ export function createVoice({ send, onState, onError }) {
   async function join() {
     if (active) return;
     try {
-      localStream = await navigator.mediaDevices.getUserMedia(MIC_CONSTRAINTS);
+      localStream = await navigator.mediaDevices.getUserMedia({ audio: settings.audioConstraints(), video: false });
     } catch {
       onError?.('Нет доступа к микрофону');
       return;
@@ -78,6 +81,26 @@ export function createVoice({ send, onState, onError }) {
     send({ type: 'voice-join' });
     emit();
   }
+
+  async function applyDeviceChange() {
+    if (!active) return;
+    for (const { audioEl } of calls.values()) applySink(audioEl);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: settings.audioConstraints(), video: false });
+      const track = stream.getAudioTracks()[0];
+      track.enabled = !muted;
+      for (const { pc } of calls.values()) {
+        const sender = pc.getSenders().find((s) => s.track && s.track.kind === 'audio');
+        if (sender) await sender.replaceTrack(track);
+      }
+      if (localStream) for (const t of localStream.getTracks()) t.stop();
+      localStream = stream;
+    } catch {
+      onError?.('Не удалось сменить микрофон');
+    }
+  }
+
+  settings.onChange(applyDeviceChange);
 
   function leave() {
     if (!active) return;

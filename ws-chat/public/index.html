@@ -22,7 +22,7 @@
       <ul class="channels" id="channels"></ul>
       <div class="voice" id="voice">
         <div class="voice-controls">
-          <button type="button" class="voice-toggle" id="voice-toggle">🎙 Голос</button>
+          <button type="button" class="voice-toggle" id="voice-toggle"></button>
           <button type="button" class="voice-mute" id="voice-mute" hidden></button>
         </div>
         <ul class="voice-users" id="voice-users"></ul>
@@ -31,24 +31,25 @@
     <section class="chat">
       <header class="chat-header">
         <span id="chat-title"># public</span>
-        <button type="button" class="call-btn" id="call-btn" hidden>📞 Позвонить</button>
+        <button type="button" class="call-btn" id="call-btn" hidden></button>
       </header>
       <div class="log" id="log"></div>
       <form class="composer" id="composer">
         <input id="text-input" placeholder="сообщение…" autocomplete="off" maxlength="2000">
-        <button type="submit">→</button>
+        <button type="submit" id="send-btn"></button>
       </form>
     </section>
 
     <div class="call-incoming" id="call-incoming" hidden>
       <span class="call-incoming-text" id="call-incoming-text"></span>
       <div class="call-incoming-actions">
-        <button type="button" class="call-accept" id="call-accept">Принять</button>
-        <button type="button" class="call-decline" id="call-decline">Отклонить</button>
+        <button type="button" class="call-accept" id="call-accept"></button>
+        <button type="button" class="call-decline" id="call-decline"></button>
       </div>
     </div>
 
     <section class="call-panel" id="call-panel" hidden>
+      <div class="call-grip" id="call-grip"></div>
       <div class="call-parties">
         <div class="party" id="party-me">
           <span class="ring"></span>
@@ -64,10 +65,12 @@
       <div class="call-status" id="call-status"></div>
       <div class="call-stats" id="call-stats"></div>
       <div class="call-actions">
-        <button type="button" class="call-mute" id="call-mute">🔊 Микро вкл</button>
-        <button type="button" class="call-hangup" id="call-hangup">Завершить</button>
+        <button type="button" class="call-mute" id="call-mute"></button>
+        <button type="button" class="call-hangup" id="call-hangup"></button>
       </div>
     </section>
+
+    <div class="settings" id="settings"></div>
   </main>
 
   <script type="module" src="app.js"></script>

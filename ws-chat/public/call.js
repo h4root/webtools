@@ -1,5 +1,6 @@
+import { settings, applySink } from './settings.js';
+
 const RTC_CONFIG = { iceServers: [] };
-const MIC_CONSTRAINTS = { audio: { echoCancellation: true, noiseSuppression: true }, video: false };
 const RING_TIMEOUT_MS = 30000;
 const STATS_MS = 1000;
 const SPEAK_THRESHOLD = 0.045;
@@ -66,10 +67,28 @@ export function createCall({ send, onState, onLevels, onError }) {
   }
 
   async function startMedia() {
-    localStream = await navigator.mediaDevices.getUserMedia(MIC_CONSTRAINTS);
+    localStream = await navigator.mediaDevices.getUserMedia({ audio: settings.audioConstraints(), video: false });
     muted = false;
     applyMute();
     localAnalyser = makeAnalyser(localStream);
+  }
+
+  async function applyDeviceChange() {
+    if (phase !== 'active') return;
+    if (remoteAudio) applySink(remoteAudio);
+    if (!pc) return;
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: settings.audioConstraints(), video: false });
+      const track = stream.getAudioTracks()[0];
+      track.enabled = !muted;
+      const sender = pc.getSenders().find((s) => s.track && s.track.kind === 'audio');
+      if (sender) await sender.replaceTrack(track);
+      if (localStream) for (const t of localStream.getTracks()) t.stop();
+      localStream = stream;
+      localAnalyser = makeAnalyser(localStream);
+    } catch {
+      onError?.('Не удалось сменить микрофон');
+    }
   }
 
   function createPeer() {
@@ -79,10 +98,12 @@ export function createCall({ send, onState, onLevels, onError }) {
     remoteAudio = document.createElement('audio');
     remoteAudio.autoplay = true;
     document.body.appendChild(remoteAudio);
+    applySink(remoteAudio);
 
     pc.ontrack = (event) => {
       remoteAudio.srcObject = event.streams[0];
       remoteAnalyser = makeAnalyser(event.streams[0]);
+      applySink(remoteAudio);
     };
     pc.onicecandidate = (event) => {
       if (event.candidate) send({ type: 'call-signal', to: peer, data: { kind: 'ice', candidate: event.candidate } });
@@ -340,6 +361,8 @@ export function createCall({ send, onState, onLevels, onError }) {
   function handlePresence(users) {
     if (peer && phase !== 'idle' && !users.includes(peer)) reset();
   }
+
+  settings.onChange(applyDeviceChange);
 
   return { invite, accept, decline, hangup, toggleMute, handleMessage, handlePresence };
 }

@@ -38,7 +38,17 @@ npm start       # прод
 - **Аудио-индикатор** - шкала уровня по каждому участнику.
 - **Задержку и качество** - из `RTCPeerConnection.getStats()` раз в секунду: RTT (мс), потери, джиттер, битрейт, кодек (opus), и **используемый транспорт** - протокол (UDP/TCP) и типы ICE-кандидатов (`host` / `srflx` / `relay`). Точка слева меняет цвет: зелёная (хорошо) / жёлтая (норм) / красная (плохо).
 
-Всё P2P, `iceServers` пуст - на LAN это host-кандидаты по UDP.
+Всё P2P, `iceServers` пуст - на LAN это host-кандидаты по UDP. Панель звонка можно перетаскивать за верхний хват.
+
+## Настройки
+
+Кнопка-шестерёнка снизу-слева открывает попап:
+
+- **Микрофон / Динамик** - выбор устройств ввода и вывода (`enumerateDevices`; вывод через `HTMLMediaElement.setSinkId`, где поддерживается). Смена применяется на лету в активном голосе/звонке (`replaceTrack`).
+- **Эффекты микрофона** - шумоподавление, эхоподавление, автоусиление (constraints `noiseSuppression` / `echoCancellation` / `autoGainControl`).
+- **Шрифт** - переключение между JetBrains Mono, Victor Mono, IBM Plex Mono и системным моно. Шрифты забандлены локально (`public/fonts/*.woff2`), работает офлайн.
+
+Настройки хранятся в `localStorage`. Иконки - [akar-icons](https://github.com/artcoholic/akar-icons) (MIT), инлайн-SVG без внешних запросов.
 
 ## Структура
 
@@ -52,6 +62,9 @@ public/
   app.js        клиент чата
   voice.js      mesh WebRTC-аудио группового голоса (createVoice)
   call.js       приватный 1-на-1 звонок + индикаторы и статистика (createCall)
+  settings.js   попап настроек: устройства, эффекты, шрифт (localStorage)
+  icons.js      инлайн akar-icons
+  fonts/        забандленные woff2 (JetBrains Mono / Victor Mono / IBM Plex Mono)
   index.html styles.css
 ```
 

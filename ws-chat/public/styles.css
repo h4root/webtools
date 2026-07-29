@@ -1,4 +1,42 @@
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-weight: 400;
+  font-display: swap;
+  src: url('./fonts/jetbrains-mono-400.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-weight: 700;
+  font-display: swap;
+  src: url('./fonts/jetbrains-mono-700.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Victor Mono';
+  font-weight: 400;
+  font-display: swap;
+  src: url('./fonts/victor-mono-400.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Victor Mono';
+  font-weight: 700;
+  font-display: swap;
+  src: url('./fonts/victor-mono-700.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'IBM Plex Mono';
+  font-weight: 400;
+  font-display: swap;
+  src: url('./fonts/ibm-plex-mono-400.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'IBM Plex Mono';
+  font-weight: 700;
+  font-display: swap;
+  src: url('./fonts/ibm-plex-mono-700.woff2') format('woff2');
+}
+
 :root {
+  --font: 'JetBrains Mono', 'Courier New', monospace;
   --bg: #0c0f0d;
   --panel: #121613;
   --line: #1f2a22;
@@ -21,8 +59,13 @@ body {
   height: 100vh;
   background: var(--bg);
   color: var(--fg);
-  font-family: 'JetBrains Mono', 'Courier New', monospace;
+  font-family: var(--font);
   font-size: 14px;
+}
+
+.icon {
+  flex-shrink: 0;
+  vertical-align: middle;
 }
 
 .gate {
@@ -454,4 +497,131 @@ button {
 
 .composer input {
   flex: 1;
+}
+
+.voice-toggle,
+.voice-mute,
+.call-btn,
+.call-mute,
+.call-hangup,
+.call-accept,
+.call-decline,
+#send-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.call-grip {
+  height: 12px;
+  margin: -6px 0 2px;
+  cursor: move;
+  touch-action: none;
+}
+
+.call-grip::before {
+  content: '';
+  display: block;
+  width: 36px;
+  height: 4px;
+  margin: 2px auto 0;
+  border-radius: 2px;
+  background: var(--line);
+}
+
+.settings-toggle {
+  position: fixed;
+  left: 16px;
+  bottom: 16px;
+  width: 40px;
+  height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--fg);
+  cursor: pointer;
+  z-index: 25;
+}
+
+.settings-toggle:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.settings-popup {
+  position: fixed;
+  left: 16px;
+  bottom: 64px;
+  width: 260px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 14px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  z-index: 25;
+}
+
+.settings-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.settings-title {
+  color: var(--dim);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.settings-popup select {
+  width: 100%;
+  padding: 6px;
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font-family: inherit;
+  font-size: 13px;
+}
+
+.settings-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--fg);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.settings-check input {
+  accent-color: var(--accent);
+}
+
+.settings-fonts {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.settings-fonts button {
+  padding: 8px;
+  text-align: left;
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.settings-fonts button.active {
+  border-color: var(--accent);
+  color: var(--accent);
 }
