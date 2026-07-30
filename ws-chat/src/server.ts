@@ -1,5 +1,7 @@
 import 'dotenv/config';
-import { createServer } from 'node:http';
+import { createServer as createHttpServer } from 'node:http';
+import { createServer as createHttpsServer } from 'node:https';
+import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import express from 'express';
@@ -26,7 +28,14 @@ app.use(
 
 const HEARTBEAT_MS = 30000;
 
-const server = createServer(app);
+const tlsKey = process.env.TLS_KEY;
+const tlsCert = process.env.TLS_CERT;
+const useTls = Boolean(tlsKey && tlsCert);
+
+const server = useTls
+  ? createHttpsServer({ key: readFileSync(tlsKey!), cert: readFileSync(tlsCert!) }, app)
+  : createHttpServer(app);
+
 const wss = new WebSocketServer({ server, maxPayload: Math.max(TEXT_MAX * 4, SIGNAL_MAX * 2) });
 const hub = new Hub();
 
@@ -68,7 +77,11 @@ heartbeat.unref();
 wss.on('close', () => clearInterval(heartbeat));
 
 server.listen(PORT, HOST, () => {
-  console.log(`chat server on http://${HOST}:${PORT}`);
+  const scheme = useTls ? 'https' : 'http';
+  console.log(`chat server on ${scheme}://${HOST}:${PORT}`);
+  if (!useTls) {
+    console.log('HTTP: микрофон/камера будут работать только на localhost. Для доступа с других устройств задай TLS_KEY и TLS_CERT (HTTPS).');
+  }
 });
 
 function shutdown(): void {
