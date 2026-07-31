@@ -1,0 +1,23 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "certcheck"
+version = "0.1.0"
+description = "Срок и валидность TLS-сертификатов для списка доменов. Zero runtime dependencies."
+requires-python = ">=3.11"
+authors = [{ name = "h4root" }]
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[project.scripts]
+certcheck = "certcheck.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/certcheck"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
