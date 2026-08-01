@@ -4,8 +4,8 @@ from pathlib import Path
 
 import pytest
 
-from breach_check import accounts, cli, passwords
-from breach_check.accounts import API_KEY_ENV
+from breach_check import accounts, apikey, cli, passwords
+from breach_check.apikey import API_KEY_ENV
 from breach_check.cli import main
 from breach_check.hibp import Response
 
@@ -57,6 +57,34 @@ def test_missing_api_key_exits_two(monkeypatch, capsys):
     monkeypatch.delenv(API_KEY_ENV, raising=False)
     assert main(["email", "user@example.com"]) == 2
     assert API_KEY_ENV in capsys.readouterr().err
+
+
+def test_key_file_is_used(monkeypatch, hibp, tmp_path: Path):
+    monkeypatch.delenv(API_KEY_ENV, raising=False)
+    key_file = tmp_path / "hibp.key"
+    key_file.write_text(f"{API_KEY_ENV}=test-key\n", encoding="utf-8")
+    assert main(["email", "user@example.com", "--key-file", str(key_file), "--delay", "0"]) == 0
+
+
+def test_missing_key_file_exits_two(monkeypatch, tmp_path: Path, capsys):
+    monkeypatch.delenv(API_KEY_ENV, raising=False)
+    args = ["email", "user@example.com", "--key-file", str(tmp_path / "нет.key")]
+    assert main([*args, "--delay", "0"]) == 2
+    assert "ключ" in capsys.readouterr().err
+
+
+def test_typed_key_is_used(monkeypatch, hibp, capsys):
+    monkeypatch.delenv(API_KEY_ENV, raising=False)
+    monkeypatch.setattr(apikey.sys, "stdin", type("S", (), {"isatty": lambda self: True})())
+    monkeypatch.setattr(apikey, "getpass", lambda prompt: "typed-key")
+    assert main(["email", "user@example.com", "--delay", "0"]) == 0
+
+
+def test_bad_email_is_reported_before_key_is_requested(monkeypatch, capsys):
+    monkeypatch.delenv(API_KEY_ENV, raising=False)
+    monkeypatch.setattr(apikey, "getpass", lambda prompt: pytest.fail("ключ спрошен зря"))
+    assert main(["email", "not-an-email", "--delay", "0"]) == 2
+    assert "не похоже на email" in capsys.readouterr().err
 
 
 def test_bad_email_exits_two(api_key):

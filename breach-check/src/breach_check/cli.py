@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import sys
 import time
 from collections.abc import Sequence
@@ -10,17 +9,15 @@ from getpass import getpass
 from pathlib import Path
 
 from breach_check.accounts import (
-    API_KEY_ENV,
     DEFAULT_DELAY,
     AccountResult,
     check_account,
     read_accounts,
     validate_account,
 )
+from breach_check.apikey import API_KEY_ENV, MissingApiKey, resolve_api_key
 from breach_check.hibp import DEFAULT_TIMEOUT, HibpError
 from breach_check.passwords import PasswordResult, check_password
-
-KEY_URL = "https://haveibeenpwned.com/API/Key"
 
 
 def _plural(count: int, forms: tuple[str, str, str]) -> str:
@@ -92,7 +89,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     email = subparsers.add_parser(
         "email",
-        help=f"Проверить email по утечкам. Ключ берётся из {API_KEY_ENV}.",
+        help=f"Проверить email по утечкам. Ключ: --key-file, {API_KEY_ENV} "
+        "или ввод с клавиатуры.",
     )
     email.add_argument("accounts", nargs="*", help="Адреса: user@example.com.")
     email.add_argument(
@@ -100,6 +98,12 @@ def build_parser() -> argparse.ArgumentParser:
         "-f",
         type=Path,
         help="Файл со списком адресов, по одному в строке (# — комментарий).",
+    )
+    email.add_argument(
+        "--key-file",
+        type=Path,
+        help=f"Файл с ключом HIBP: строка {API_KEY_ENV}=... или сам ключ. "
+        "Приоритетнее переменной окружения.",
     )
     email.add_argument(
         "--delay",
@@ -142,14 +146,6 @@ def _collect_accounts(args: argparse.Namespace) -> list[str]:
 
 
 def _run_email(args: argparse.Namespace) -> int:
-    api_key = os.environ.get(API_KEY_ENV)
-    if not api_key:
-        print(
-            f"breach-check: для проверки email нужен ключ HIBP в {API_KEY_ENV} "
-            f"({KEY_URL})",
-            file=sys.stderr,
-        )
-        return 2
     if not args.accounts and not args.file:
         print("breach-check: укажите адреса или --file", file=sys.stderr)
         return 2
@@ -168,6 +164,15 @@ def _run_email(args: argparse.Namespace) -> int:
 
     if not accounts:
         print("breach-check: список адресов пуст", file=sys.stderr)
+        return 2
+
+    try:
+        api_key = resolve_api_key(args.key_file)
+    except MissingApiKey as error:
+        print(f"breach-check: {error}", file=sys.stderr)
+        return 2
+    except (OSError, UnicodeDecodeError) as error:
+        print(f"breach-check: не удалось прочитать ключ: {error}", file=sys.stderr)
         return 2
 
     results = []

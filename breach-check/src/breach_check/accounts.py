@@ -5,10 +5,10 @@ import time
 from dataclasses import dataclass
 from urllib.parse import quote
 
+from breach_check.apikey import API_KEY_ENV
 from breach_check.hibp import DEFAULT_TIMEOUT, HibpError, http_get
 
 ACCOUNT_URL = "https://haveibeenpwned.com/api/v3/breachedaccount/"
-API_KEY_ENV = "HIBP_API_KEY"
 DEFAULT_DELAY = 1.6
 MAX_RETRY_WAIT = 60.0
 
