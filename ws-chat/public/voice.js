@@ -5,17 +5,22 @@ const RTC_CONFIG = { iceServers: [] };
 export function createVoice({ send, onState, onError }) {
   const calls = new Map();
   let localStream = null;
-  let active = false;
+  let channel = null;
   let muted = false;
-  let users = [];
+  let deafened = false;
 
   function emit() {
-    onState?.({ active, muted, users });
+    onState?.({ channel, muted, deafened });
   }
 
-  function applyMute() {
+  function applyMic() {
     if (!localStream) return;
-    for (const track of localStream.getAudioTracks()) track.enabled = !muted;
+    for (const track of localStream.getAudioTracks()) track.enabled = !muted && !deafened;
+  }
+
+  function applyDeafen() {
+    for (const { audioEl } of calls.values()) audioEl.muted = deafened;
+    applyMic();
   }
 
   function createPeer(nick) {
@@ -24,6 +29,7 @@ export function createVoice({ send, onState, onError }) {
 
     const audioEl = document.createElement('audio');
     audioEl.autoplay = true;
+    audioEl.muted = deafened;
     document.body.appendChild(audioEl);
     applySink(audioEl);
 
@@ -67,8 +73,9 @@ export function createVoice({ send, onState, onError }) {
     }
   }
 
-  async function join() {
-    if (active) return;
+  async function join(target) {
+    if (channel === target) return;
+    if (channel) teardown();
     try {
       localStream = await navigator.mediaDevices.getUserMedia({ audio: settings.audioConstraints(), video: false });
     } catch {
@@ -76,62 +83,50 @@ export function createVoice({ send, onState, onError }) {
       return;
     }
     muted = false;
-    applyMute();
-    active = true;
-    send({ type: 'voice-join' });
+    deafened = false;
+    applyMic();
+    channel = target;
+    send({ type: 'voice-join', channel });
     emit();
   }
 
-  async function applyDeviceChange() {
-    if (!active) return;
-    for (const { audioEl } of calls.values()) applySink(audioEl);
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: settings.audioConstraints(), video: false });
-      const track = stream.getAudioTracks()[0];
-      track.enabled = !muted;
-      for (const { pc } of calls.values()) {
-        const sender = pc.getSenders().find((s) => s.track && s.track.kind === 'audio');
-        if (sender) await sender.replaceTrack(track);
-      }
-      if (localStream) for (const t of localStream.getTracks()) t.stop();
-      localStream = stream;
-    } catch {
-      onError?.('Не удалось сменить микрофон');
-    }
-  }
-
-  settings.onChange(applyDeviceChange);
-
   function leave() {
-    if (!active) return;
+    if (!channel) return;
     send({ type: 'voice-leave' });
     reset();
   }
 
   function reset() {
-    active = false;
+    channel = null;
     muted = false;
-    users = [];
+    deafened = false;
     teardown();
     emit();
   }
 
   function toggleMute() {
-    if (!active) return;
+    if (!channel) return;
     muted = !muted;
-    applyMute();
+    applyMic();
     emit();
   }
 
-  async function handleRoster(present) {
-    if (!active) return;
-    for (const nick of present) {
+  function toggleDeafen() {
+    if (!channel) return;
+    deafened = !deafened;
+    applyDeafen();
+    emit();
+  }
+
+  async function handleRoster(rosterChannel, users) {
+    if (rosterChannel !== channel) return;
+    for (const nick of users) {
       if (!calls.has(nick)) await offerTo(nick);
     }
   }
 
   async function handleSignal(from, data) {
-    if (!active || !data || typeof data !== 'object') return;
+    if (!channel || !data || typeof data !== 'object') return;
 
     if (data.kind === 'offer') {
       const call = calls.get(from) ?? createPeer(from);
@@ -155,15 +150,33 @@ export function createVoice({ send, onState, onError }) {
     }
   }
 
-  function handlePresence(nicks) {
-    users = nicks;
-    if (active) {
-      for (const nick of [...calls.keys()]) {
-        if (!nicks.includes(nick)) dropPeer(nick);
-      }
+  function handlePresence(map) {
+    if (!channel) return;
+    const members = map[channel] ?? [];
+    for (const nick of [...calls.keys()]) {
+      if (!members.includes(nick)) dropPeer(nick);
     }
-    emit();
   }
 
-  return { join, leave, reset, toggleMute, handleRoster, handleSignal, handlePresence };
+  async function applyDeviceChange() {
+    if (!channel) return;
+    for (const { audioEl } of calls.values()) applySink(audioEl);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: settings.audioConstraints(), video: false });
+      const track = stream.getAudioTracks()[0];
+      track.enabled = !muted && !deafened;
+      for (const { pc } of calls.values()) {
+        const sender = pc.getSenders().find((s) => s.track && s.track.kind === 'audio');
+        if (sender) await sender.replaceTrack(track);
+      }
+      if (localStream) for (const t of localStream.getTracks()) t.stop();
+      localStream = stream;
+    } catch {
+      onError?.('Не удалось сменить микрофон');
+    }
+  }
+
+  settings.onChange(applyDeviceChange);
+
+  return { join, leave, reset, toggleMute, toggleDeafen, handleRoster, handleSignal, handlePresence };
 }

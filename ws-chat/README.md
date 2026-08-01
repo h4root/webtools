@@ -48,14 +48,15 @@ openssl req -x509 -newkey rsa:2048 -nodes -keyout key.pem -out cert.pem -days 36
 
 Затем укажи пути в `.env` (`TLS_KEY=./key.pem`, `TLS_CERT=./cert.pem`) и запусти. Сервер поднимется на `https://<ip>:3000`, клиент сам переключится на `wss`. На чужом устройстве браузер один раз покажет предупреждение о самоподписанном сертификате — нажать «Дополнительно → Перейти», после чего микрофон заработает.
 
-## Голосовой чат
+## Голосовые каналы
 
-Кнопка «Голос» в сайдбаре включает голосовой канал. Звук идёт по **WebRTC-аудио напрямую между устройствами** (mesh: каждый шлёт микрофон каждому), кодек Opus поверх UDP/SRTP - минимальная задержка, на LAN это десятки миллисекунд. Сервер только пересылает сигналинг (SDP/ICE), медиа через него не проходит.
+Discord-подобные **голосовые каналы** (по умолчанию `general`, `games`; можно создавать новые из сайдбара). Клик по каналу подключает к нему, под каждым каналом видно, кто в нём. Ты в одном голосовом канале за раз; клик по другому переключает.
 
-- Участники голоса привязаны к никам чата; видно, кто в голосе.
-- Открытый микрофон + кнопка mute.
-- `iceServers` пуст: на LAN хватает host-кандидатов, трафик не покидает сеть.
-- Рассчитано на небольшую группу (mesh); для десятков участников нужен был бы SFU.
+- Звук — **WebRTC-аудио mesh внутри канала** (каждый шлёт микрофон каждому), Opus поверх UDP/SRTP, минимальная задержка; сервер только релеит сигналинг, медиа через него не идёт. Сигнал ходит только между участниками одного канала.
+- Нижняя панель в подключённом состоянии: **mute** (микрофон) и **deafen** (глушит звук всех + свой микрофон), выход.
+- `iceServers` пуст: на LAN host-кандидаты, трафик не покидает сеть.
+- Mesh рассчитан на небольшую группу; для десятков нужен SFU.
+- Демонстрация экрана и громкость-на-участника — следующий заход.
 
 ## Приватный звонок
 
@@ -112,10 +113,11 @@ public/
 - `{ "type": "edit", "id": 12, "text": "…" }` / `{ "type": "delete", "id": 12 }`
 - `{ "type": "react", "id": 12, "emoji": "🔥" }` - переключить реакцию (эмодзи из фикс. палитры)
 - `{ "type": "typing", "channel": "general" }` / `{ "type": "typing", "to": "bob" }`
-- `{ "type": "voice-join" }` / `{ "type": "voice-leave" }` / `{ "type": "voice-signal", "to": "bob", "data": … }`
+- `{ "type": "voice-channel-create", "name": "music" }`
+- `{ "type": "voice-join", "channel": "general" }` / `{ "type": "voice-leave" }` / `{ "type": "voice-signal", "to": "bob", "data": … }`
 - `{ "type": "call-invite" | "call-accept" | "call-decline" | "call-end" | "call-signal", "to": "bob", … }`
 
-Сервер → клиент: `welcome`, `channels`, `presence`, `message` (с `msg` = `{ id, from, text, ts, edited, channel? , to?, reactions? }`), `history`, `edited`, `deleted`, `reaction` (`{ id, reactions }`), `typing`, `system`, `error`, `voice-roster`/`voice-presence`/`voice-signal`, и зеркальные `call-*` с `from` (плюс `reason: offline / busy`).
+Сервер → клиент: `welcome`, `channels`, `presence`, `message` (с `msg` = `{ id, from, text, ts, edited, channel? , to?, reactions? }`), `history`, `edited`, `deleted`, `reaction` (`{ id, reactions }`), `typing`, `system`, `error`, `voice-channels`, `voice-roster` (`{ channel, users }`), `voice-presence` (`{ channels: { name: [nicks] } }`), `voice-signal`, и зеркальные `call-*` с `from` (плюс `reason: offline / busy`).
 
 ## Тесты
 

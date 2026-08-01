@@ -11,7 +11,7 @@ const NICK_PATTERN = /^[\p{L}\p{N} _.-]+$/u;
 
 export class Hub {
   private readonly clients = new Set<Client>();
-  private readonly voice = new Set<Client>();
+  private readonly voiceOf = new Map<Client, string>();
 
   constructor(private readonly store: Store = new Store()) {}
 
@@ -30,13 +30,15 @@ export class Hub {
     this.clients.add(client);
     client.send({ type: 'welcome', nick: trimmed });
     client.send({ type: 'channels', list: this.store.listChannels() });
+    client.send({ type: 'voice-channels', list: this.store.listVoiceChannels() });
+    client.send({ type: 'voice-presence', channels: this.voicePresenceMap() });
     this.broadcast({ type: 'system', text: `${trimmed} присоединился` });
     this.broadcastPresence();
   }
 
   leave(client: Client): void {
     if (!this.clients.delete(client)) return;
-    const wasInVoice = this.voice.delete(client);
+    const wasInVoice = this.voiceOf.delete(client);
     const nick = client.nick;
     client.nick = null;
     if (nick) {
@@ -85,8 +87,11 @@ export class Hub {
       case 'typing':
         this.relayTyping(client, message);
         break;
+      case 'voice-channel-create':
+        this.voiceChannelCreate(client, message.name);
+        break;
       case 'voice-join':
-        this.voiceJoin(client);
+        this.voiceJoin(client, message.channel);
         break;
       case 'voice-leave':
         this.voiceLeave(client);
@@ -198,22 +203,41 @@ export class Hub {
     return [...this.clients].find((c) => c.nick?.toLowerCase() === lower);
   }
 
-  private voiceJoin(client: Client): void {
-    if (this.voice.has(client)) return;
-    const present = this.voiceNicks();
-    this.voice.add(client);
-    client.send({ type: 'voice-roster', users: present });
+  private voiceChannelCreate(client: Client, name: string): void {
+    if (this.store.createVoiceChannel(name)) {
+      this.broadcast({ type: 'voice-channels', list: this.store.listVoiceChannels() });
+      this.broadcastVoicePresence();
+    } else {
+      client.send({ type: 'error', reason: 'Голосовой канал уже существует' });
+    }
+  }
+
+  private voiceJoin(client: Client, channel: string): void {
+    if (!this.store.hasVoiceChannel(channel)) {
+      client.send({ type: 'error', reason: 'Нет такого голосового канала' });
+      return;
+    }
+    if (this.voiceOf.get(client) === channel) return;
+
+    const present = [...this.voiceOf]
+      .filter(([c, ch]) => ch === channel && c !== client && c.nick)
+      .map(([c]) => c.nick!)
+      .sort((a, b) => a.localeCompare(b));
+
+    this.voiceOf.set(client, channel);
+    client.send({ type: 'voice-roster', channel, users: present });
     this.broadcastVoicePresence();
   }
 
   private voiceLeave(client: Client): void {
-    if (this.voice.delete(client)) this.broadcastVoicePresence();
+    if (this.voiceOf.delete(client)) this.broadcastVoicePresence();
   }
 
   private voiceSignal(client: Client, toNick: string, data: unknown): void {
-    if (!this.voice.has(client)) return;
+    const channel = this.voiceOf.get(client);
+    if (!channel) return;
     const lower = toNick.toLowerCase();
-    const target = [...this.voice].find((c) => c.nick?.toLowerCase() === lower);
+    const target = [...this.voiceOf].find(([c, ch]) => ch === channel && c.nick?.toLowerCase() === lower)?.[0];
     target?.send({ type: 'voice-signal', from: client.nick!, data });
   }
 
@@ -232,11 +256,14 @@ export class Hub {
       .sort((a, b) => a.localeCompare(b));
   }
 
-  private voiceNicks(): string[] {
-    return [...this.voice]
-      .map((c) => c.nick)
-      .filter((nick): nick is string => nick !== null)
-      .sort((a, b) => a.localeCompare(b));
+  private voicePresenceMap(): Record<string, string[]> {
+    const map: Record<string, string[]> = {};
+    for (const name of this.store.listVoiceChannels()) map[name] = [];
+    for (const [client, channel] of this.voiceOf) {
+      if (client.nick && map[channel]) map[channel].push(client.nick);
+    }
+    for (const name of Object.keys(map)) map[name].sort((a, b) => a.localeCompare(b));
+    return map;
   }
 
   private broadcastPresence(): void {
@@ -244,7 +271,7 @@ export class Hub {
   }
 
   private broadcastVoicePresence(): void {
-    this.broadcast({ type: 'voice-presence', users: this.voiceNicks() });
+    this.broadcast({ type: 'voice-presence', channels: this.voicePresenceMap() });
   }
 
   private broadcast(message: ServerMessage): void {

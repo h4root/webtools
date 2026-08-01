@@ -25,16 +25,24 @@
           <button type="button" class="nav-add" id="channel-add" title="Создать канал"></button>
         </div>
         <ul class="chan-list" id="channel-list"></ul>
+        <div class="nav-head">
+          <span>Голосовые</span>
+          <button type="button" class="nav-add" id="voice-add" title="Создать голосовой канал"></button>
+        </div>
+        <ul class="chan-list voice-list" id="voice-list"></ul>
         <div class="nav-head"><span>Личные</span></div>
         <ul class="chan-list" id="dm-list"></ul>
       </nav>
-      <div class="voice" id="voice">
-        <ul class="voice-users" id="voice-users"></ul>
-        <div class="voice-controls">
-          <button type="button" class="voice-toggle" id="voice-toggle"></button>
-          <button type="button" class="voice-mute" id="voice-mute" hidden></button>
-          <div class="settings" id="settings"></div>
+      <div class="voice-bar">
+        <div class="voice-status" id="voice-status" hidden>
+          <span class="voice-conn" id="voice-conn"></span>
+          <div class="voice-btns">
+            <button type="button" class="vbtn" id="voice-mute" title="Микрофон"></button>
+            <button type="button" class="vbtn" id="voice-deafen" title="Звук"></button>
+            <button type="button" class="vbtn danger" id="voice-leave" title="Выйти"></button>
+          </div>
         </div>
+        <div class="settings" id="settings"></div>
       </div>
     </aside>
 

@@ -217,82 +217,101 @@ describe('Hub', () => {
   });
 });
 
-function lastVoicePresence(client: TestClient): string[] | undefined {
+function voicePresence(client: TestClient): Record<string, string[]> | undefined {
   for (let i = client.inbox.length - 1; i >= 0; i--) {
     const message = client.inbox[i];
-    if (message.type === 'voice-presence') return message.users;
+    if (message.type === 'voice-presence') return message.channels;
   }
   return undefined;
 }
 
-function voiceRoster(client: TestClient): string[] | undefined {
+function voiceRoster(client: TestClient) {
   const message = client.inbox.find((m) => m.type === 'voice-roster');
-  return message && message.type === 'voice-roster' ? message.users : undefined;
+  return message && message.type === 'voice-roster' ? { channel: message.channel, users: message.users } : undefined;
 }
 
-describe('Hub voice', () => {
+describe('Hub voice channels', () => {
   let hub: Hub;
 
   beforeEach(() => {
     hub = new Hub();
   });
 
-  it('первому в голосе отдаёт пустой roster, второму — первого', () => {
+  it('шлёт список голосовых каналов при входе', () => {
+    const a = makeClient('a');
+    hub.join(a, 'alice');
+    const vc = a.inbox.find((m) => m.type === 'voice-channels');
+    expect(vc && vc.type === 'voice-channels' && vc.list).toContain('general');
+  });
+
+  it('первому в канале — пустой roster, второму — первого', () => {
     const a = makeClient('a');
     const b = makeClient('b');
     hub.join(a, 'alice');
     hub.join(b, 'bob');
-    hub.handle(a, JSON.stringify({ type: 'voice-join' }));
-    hub.handle(b, JSON.stringify({ type: 'voice-join' }));
-    expect(voiceRoster(a)).toEqual([]);
-    expect(voiceRoster(b)).toEqual(['alice']);
+    hub.handle(a, JSON.stringify({ type: 'voice-join', channel: 'general' }));
+    hub.handle(b, JSON.stringify({ type: 'voice-join', channel: 'general' }));
+    expect(voiceRoster(a)).toEqual({ channel: 'general', users: [] });
+    expect(voiceRoster(b)).toEqual({ channel: 'general', users: ['alice'] });
   });
 
-  it('транслирует voice-presence всем при входе в голос', () => {
+  it('presence раскладывает участников по каналам', () => {
     const a = makeClient('a');
     const b = makeClient('b');
     hub.join(a, 'alice');
     hub.join(b, 'bob');
-    hub.handle(a, JSON.stringify({ type: 'voice-join' }));
-    hub.handle(b, JSON.stringify({ type: 'voice-join' }));
-    expect(lastVoicePresence(a)).toEqual(['alice', 'bob']);
-    expect(lastVoicePresence(b)).toEqual(['alice', 'bob']);
+    hub.handle(a, JSON.stringify({ type: 'voice-join', channel: 'general' }));
+    hub.handle(b, JSON.stringify({ type: 'voice-join', channel: 'games' }));
+    const p = voicePresence(a);
+    expect(p?.general).toEqual(['alice']);
+    expect(p?.games).toEqual(['bob']);
   });
 
-  it('маршрутизирует voice-signal только адресату в голосе', () => {
+  it('сигнал ходит только внутри одного канала', () => {
     const a = makeClient('a');
     const b = makeClient('b');
     const c = makeClient('c');
     hub.join(a, 'alice');
     hub.join(b, 'bob');
     hub.join(c, 'carol');
-    for (const client of [a, b, c]) hub.handle(client, JSON.stringify({ type: 'voice-join' }));
+    hub.handle(a, JSON.stringify({ type: 'voice-join', channel: 'general' }));
+    hub.handle(b, JSON.stringify({ type: 'voice-join', channel: 'general' }));
+    hub.handle(c, JSON.stringify({ type: 'voice-join', channel: 'games' }));
     hub.handle(a, JSON.stringify({ type: 'voice-signal', to: 'bob', data: { kind: 'offer' } }));
     expect(b.inbox.at(-1)).toEqual({ type: 'voice-signal', from: 'alice', data: { kind: 'offer' } });
+    hub.handle(a, JSON.stringify({ type: 'voice-signal', to: 'carol', data: { kind: 'offer' } }));
     expect(c.inbox.some((m) => m.type === 'voice-signal')).toBe(false);
   });
 
-  it('игнорирует voice-signal от того, кто не в голосе', () => {
+  it('игнорирует сигнал от того, кто не в голосе', () => {
     const a = makeClient('a');
     const b = makeClient('b');
     hub.join(a, 'alice');
     hub.join(b, 'bob');
-    hub.handle(b, JSON.stringify({ type: 'voice-join' }));
+    hub.handle(b, JSON.stringify({ type: 'voice-join', channel: 'general' }));
     hub.handle(a, JSON.stringify({ type: 'voice-signal', to: 'bob', data: { kind: 'offer' } }));
     expect(b.inbox.some((m) => m.type === 'voice-signal')).toBe(false);
   });
 
-  it('обновляет voice-presence на voice-leave и на выход из чата', () => {
+  it('обновляет presence на leave и на выход из чата', () => {
     const a = makeClient('a');
     const b = makeClient('b');
     hub.join(a, 'alice');
     hub.join(b, 'bob');
-    hub.handle(a, JSON.stringify({ type: 'voice-join' }));
-    hub.handle(b, JSON.stringify({ type: 'voice-join' }));
+    hub.handle(a, JSON.stringify({ type: 'voice-join', channel: 'general' }));
+    hub.handle(b, JSON.stringify({ type: 'voice-join', channel: 'general' }));
     hub.handle(b, JSON.stringify({ type: 'voice-leave' }));
-    expect(lastVoicePresence(a)).toEqual(['alice']);
+    expect(voicePresence(a)?.general).toEqual(['alice']);
     hub.leave(a);
-    expect(lastVoicePresence(b)).toEqual([]);
+    expect(voicePresence(b)?.general).toEqual([]);
+  });
+
+  it('создаёт голосовой канал и рассылает список', () => {
+    const a = makeClient('a');
+    hub.join(a, 'alice');
+    hub.handle(a, JSON.stringify({ type: 'voice-channel-create', name: 'music' }));
+    const vc = [...a.inbox].reverse().find((m) => m.type === 'voice-channels');
+    expect(vc && vc.type === 'voice-channels' && vc.list).toContain('music');
   });
 });
 

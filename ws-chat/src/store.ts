@@ -3,6 +3,7 @@ import { dirname } from 'node:path';
 import type { Reactions, WireMessage } from './protocol.ts';
 
 export const DEFAULT_CHANNELS = ['general', 'random'];
+export const DEFAULT_VOICE_CHANNELS = ['general', 'games'];
 const HISTORY_LIMIT = 200;
 const SAVE_DEBOUNCE_MS = 400;
 
@@ -41,12 +42,14 @@ function toWire(message: StoredMessage): WireMessage {
 
 export class Store {
   private channels: string[];
+  private voiceChannels: string[];
   private messages: StoredMessage[] = [];
   private nextId = 1;
   private saveTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(private readonly filePath?: string) {
     this.channels = [...DEFAULT_CHANNELS];
+    this.voiceChannels = [...DEFAULT_VOICE_CHANNELS];
     if (filePath) this.load();
   }
 
@@ -55,6 +58,7 @@ export class Store {
       const raw = readFileSync(this.filePath!, 'utf8');
       const data = JSON.parse(raw);
       if (Array.isArray(data.channels) && data.channels.length) this.channels = data.channels;
+      if (Array.isArray(data.voiceChannels) && data.voiceChannels.length) this.voiceChannels = data.voiceChannels;
       if (Array.isArray(data.messages)) this.messages = data.messages;
       if (typeof data.nextId === 'number') this.nextId = data.nextId;
     } catch {
@@ -71,7 +75,12 @@ export class Store {
         mkdirSync(dirname(this.filePath!), { recursive: true });
         writeFileSync(
           this.filePath!,
-          JSON.stringify({ channels: this.channels, messages: this.messages, nextId: this.nextId }),
+          JSON.stringify({
+            channels: this.channels,
+            voiceChannels: this.voiceChannels,
+            messages: this.messages,
+            nextId: this.nextId,
+          }),
         );
       } catch {
         /* сохранение необязательно — данные остаются в памяти */
@@ -90,6 +99,21 @@ export class Store {
   createChannel(name: string): boolean {
     if (this.channels.includes(name)) return false;
     this.channels.push(name);
+    this.scheduleSave();
+    return true;
+  }
+
+  listVoiceChannels(): string[] {
+    return [...this.voiceChannels];
+  }
+
+  hasVoiceChannel(name: string): boolean {
+    return this.voiceChannels.includes(name);
+  }
+
+  createVoiceChannel(name: string): boolean {
+    if (this.voiceChannels.includes(name)) return false;
+    this.voiceChannels.push(name);
     this.scheduleSave();
     return true;
   }

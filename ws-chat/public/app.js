@@ -21,9 +21,13 @@ const textInput = document.getElementById('text-input');
 const menuBtn = document.getElementById('menu-btn');
 const sidebar = document.getElementById('sidebar');
 const backdrop = document.getElementById('backdrop');
-const voiceToggle = document.getElementById('voice-toggle');
-const voiceMute = document.getElementById('voice-mute');
-const voiceUsers = document.getElementById('voice-users');
+const voiceListEl = document.getElementById('voice-list');
+const voiceAddBtn = document.getElementById('voice-add');
+const voiceStatus = document.getElementById('voice-status');
+const voiceConn = document.getElementById('voice-conn');
+const voiceMuteBtn = document.getElementById('voice-mute');
+const voiceDeafenBtn = document.getElementById('voice-deafen');
+const voiceLeaveBtn = document.getElementById('voice-leave');
 const callBtn = document.getElementById('call-btn');
 const callIncoming = document.getElementById('call-incoming');
 const callIncomingText = document.getElementById('call-incoming-text');
@@ -54,7 +58,9 @@ let joined = false;
 let channels = [];
 let online = [];
 let active = { kind: 'channel', id: 'general' };
-let voiceActive = false;
+let voiceChannel = null;
+let voiceChannels = [];
+let voicePresence = {};
 let callPhase = 'idle';
 let lastTypingSent = 0;
 let ws = null;
@@ -179,14 +185,20 @@ function handleServer(message) {
       if (!joined) gateError.textContent = message.reason;
       else systemLine(message.reason);
       break;
+    case 'voice-channels':
+      voiceChannels = message.list;
+      renderVoiceChannels();
+      break;
     case 'voice-roster':
-      voice.handleRoster(message.users);
+      voice.handleRoster(message.channel, message.users);
       break;
     case 'voice-signal':
       voice.handleSignal(message.from, message.data);
       break;
     case 'voice-presence':
-      voice.handlePresence(message.users);
+      voicePresence = message.channels;
+      renderVoiceChannels();
+      voice.handlePresence(message.channels);
       break;
     case 'call-invite':
     case 'call-accept':
@@ -600,19 +612,51 @@ function sendTyping() {
 // --- голос / звонок (без изменений в логике) ---
 
 function renderVoice(state) {
-  voiceActive = state.active;
-  setButton(voiceToggle, state.active ? 'cross' : 'microphone', state.active ? 'Выйти' : 'Голос');
-  voiceToggle.classList.toggle('active', state.active);
+  voiceChannel = state.channel;
+  voiceStatus.hidden = !state.channel;
+  if (state.channel) {
+    voiceConn.replaceChildren(icon('sound-on', 14));
+    const label = document.createElement('span');
+    label.textContent = state.channel;
+    voiceConn.appendChild(label);
+    setButton(voiceMuteBtn, state.muted ? 'sound-off' : 'microphone');
+    voiceMuteBtn.classList.toggle('muted', state.muted);
+    setButton(voiceDeafenBtn, state.deafened ? 'sound-off' : 'sound-on');
+    voiceDeafenBtn.classList.toggle('muted', state.deafened);
+  }
+  renderVoiceChannels();
+}
 
-  voiceMute.hidden = !state.active;
-  setButton(voiceMute, state.muted ? 'sound-off' : 'microphone', state.muted ? 'Выкл' : 'Микро');
-  voiceMute.classList.toggle('muted', state.muted);
-
-  voiceUsers.replaceChildren();
-  for (const nick of state.users) {
+function renderVoiceChannels() {
+  voiceListEl.replaceChildren();
+  for (const name of voiceChannels) {
     const li = document.createElement('li');
-    li.textContent = nick === myNick ? `${nick} (вы)` : nick;
-    voiceUsers.appendChild(li);
+    li.className = 'voice-chan';
+
+    const head = document.createElement('div');
+    head.className = name === voiceChannel ? 'channel voice-chan-head active' : 'channel voice-chan-head';
+    head.appendChild(icon('sound-on', 14));
+    const label = document.createElement('span');
+    label.textContent = name;
+    head.appendChild(label);
+    head.addEventListener('click', () => {
+      if (voiceChannel === name) voice.leave();
+      else voice.join(name);
+    });
+    li.appendChild(head);
+
+    const members = voicePresence[name] ?? [];
+    if (members.length) {
+      const ul = document.createElement('ul');
+      ul.className = 'voice-members';
+      for (const nick of members) {
+        const m = document.createElement('li');
+        m.textContent = nick === myNick ? `${nick} (вы)` : nick;
+        ul.appendChild(m);
+      }
+      li.appendChild(ul);
+    }
+    voiceListEl.appendChild(li);
   }
 }
 
@@ -723,11 +767,19 @@ menuBtn.addEventListener('click', () => {
 });
 backdrop.addEventListener('click', closeSidebar);
 
-voiceToggle.addEventListener('click', () => {
-  if (voiceActive) voice.leave();
-  else voice.join();
+voiceMuteBtn.addEventListener('click', () => voice.toggleMute());
+voiceDeafenBtn.addEventListener('click', () => voice.toggleDeafen());
+voiceLeaveBtn.addEventListener('click', () => voice.leave());
+voiceAddBtn.addEventListener('click', () => {
+  const name = prompt('Имя голосового канала (латиница, цифры, дефис):');
+  if (!name) return;
+  const slug = name.trim().toLowerCase();
+  if (!/^[a-z0-9-]{1,24}$/.test(slug)) {
+    systemLine('Недопустимое имя канала');
+    return;
+  }
+  wsSend({ type: 'voice-channel-create', name: slug });
 });
-voiceMute.addEventListener('click', () => voice.toggleMute());
 callBtn.addEventListener('click', () => call.invite(active.id));
 callAccept.addEventListener('click', () => call.accept());
 callDecline.addEventListener('click', () => call.decline());
@@ -764,7 +816,7 @@ function makeDraggable(panel, handle) {
 }
 
 function initUI() {
-  setButton(voiceToggle, 'microphone', 'Голос');
+  setButton(voiceLeaveBtn, 'cross');
   setButton(callBtn, 'phone', 'Позвонить');
   setButton(callAccept, 'phone', 'Принять');
   setButton(callDecline, 'cross', 'Отклонить');

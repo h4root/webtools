@@ -29,7 +29,8 @@ export type ClientMessage =
   | { type: 'delete'; id: number }
   | { type: 'react'; id: number; emoji: string }
   | { type: 'typing'; channel?: string; to?: string }
-  | { type: 'voice-join' }
+  | { type: 'voice-channel-create'; name: string }
+  | { type: 'voice-join'; channel: string }
   | { type: 'voice-leave' }
   | { type: 'voice-signal'; to: string; data: unknown }
   | { type: 'call-invite'; to: string }
@@ -50,8 +51,9 @@ export type ServerMessage =
   | { type: 'typing'; from: string; channel?: string; to?: string }
   | { type: 'system'; text: string }
   | { type: 'error'; reason: string }
-  | { type: 'voice-roster'; users: string[] }
-  | { type: 'voice-presence'; users: string[] }
+  | { type: 'voice-channels'; list: string[] }
+  | { type: 'voice-roster'; channel: string; users: string[] }
+  | { type: 'voice-presence'; channels: Record<string, string[]> }
   | { type: 'voice-signal'; from: string; data: unknown }
   | { type: 'call-invite'; from: string }
   | { type: 'call-accept'; from: string }
@@ -115,8 +117,10 @@ export function parseClientMessage(raw: string): ClientMessage | null {
     case 'react':
       if (typeof data.id !== 'number' || typeof data.emoji !== 'string' || !REACTIONS.includes(data.emoji)) return null;
       return { type: 'react', id: data.id, emoji: data.emoji };
+    case 'voice-channel-create':
+      return isValidChannelName(data.name) ? { type: 'voice-channel-create', name: data.name } : null;
     case 'voice-join':
-      return { type: 'voice-join' };
+      return isValidChannelName(data.channel) ? { type: 'voice-join', channel: data.channel } : null;
     case 'voice-leave':
       return { type: 'voice-leave' };
     case 'voice-signal':
