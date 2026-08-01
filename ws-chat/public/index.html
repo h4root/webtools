@@ -17,9 +17,17 @@
   </div>
 
   <main id="app" class="app" hidden>
-    <aside class="sidebar">
+    <aside class="sidebar" id="sidebar">
       <div class="me" id="me"></div>
-      <ul class="channels" id="channels"></ul>
+      <nav class="nav">
+        <div class="nav-head">
+          <span>Каналы</span>
+          <button type="button" class="nav-add" id="channel-add" title="Создать канал"></button>
+        </div>
+        <ul class="chan-list" id="channel-list"></ul>
+        <div class="nav-head"><span>Личные</span></div>
+        <ul class="chan-list" id="dm-list"></ul>
+      </nav>
       <div class="voice" id="voice">
         <ul class="voice-users" id="voice-users"></ul>
         <div class="voice-controls">
@@ -29,17 +37,22 @@
         </div>
       </div>
     </aside>
+
     <section class="chat">
       <header class="chat-header">
-        <span id="chat-title"># public</span>
+        <button type="button" class="menu-btn" id="menu-btn" title="Меню"></button>
+        <span id="chat-title"># general</span>
         <button type="button" class="call-btn" id="call-btn" hidden></button>
       </header>
       <div class="log" id="log"></div>
+      <div class="typing" id="typing"></div>
       <form class="composer" id="composer">
         <input id="text-input" placeholder="сообщение…" autocomplete="off" maxlength="2000">
         <button type="submit" id="send-btn"></button>
       </form>
     </section>
+
+    <div class="backdrop" id="backdrop" hidden></div>
 
     <div class="call-incoming" id="call-incoming" hidden>
       <span class="call-incoming-text" id="call-incoming-text"></span>

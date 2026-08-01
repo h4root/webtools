@@ -10,11 +10,17 @@ const nickInput = document.getElementById('nick-input');
 const gateError = document.getElementById('gate-error');
 const appEl = document.getElementById('app');
 const meEl = document.getElementById('me');
-const channelsEl = document.getElementById('channels');
+const channelListEl = document.getElementById('channel-list');
+const dmListEl = document.getElementById('dm-list');
+const channelAddBtn = document.getElementById('channel-add');
 const chatTitle = document.getElementById('chat-title');
 const logEl = document.getElementById('log');
+const typingEl = document.getElementById('typing');
 const composer = document.getElementById('composer');
 const textInput = document.getElementById('text-input');
+const menuBtn = document.getElementById('menu-btn');
+const sidebar = document.getElementById('sidebar');
+const backdrop = document.getElementById('backdrop');
 const voiceToggle = document.getElementById('voice-toggle');
 const voiceMute = document.getElementById('voice-mute');
 const voiceUsers = document.getElementById('voice-users');
@@ -35,20 +41,42 @@ const callGrip = document.getElementById('call-grip');
 const sendBtn = document.getElementById('send-btn');
 const settingsEl = document.getElementById('settings');
 
-const PUBLIC = 'public';
 const RECONNECT_MS = 2000;
+const TYPING_SEND_MS = 2500;
+const TYPING_SHOW_MS = 5000;
 
 let myNick = '';
 let pendingNick = '';
 let joined = false;
-let activeChannel = PUBLIC;
+let channels = [];
 let online = [];
+let active = { kind: 'channel', id: 'general' };
 let voiceActive = false;
 let callPhase = 'idle';
-const history = new Map([[PUBLIC, []]]);
-const unread = new Map();
+let lastTypingSent = 0;
 let ws = null;
 let reconnectTimer = null;
+
+const conversations = new Map();
+const loaded = new Set();
+const unread = new Map();
+const typing = new Map();
+
+function keyOf(kind, id) {
+  return kind === 'channel' ? `ch:${id}` : `dm:${id.toLowerCase()}`;
+}
+function activeKey() {
+  return keyOf(active.kind, active.id);
+}
+function messageKey(msg) {
+  if (msg.channel) return `ch:${msg.channel}`;
+  const other = msg.from === myNick ? msg.to : msg.from;
+  return `dm:${other.toLowerCase()}`;
+}
+function convOf(key) {
+  if (!conversations.has(key)) conversations.set(key, []);
+  return conversations.get(key);
+}
 
 function wsSend(message) {
   if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(message));
@@ -57,14 +85,14 @@ function wsSend(message) {
 const voice = createVoice({
   send: wsSend,
   onState: renderVoice,
-  onError: (reason) => pushMessage(activeChannel, { system: true, text: reason }),
+  onError: (reason) => systemLine(reason),
 });
 
 const call = createCall({
   send: wsSend,
   onState: renderCall,
   onLevels: renderLevels,
-  onError: (reason) => pushMessage(activeChannel, { system: true, text: reason }),
+  onError: (reason) => systemLine(reason),
 });
 
 function wsUrl() {
@@ -87,6 +115,7 @@ function connect() {
   ws.addEventListener('close', () => {
     voice.reset();
     call.hangup();
+    loaded.clear();
     scheduleReconnect();
   });
   ws.addEventListener('error', () => ws.close());
@@ -107,26 +136,42 @@ function handleServer(message) {
       pendingNick = message.nick;
       if (!joined) enterApp();
       break;
+    case 'channels':
+      channels = message.list;
+      if (!channels.includes(active.id) && active.kind === 'channel') active.id = channels[0] ?? 'general';
+      renderChannels();
+      requestHistory(active);
+      break;
     case 'presence':
       online = message.users.filter((nick) => nick !== myNick);
       renderChannels();
       call.handlePresence(message.users);
       break;
-    case 'chat': {
-      const channel = message.channel === 'public' ? PUBLIC : otherParty(message);
-      pushMessage(channel, {
-        from: message.from,
-        text: message.text,
-        mine: message.from === myNick,
-      });
+    case 'history': {
+      const key = message.channel ? `ch:${message.channel}` : `dm:${message.to.toLowerCase()}`;
+      conversations.set(key, message.messages);
+      loaded.add(key);
+      if (key === activeKey()) renderLog();
       break;
     }
+    case 'message':
+      receiveMessage(message.msg);
+      break;
+    case 'edited':
+      applyEdit(message.id, message.text);
+      break;
+    case 'deleted':
+      applyDelete(message.id);
+      break;
+    case 'typing':
+      receiveTyping(message);
+      break;
     case 'system':
-      pushMessage(PUBLIC, { system: true, text: message.text });
+      systemLine(message.text);
       break;
     case 'error':
       if (!joined) gateError.textContent = message.reason;
-      else pushMessage(activeChannel, { system: true, text: message.reason });
+      else systemLine(message.reason);
       break;
     case 'voice-roster':
       voice.handleRoster(message.users);
@@ -147,67 +192,294 @@ function handleServer(message) {
   }
 }
 
-function otherParty(message) {
-  return message.from === myNick ? message.to : message.from;
-}
-
 function enterApp() {
   joined = true;
   gate.hidden = true;
   appEl.hidden = false;
   meEl.textContent = `@${myNick}`;
-  setActive(PUBLIC);
+  renderChannels();
+  updateTitle();
+  textInput.focus();
 }
 
-function pushMessage(channel, entry) {
-  if (!history.has(channel)) history.set(channel, []);
-  history.get(channel).push(entry);
-  if (channel === activeChannel) {
-    appendRow(entry);
+function receiveMessage(msg) {
+  const key = messageKey(msg);
+  convOf(key).push(msg);
+  clearTyping(key, msg.from);
+  if (key === activeKey()) {
+    appendRow(msg);
+    renderTyping();
   } else {
-    unread.set(channel, (unread.get(channel) ?? 0) + 1);
+    unread.set(key, (unread.get(key) ?? 0) + 1);
   }
   renderChannels();
 }
 
-function setActive(channel) {
-  activeChannel = channel;
-  unread.set(channel, 0);
-  chatTitle.textContent = channel === PUBLIC ? '# public' : `@ ${channel}`;
+function systemLine(text) {
+  const key = activeKey();
+  const msg = { id: -Date.now(), from: '', text, ts: Date.now(), edited: false, system: true };
+  convOf(key).push(msg);
+  appendRow(msg);
+}
+
+function findMessage(id) {
+  for (const list of conversations.values()) {
+    const m = list.find((x) => x.id === id);
+    if (m) return m;
+  }
+  return null;
+}
+
+function applyEdit(id, text) {
+  const msg = findMessage(id);
+  if (!msg) return;
+  msg.text = text;
+  msg.edited = true;
+  const row = logEl.querySelector(`[data-id="${id}"]`);
+  if (row) fillRow(row, msg);
+}
+
+function applyDelete(id) {
+  for (const list of conversations.values()) {
+    const idx = list.findIndex((x) => x.id === id);
+    if (idx !== -1) list.splice(idx, 1);
+  }
+  logEl.querySelector(`[data-id="${id}"]`)?.remove();
+}
+
+function openConversation(kind, id) {
+  active = { kind, id };
+  unread.set(activeKey(), 0);
+  updateTitle();
   renderChannels();
+  requestHistory(active);
   renderLog();
+  renderTyping();
   updateCallButton();
+  closeSidebar();
   textInput.focus();
 }
 
+function requestHistory(target) {
+  const key = keyOf(target.kind, target.id);
+  if (loaded.has(key)) return;
+  loaded.add(key);
+  wsSend(target.kind === 'channel' ? { type: 'history', channel: target.id } : { type: 'history', to: target.id });
+}
+
+function updateTitle() {
+  chatTitle.textContent = active.kind === 'channel' ? `# ${active.id}` : `@ ${active.id}`;
+}
+
 function updateCallButton() {
-  const canCall = callPhase === 'idle' && activeChannel !== PUBLIC && online.includes(activeChannel);
+  const canCall = callPhase === 'idle' && active.kind === 'dm' && online.includes(active.id);
   callBtn.hidden = !canCall;
 }
 
 function renderChannels() {
-  channelsEl.replaceChildren();
-  for (const channel of [PUBLIC, ...online]) {
-    const item = document.createElement('li');
-    item.className = channel === activeChannel ? 'channel active' : 'channel';
-
-    const label = document.createElement('span');
-    label.textContent = channel === PUBLIC ? '# public' : `@ ${channel}`;
-    item.appendChild(label);
-
-    const count = unread.get(channel) ?? 0;
-    if (count > 0 && channel !== activeChannel) {
-      const badge = document.createElement('span');
-      badge.className = 'badge';
-      badge.textContent = String(count);
-      item.appendChild(badge);
-    }
-
-    item.addEventListener('click', () => setActive(channel));
-    channelsEl.appendChild(item);
+  channelListEl.replaceChildren();
+  for (const name of channels) {
+    channelListEl.appendChild(navItem('channel', name, `# ${name}`));
+  }
+  dmListEl.replaceChildren();
+  for (const nick of online) {
+    dmListEl.appendChild(navItem('dm', nick, `@ ${nick}`));
   }
   updateCallButton();
 }
+
+function navItem(kind, id, label) {
+  const key = keyOf(kind, id);
+  const item = document.createElement('li');
+  const isActive = kind === active.kind && id.toLowerCase() === active.id.toLowerCase();
+  item.className = isActive ? 'channel active' : 'channel';
+
+  const text = document.createElement('span');
+  text.textContent = label;
+  item.appendChild(text);
+
+  const count = unread.get(key) ?? 0;
+  if (count > 0 && !isActive) {
+    const badge = document.createElement('span');
+    badge.className = 'badge';
+    badge.textContent = String(count);
+    item.appendChild(badge);
+  }
+
+  item.addEventListener('click', () => openConversation(kind, id));
+  return item;
+}
+
+// --- сообщения ---
+
+const logAnimation = autoAnimate(logEl, { duration: 180, disrespectUserMotionPreference: true });
+
+function applyMotionState() {
+  if (settings.animationsEnabled()) logAnimation.enable();
+  else logAnimation.disable();
+}
+
+function timeLabel(ts) {
+  return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
+function renderText(parent, text) {
+  let mentionsMe = false;
+  const parts = text.split(/(@[\p{L}\p{N}_.-]+)/gu);
+  for (const part of parts) {
+    if (part.startsWith('@') && part.length > 1) {
+      const span = document.createElement('span');
+      span.className = 'mention';
+      span.textContent = part;
+      if (part.slice(1).toLowerCase() === myNick.toLowerCase()) {
+        span.classList.add('me');
+        mentionsMe = true;
+      }
+      parent.appendChild(span);
+    } else if (part) {
+      parent.appendChild(document.createTextNode(part));
+    }
+  }
+  return mentionsMe;
+}
+
+function fillRow(row, msg) {
+  row.replaceChildren();
+  if (!msg.mine) {
+    const who = document.createElement('span');
+    who.className = 'who';
+    who.textContent = msg.from;
+    row.appendChild(who);
+  }
+  const text = document.createElement('span');
+  text.className = 'text';
+  const mentionsMe = renderText(text, msg.text);
+  row.appendChild(text);
+
+  const meta = document.createElement('span');
+  meta.className = 'meta';
+  meta.textContent = (msg.edited ? 'изм. · ' : '') + timeLabel(msg.ts);
+  row.appendChild(meta);
+
+  row.classList.toggle('mention', mentionsMe && !msg.mine);
+
+  if (msg.mine) {
+    const actions = document.createElement('span');
+    actions.className = 'row-actions';
+    const edit = document.createElement('button');
+    edit.type = 'button';
+    edit.title = 'Изменить';
+    edit.appendChild(icon('pencil', 14));
+    edit.addEventListener('click', (e) => {
+      e.stopPropagation();
+      startEdit(row, msg);
+    });
+    const del = document.createElement('button');
+    del.type = 'button';
+    del.title = 'Удалить';
+    del.appendChild(icon('trash', 14));
+    del.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (confirm('Удалить сообщение?')) wsSend({ type: 'delete', id: msg.id });
+    });
+    actions.append(edit, del);
+    row.appendChild(actions);
+  }
+}
+
+function createRow(msg) {
+  const row = document.createElement('div');
+  if (msg.system) {
+    row.className = 'row system';
+    row.textContent = msg.text;
+    return row;
+  }
+  msg.mine = msg.from === myNick;
+  row.className = msg.mine ? 'row mine' : 'row';
+  row.dataset.id = String(msg.id);
+  fillRow(row, msg);
+  return row;
+}
+
+function startEdit(row, msg) {
+  row.replaceChildren();
+  const input = document.createElement('input');
+  input.className = 'edit-input';
+  input.value = msg.text;
+  input.maxLength = 2000;
+  row.appendChild(input);
+  input.focus();
+  const commit = () => {
+    const value = input.value.trim();
+    if (value && value !== msg.text) wsSend({ type: 'edit', id: msg.id, text: value });
+    else fillRow(row, msg);
+  };
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      commit();
+    } else if (e.key === 'Escape') {
+      fillRow(row, msg);
+    }
+  });
+  input.addEventListener('blur', () => fillRow(row, msg));
+}
+
+function appendRow(msg) {
+  logEl.appendChild(createRow(msg));
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+function renderLog() {
+  logAnimation.disable();
+  logEl.replaceChildren();
+  for (const msg of convOf(activeKey())) logEl.appendChild(createRow(msg));
+  logEl.scrollTop = logEl.scrollHeight;
+  applyMotionState();
+}
+
+// --- typing ---
+
+function receiveTyping(message) {
+  const key = message.channel ? `ch:${message.channel}` : `dm:${message.from.toLowerCase()}`;
+  addTyping(key, message.from);
+}
+
+function addTyping(key, nick) {
+  if (!typing.has(key)) typing.set(key, new Map());
+  const map = typing.get(key);
+  if (map.has(nick)) clearTimeout(map.get(nick));
+  map.set(nick, setTimeout(() => clearTyping(key, nick), TYPING_SHOW_MS));
+  if (key === activeKey()) renderTyping();
+}
+
+function clearTyping(key, nick) {
+  const map = typing.get(key);
+  if (!map || !map.has(nick)) return;
+  clearTimeout(map.get(nick));
+  map.delete(nick);
+  if (key === activeKey()) renderTyping();
+}
+
+function renderTyping() {
+  const map = typing.get(activeKey());
+  const nicks = map ? [...map.keys()] : [];
+  if (nicks.length === 0) {
+    typingEl.textContent = '';
+    return;
+  }
+  const verb = nicks.length === 1 ? 'печатает' : 'печатают';
+  typingEl.textContent = `${nicks.join(', ')} ${verb}…`;
+}
+
+function sendTyping() {
+  const now = Date.now();
+  if (now - lastTypingSent < TYPING_SEND_MS) return;
+  lastTypingSent = now;
+  wsSend(active.kind === 'channel' ? { type: 'typing', channel: active.id } : { type: 'typing', to: active.id });
+}
+
+// --- голос / звонок (без изменений в логике) ---
 
 function renderVoice(state) {
   voiceActive = state.active;
@@ -281,46 +553,18 @@ function renderLevels(levels) {
   setMeter(partyPeer, levels.remote, levels.remoteSpeaking);
 }
 
-const logAnimation = autoAnimate(logEl, { duration: 180, disrespectUserMotionPreference: true });
+// --- адаптив ---
 
-function applyMotionState() {
-  if (settings.animationsEnabled()) logAnimation.enable();
-  else logAnimation.disable();
+function openSidebar() {
+  sidebar.classList.add('open');
+  backdrop.hidden = false;
+}
+function closeSidebar() {
+  sidebar.classList.remove('open');
+  backdrop.hidden = true;
 }
 
-function createRow(entry) {
-  const row = document.createElement('div');
-  if (entry.system) {
-    row.className = 'row system';
-    row.textContent = entry.text;
-  } else {
-    row.className = entry.mine ? 'row mine' : 'row';
-    if (!entry.mine) {
-      const who = document.createElement('span');
-      who.className = 'who';
-      who.textContent = entry.from;
-      row.appendChild(who);
-    }
-    const text = document.createElement('span');
-    text.className = 'text';
-    text.textContent = entry.text;
-    row.appendChild(text);
-  }
-  return row;
-}
-
-function appendRow(entry) {
-  logEl.appendChild(createRow(entry));
-  logEl.scrollTop = logEl.scrollHeight;
-}
-
-function renderLog() {
-  logAnimation.disable();
-  logEl.replaceChildren();
-  for (const entry of history.get(activeChannel) ?? []) logEl.appendChild(createRow(entry));
-  logEl.scrollTop = logEl.scrollHeight;
-  applyMotionState();
-}
+// --- события ---
 
 nickForm.addEventListener('submit', (event) => {
   event.preventDefault();
@@ -328,37 +572,49 @@ nickForm.addEventListener('submit', (event) => {
   if (!nick) return;
   pendingNick = nick;
   gateError.textContent = '';
-  if (ws && ws.readyState === WebSocket.OPEN) {
-    ws.send(JSON.stringify({ type: 'hello', nick }));
-  } else {
-    connect();
-  }
+  if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'hello', nick }));
+  else connect();
 });
+
+composer.addEventListener('submit', (event) => {
+  event.preventDefault();
+  const text = textInput.value.trim();
+  if (!text) return;
+  wsSend(active.kind === 'channel' ? { type: 'message', channel: active.id, text } : { type: 'message', to: active.id, text });
+  textInput.value = '';
+});
+
+textInput.addEventListener('input', () => {
+  if (textInput.value.trim()) sendTyping();
+});
+
+channelAddBtn.addEventListener('click', () => {
+  const name = prompt('Имя канала (латиница, цифры, дефис):');
+  if (!name) return;
+  const slug = name.trim().toLowerCase();
+  if (!/^[a-z0-9-]{1,24}$/.test(slug)) {
+    systemLine('Недопустимое имя канала');
+    return;
+  }
+  wsSend({ type: 'channel-create', name: slug });
+});
+
+menuBtn.addEventListener('click', () => {
+  if (sidebar.classList.contains('open')) closeSidebar();
+  else openSidebar();
+});
+backdrop.addEventListener('click', closeSidebar);
 
 voiceToggle.addEventListener('click', () => {
   if (voiceActive) voice.leave();
   else voice.join();
 });
-
 voiceMute.addEventListener('click', () => voice.toggleMute());
-
-callBtn.addEventListener('click', () => call.invite(activeChannel));
+callBtn.addEventListener('click', () => call.invite(active.id));
 callAccept.addEventListener('click', () => call.accept());
 callDecline.addEventListener('click', () => call.decline());
 callMute.addEventListener('click', () => call.toggleMute());
 callHangup.addEventListener('click', () => call.hangup());
-
-composer.addEventListener('submit', (event) => {
-  event.preventDefault();
-  const text = textInput.value.trim();
-  if (!text || !ws || ws.readyState !== WebSocket.OPEN) return;
-  const message =
-    activeChannel === PUBLIC
-      ? { type: 'public', text }
-      : { type: 'direct', to: activeChannel, text };
-  ws.send(JSON.stringify(message));
-  textInput.value = '';
-});
 
 function makeDraggable(panel, handle) {
   let dragging = false;
@@ -396,6 +652,8 @@ function initUI() {
   setButton(callDecline, 'cross', 'Отклонить');
   setButton(callHangup, 'phone', 'Завершить');
   setButton(sendBtn, 'chevron-right');
+  channelAddBtn.appendChild(icon('plus', 16));
+  menuBtn.appendChild(icon('menu', 20));
   const { toggle } = mountSettings(settingsEl);
   setButton(toggle, 'gear');
   makeDraggable(callPanel, callGrip);
