@@ -79,6 +79,9 @@ export class Hub {
       case 'delete':
         this.deleteMessage(client, message.id);
         break;
+      case 'react':
+        this.reactMessage(client, message.id, message.emoji);
+        break;
       case 'typing':
         this.relayTyping(client, message);
         break;
@@ -160,6 +163,12 @@ export class Hub {
     const message = this.store.remove(id, client.nick!);
     if (!message) return;
     this.dispatch(recipientsOf(message), { type: 'deleted', id });
+  }
+
+  private reactMessage(client: Client, id: number, emoji: string): void {
+    const message = this.store.toggleReaction(id, client.nick!, emoji);
+    if (!message) return;
+    this.dispatch(recipientsOf(message), { type: 'reaction', id, reactions: message.reactions ?? {} });
   }
 
   private relayTyping(client: Client, message: Extract<ClientMessage, { type: 'typing' }>): void {

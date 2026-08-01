@@ -3,7 +3,11 @@ export const TEXT_MAX = 2000;
 export const SIGNAL_MAX = 16384;
 export const CHANNEL_MAX = 24;
 
+export const REACTIONS = ['👍', '❤️', '😂', '🔥', '🎉', '😮', '😢', '👀'];
+
 const CHANNEL_PATTERN = /^[a-z0-9-]{1,24}$/;
+
+export type Reactions = Record<string, string[]>;
 
 export interface WireMessage {
   id: number;
@@ -13,6 +17,7 @@ export interface WireMessage {
   edited: boolean;
   channel?: string;
   to?: string;
+  reactions?: Reactions;
 }
 
 export type ClientMessage =
@@ -22,6 +27,7 @@ export type ClientMessage =
   | { type: 'history'; channel?: string; to?: string }
   | { type: 'edit'; id: number; text: string }
   | { type: 'delete'; id: number }
+  | { type: 'react'; id: number; emoji: string }
   | { type: 'typing'; channel?: string; to?: string }
   | { type: 'voice-join' }
   | { type: 'voice-leave' }
@@ -40,6 +46,7 @@ export type ServerMessage =
   | { type: 'history'; channel?: string; to?: string; messages: WireMessage[] }
   | { type: 'edited'; id: number; text: string }
   | { type: 'deleted'; id: number }
+  | { type: 'reaction'; id: number; reactions: Reactions }
   | { type: 'typing'; from: string; channel?: string; to?: string }
   | { type: 'system'; text: string }
   | { type: 'error'; reason: string }
@@ -105,6 +112,9 @@ export function parseClientMessage(raw: string): ClientMessage | null {
       return { type: 'edit', id: data.id, text: data.text };
     case 'delete':
       return typeof data.id === 'number' ? { type: 'delete', id: data.id } : null;
+    case 'react':
+      if (typeof data.id !== 'number' || typeof data.emoji !== 'string' || !REACTIONS.includes(data.emoji)) return null;
+      return { type: 'react', id: data.id, emoji: data.emoji };
     case 'voice-join':
       return { type: 'voice-join' };
     case 'voice-leave':

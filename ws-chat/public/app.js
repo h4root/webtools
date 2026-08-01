@@ -44,6 +44,9 @@ const settingsEl = document.getElementById('settings');
 const RECONNECT_MS = 2000;
 const TYPING_SEND_MS = 2500;
 const TYPING_SHOW_MS = 5000;
+const REACTIONS = ['👍', '❤️', '😂', '🔥', '🎉', '😮', '😢', '👀'];
+
+let activePicker = null;
 
 let myNick = '';
 let pendingNick = '';
@@ -162,6 +165,9 @@ function handleServer(message) {
       break;
     case 'deleted':
       applyDelete(message.id);
+      break;
+    case 'reaction':
+      applyReaction(message.id, message.reactions);
       break;
     case 'typing':
       receiveTyping(message);
@@ -363,9 +369,19 @@ function fillRow(row, msg) {
 
   row.classList.toggle('mention', mentionsMe && !msg.mine);
 
+  const actions = document.createElement('span');
+  actions.className = 'row-actions';
+  const react = document.createElement('button');
+  react.type = 'button';
+  react.title = 'Реакция';
+  react.appendChild(icon('smiley', 14));
+  react.addEventListener('click', (e) => {
+    e.stopPropagation();
+    openReactionPicker(row, msg);
+  });
+  actions.appendChild(react);
+
   if (msg.mine) {
-    const actions = document.createElement('span');
-    actions.className = 'row-actions';
     const edit = document.createElement('button');
     edit.type = 'button';
     edit.title = 'Изменить';
@@ -383,8 +399,77 @@ function fillRow(row, msg) {
       if (confirm('Удалить сообщение?')) wsSend({ type: 'delete', id: msg.id });
     });
     actions.append(edit, del);
-    row.appendChild(actions);
   }
+  row.appendChild(actions);
+
+  renderReactions(row, msg);
+}
+
+function renderReactions(row, msg, changed = new Set()) {
+  row.querySelector('.reactions')?.remove();
+  const reactions = msg.reactions;
+  if (!reactions || Object.keys(reactions).length === 0) return;
+
+  const box = document.createElement('div');
+  box.className = 'reactions';
+  for (const [emoji, users] of Object.entries(reactions)) {
+    const chip = document.createElement('button');
+    chip.type = 'button';
+    chip.className = 'reaction';
+    if (users.includes(myNick)) chip.classList.add('mine');
+    if (changed.has(emoji)) chip.classList.add('bump');
+    chip.title = users.join(', ');
+    const face = document.createElement('span');
+    face.textContent = emoji;
+    const count = document.createElement('span');
+    count.className = 'rcount';
+    count.textContent = String(users.length);
+    chip.append(face, count);
+    chip.addEventListener('click', (e) => {
+      e.stopPropagation();
+      wsSend({ type: 'react', id: msg.id, emoji });
+    });
+    box.appendChild(chip);
+  }
+  row.appendChild(box);
+}
+
+function applyReaction(id, reactions) {
+  const msg = findMessage(id);
+  if (!msg) return;
+  const old = msg.reactions ?? {};
+  const changed = new Set();
+  for (const emoji of new Set([...Object.keys(old), ...Object.keys(reactions)])) {
+    if ((old[emoji]?.length ?? 0) !== (reactions[emoji]?.length ?? 0)) changed.add(emoji);
+  }
+  msg.reactions = Object.keys(reactions).length ? reactions : undefined;
+  const row = logEl.querySelector(`[data-id="${id}"]`);
+  if (row) renderReactions(row, msg, changed);
+}
+
+function openReactionPicker(row, msg) {
+  closeReactionPicker();
+  const pick = document.createElement('div');
+  pick.className = 'react-picker';
+  for (const emoji of REACTIONS) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = emoji;
+    b.addEventListener('click', (e) => {
+      e.stopPropagation();
+      wsSend({ type: 'react', id: msg.id, emoji });
+      closeReactionPicker();
+    });
+    pick.appendChild(b);
+  }
+  row.appendChild(pick);
+  activePicker = pick;
+  setTimeout(() => document.addEventListener('click', closeReactionPicker, { once: true }), 0);
+}
+
+function closeReactionPicker() {
+  activePicker?.remove();
+  activePicker = null;
 }
 
 function createRow(msg) {

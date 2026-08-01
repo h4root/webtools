@@ -29,6 +29,7 @@ Discord-подобный текстовый костяк:
 - **Именованные текст-каналы** (по умолчанию `general`, `random`) + создание новых из сайдбара; отдельный раздел **Личные** для ЛС.
 - **Персистентная история** на сервере (`store.json`, ключуется по каналу и по паре ников для ЛС) - переживает перезапуск. Клиент подтягивает историю канала при открытии.
 - **Правка и удаление** своих сообщений (инлайн, автор-онли), пометка «изм.», время у каждого сообщения.
+- **Реакции** на сообщения (палитра из 8 эмодзи, тап-чтобы-реагировать, чипы со счётчиком и подсветкой своих, поп-анимация; своя реализация в стиле Telegram, без их GPL-кода/ассетов) - агрегируются по пользователям и персистятся.
 - **Typing-индикатор** по каналу/ЛС и подсветка **@упоминаний** (своё имя выделяется, сообщение помечается).
 - **Адаптивная вёрстка**: на узких экранах сайдбар уезжает за край, открывается гамбургером; панели звонка/настроек подстраиваются.
 
@@ -109,11 +110,12 @@ public/
 - `{ "type": "message", "channel": "general", "text": "…" }` или `{ "type": "message", "to": "bob", "text": "…" }`
 - `{ "type": "history", "channel": "general" }` / `{ "type": "history", "to": "bob" }`
 - `{ "type": "edit", "id": 12, "text": "…" }` / `{ "type": "delete", "id": 12 }`
+- `{ "type": "react", "id": 12, "emoji": "🔥" }` - переключить реакцию (эмодзи из фикс. палитры)
 - `{ "type": "typing", "channel": "general" }` / `{ "type": "typing", "to": "bob" }`
 - `{ "type": "voice-join" }` / `{ "type": "voice-leave" }` / `{ "type": "voice-signal", "to": "bob", "data": … }`
 - `{ "type": "call-invite" | "call-accept" | "call-decline" | "call-end" | "call-signal", "to": "bob", … }`
 
-Сервер → клиент: `welcome`, `channels`, `presence`, `message` (с `msg` = `{ id, from, text, ts, edited, channel? , to? }`), `history`, `edited`, `deleted`, `typing`, `system`, `error`, `voice-roster`/`voice-presence`/`voice-signal`, и зеркальные `call-*` с `from` (плюс `reason: offline / busy`).
+Сервер → клиент: `welcome`, `channels`, `presence`, `message` (с `msg` = `{ id, from, text, ts, edited, channel? , to?, reactions? }`), `history`, `edited`, `deleted`, `reaction` (`{ id, reactions }`), `typing`, `system`, `error`, `voice-roster`/`voice-presence`/`voice-signal`, и зеркальные `call-*` с `from` (плюс `reason: offline / busy`).
 
 ## Тесты
 

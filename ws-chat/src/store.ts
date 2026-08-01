@@ -1,6 +1,6 @@
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
-import type { WireMessage } from './protocol.ts';
+import type { Reactions, WireMessage } from './protocol.ts';
 
 export const DEFAULT_CHANNELS = ['general', 'random'];
 const HISTORY_LIMIT = 200;
@@ -15,6 +15,7 @@ interface StoredMessage {
   text: string;
   ts: number;
   edited: boolean;
+  reactions?: Reactions;
 }
 
 export function channelKey(name: string): string {
@@ -34,6 +35,7 @@ function toWire(message: StoredMessage): WireMessage {
     edited: message.edited,
     channel: message.channel,
     to: message.to,
+    reactions: message.reactions && Object.keys(message.reactions).length ? message.reactions : undefined,
   };
 }
 
@@ -131,6 +133,18 @@ export class Store {
     const message = this.find(id);
     if (!message || message.from !== from) return null;
     this.messages = this.messages.filter((m) => m.id !== id);
+    this.scheduleSave();
+    return message;
+  }
+
+  toggleReaction(id: number, nick: string, emoji: string): StoredMessage | null {
+    const message = this.find(id);
+    if (!message) return null;
+    const reactions = (message.reactions ??= {});
+    const users = reactions[emoji] ?? [];
+    reactions[emoji] = users.includes(nick) ? users.filter((n) => n !== nick) : [...users, nick];
+    if (reactions[emoji].length === 0) delete reactions[emoji];
+    if (Object.keys(reactions).length === 0) delete message.reactions;
     this.scheduleSave();
     return message;
   }

@@ -169,6 +169,19 @@ describe('Hub', () => {
     expect(b.inbox.at(-1)).toEqual({ type: 'deleted', id });
   });
 
+  it('рассылает реакцию всем в канале и переключает её', () => {
+    const a = makeClient('a');
+    const b = makeClient('b');
+    hub.join(a, 'alice');
+    hub.join(b, 'bob');
+    hub.handle(a, JSON.stringify({ type: 'message', channel: 'general', text: 'react me' }));
+    const id = lastMessage(a)!.id;
+    hub.handle(b, JSON.stringify({ type: 'react', id, emoji: '🔥' }));
+    expect(a.inbox.at(-1)).toEqual({ type: 'reaction', id, reactions: { '🔥': ['bob'] } });
+    hub.handle(b, JSON.stringify({ type: 'react', id, emoji: '🔥' }));
+    expect(a.inbox.at(-1)).toEqual({ type: 'reaction', id, reactions: {} });
+  });
+
   it('ретранслирует typing другим в канале, но не себе', () => {
     const a = makeClient('a');
     const b = makeClient('b');

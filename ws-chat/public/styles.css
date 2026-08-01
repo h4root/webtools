@@ -1024,3 +1024,85 @@ html.motion-off *::after {
     width: auto;
   }
 }
+
+/* --- реакции --- */
+.reactions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.reaction {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 7px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  color: var(--fg);
+  font-size: 12px;
+  line-height: 1.5;
+  cursor: pointer;
+  transition: transform 0.12s ease, border-color 0.15s ease, background 0.15s ease;
+}
+
+.reaction:hover {
+  transform: translateY(-1px);
+}
+
+.reaction.mine {
+  border-color: var(--accent);
+  background: rgba(53, 208, 127, 0.14);
+  color: var(--accent);
+}
+
+.reaction.bump {
+  animation: react-pop 0.28s ease;
+}
+
+@keyframes react-pop {
+  0% {
+    transform: scale(0.4);
+    opacity: 0.3;
+  }
+  60% {
+    transform: scale(1.25);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.react-picker {
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  margin-bottom: 6px;
+  display: flex;
+  gap: 2px;
+  padding: 4px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  z-index: 15;
+  animation: pop-in 0.16s ease;
+}
+
+.react-picker button {
+  padding: 3px 5px;
+  background: transparent;
+  border: none;
+  border-radius: 8px;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  transition: transform 0.1s ease, background 0.12s ease;
+}
+
+.react-picker button:hover {
+  background: var(--line);
+  transform: scale(1.25);
+}

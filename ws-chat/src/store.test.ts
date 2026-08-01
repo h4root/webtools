@@ -47,4 +47,15 @@ describe('Store', () => {
     expect(recipientsOf({ channel: 'general', from: 'alice' })).toBe('all');
     expect(recipientsOf({ from: 'alice', to: 'bob' })).toEqual(['alice', 'bob']);
   });
+
+  it('переключает реакцию: добавляет и убирает', () => {
+    const m = store.addChannelMessage('general', 'alice', 'hey');
+    store.toggleReaction(m.id, 'bob', '🔥');
+    store.toggleReaction(m.id, 'carol', '🔥');
+    expect(store.history(channelKey('general'))[0].reactions).toEqual({ '🔥': ['bob', 'carol'] });
+    store.toggleReaction(m.id, 'bob', '🔥');
+    expect(store.history(channelKey('general'))[0].reactions).toEqual({ '🔥': ['carol'] });
+    store.toggleReaction(m.id, 'carol', '🔥');
+    expect(store.history(channelKey('general'))[0].reactions).toBeUndefined();
+  });
 });
