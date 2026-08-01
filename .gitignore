@@ -142,3 +142,7 @@ vite.config.ts.timestamp-*
 *.pem
 *.key
 *.crt
+
+# ws-chat persistence
+data/
+store.json

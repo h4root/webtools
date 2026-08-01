@@ -7,6 +7,7 @@ import { dirname, join } from 'node:path';
 import express from 'express';
 import { WebSocketServer, WebSocket } from 'ws';
 import { Hub, type Client } from './chat.ts';
+import { Store } from './store.ts';
 import { TEXT_MAX, SIGNAL_MAX } from './protocol.ts';
 
 const PORT = Number(process.env.PORT ?? 3000);
@@ -37,7 +38,8 @@ const server = useTls
   : createHttpServer(app);
 
 const wss = new WebSocketServer({ server, maxPayload: Math.max(TEXT_MAX * 4, SIGNAL_MAX * 2) });
-const hub = new Hub();
+const dataFile = join(process.env.DATA_DIR ?? join(publicDir, '..', 'data'), 'store.json');
+const hub = new Hub(new Store(dataFile));
 
 let nextId = 1;
 const alive = new WeakMap<WebSocket, boolean>();

@@ -1,0 +1,50 @@
+import { describe, it, expect, beforeEach } from 'vitest';
+import { Store, channelKey, dmKey, recipientsOf } from './store.ts';
+
+describe('Store', () => {
+  let store: Store;
+
+  beforeEach(() => {
+    store = new Store();
+  });
+
+  it('стартует с дефолтными каналами и создаёт новые без дублей', () => {
+    expect(store.listChannels()).toContain('general');
+    expect(store.createChannel('dev')).toBe(true);
+    expect(store.createChannel('dev')).toBe(false);
+    expect(store.hasChannel('dev')).toBe(true);
+  });
+
+  it('присваивает возрастающие id и хранит историю канала', () => {
+    const a = store.addChannelMessage('general', 'alice', 'one');
+    const b = store.addChannelMessage('general', 'bob', 'two');
+    expect(b.id).toBe(a.id + 1);
+    expect(store.history(channelKey('general')).map((m) => m.text)).toEqual(['one', 'two']);
+  });
+
+  it('ключует ЛС по паре ников независимо от порядка', () => {
+    store.addDirectMessage('alice', 'Bob', 'hi');
+    expect(dmKey('alice', 'Bob')).toBe(dmKey('bob', 'ALICE'));
+    expect(store.history(dmKey('bob', 'alice')).map((m) => m.text)).toEqual(['hi']);
+  });
+
+  it('редактирует только своё сообщение', () => {
+    const m = store.addChannelMessage('general', 'alice', 'typo');
+    expect(store.edit(m.id, 'bob', 'x')).toBeNull();
+    const edited = store.edit(m.id, 'alice', 'fixed');
+    expect(edited).not.toBeNull();
+    expect(store.history(channelKey('general'))[0]).toMatchObject({ text: 'fixed', edited: true });
+  });
+
+  it('удаляет только своё сообщение', () => {
+    const m = store.addChannelMessage('general', 'alice', 'bye');
+    expect(store.remove(m.id, 'bob')).toBeNull();
+    expect(store.remove(m.id, 'alice')).not.toBeNull();
+    expect(store.history(channelKey('general'))).toHaveLength(0);
+  });
+
+  it('recipientsOf: канал — all, ЛС — обе стороны', () => {
+    expect(recipientsOf({ channel: 'general', from: 'alice' })).toBe('all');
+    expect(recipientsOf({ from: 'alice', to: 'bob' })).toEqual(['alice', 'bob']);
+  });
+});

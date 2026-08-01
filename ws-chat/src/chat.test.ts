@@ -24,8 +24,24 @@ function lastPresence(client: TestClient): string[] | undefined {
   return undefined;
 }
 
-function chatCount(client: TestClient, text: string): number {
-  return client.inbox.filter((m) => m.type === 'chat' && m.text === text).length;
+function msgCount(client: TestClient, text: string): number {
+  return client.inbox.filter((m) => m.type === 'message' && m.msg.text === text).length;
+}
+
+function lastMessage(client: TestClient) {
+  for (let i = client.inbox.length - 1; i >= 0; i--) {
+    const m = client.inbox[i];
+    if (m.type === 'message') return m.msg;
+  }
+  return undefined;
+}
+
+function channelsList(client: TestClient): string[] | undefined {
+  for (let i = client.inbox.length - 1; i >= 0; i--) {
+    const m = client.inbox[i];
+    if (m.type === 'channels') return m.list;
+  }
+  return undefined;
 }
 
 describe('Hub', () => {
@@ -35,11 +51,12 @@ describe('Hub', () => {
     hub = new Hub();
   });
 
-  it('принимает валидный ник и шлёт welcome', () => {
+  it('принимает валидный ник, шлёт welcome и список каналов', () => {
     const a = makeClient('a');
     hub.join(a, 'alice');
     expect(a.nick).toBe('alice');
     expect(a.inbox.some((m) => m.type === 'welcome' && m.nick === 'alice')).toBe(true);
+    expect(channelsList(a)).toContain('general');
   });
 
   it('отклоняет занятый ник без учёта регистра', () => {
@@ -51,44 +68,115 @@ describe('Hub', () => {
     expect(b.inbox.at(-1)).toEqual({ type: 'error', reason: 'Ник уже занят' });
   });
 
-  it('рассылает публичное сообщение всем', () => {
+  it('рассылает сообщение канала всем и присваивает id', () => {
     const a = makeClient('a');
     const b = makeClient('b');
     hub.join(a, 'alice');
     hub.join(b, 'bob');
-    hub.handle(a, JSON.stringify({ type: 'public', text: 'hi all' }));
-    expect(chatCount(a, 'hi all')).toBe(1);
-    expect(chatCount(b, 'hi all')).toBe(1);
+    hub.handle(a, JSON.stringify({ type: 'message', channel: 'general', text: 'hi all' }));
+    expect(msgCount(a, 'hi all')).toBe(1);
+    expect(msgCount(b, 'hi all')).toBe(1);
+    expect(lastMessage(b)).toMatchObject({ channel: 'general', from: 'alice', edited: false });
+    expect(typeof lastMessage(b)?.id).toBe('number');
   });
 
-  it('доставляет личное сообщение только отправителю и получателю', () => {
+  it('отклоняет сообщение в несуществующий канал', () => {
+    const a = makeClient('a');
+    hub.join(a, 'alice');
+    hub.handle(a, JSON.stringify({ type: 'message', channel: 'ghost', text: 'x' }));
+    expect(a.inbox.at(-1)).toEqual({ type: 'error', reason: 'Нет такого канала' });
+  });
+
+  it('доставляет ЛС только отправителю и получателю (без учёта регистра)', () => {
     const a = makeClient('a');
     const b = makeClient('b');
     const c = makeClient('c');
     hub.join(a, 'alice');
-    hub.join(b, 'bob');
+    hub.join(b, 'Bob');
     hub.join(c, 'carol');
-    hub.handle(a, JSON.stringify({ type: 'direct', to: 'bob', text: 'psst' }));
-    expect(chatCount(a, 'psst')).toBe(1);
-    expect(chatCount(b, 'psst')).toBe(1);
-    expect(chatCount(c, 'psst')).toBe(0);
+    hub.handle(a, JSON.stringify({ type: 'message', to: 'bob', text: 'psst' }));
+    expect(msgCount(a, 'psst')).toBe(1);
+    expect(msgCount(b, 'psst')).toBe(1);
+    expect(msgCount(c, 'psst')).toBe(0);
+    expect(lastMessage(b)).toMatchObject({ from: 'alice', to: 'Bob' });
   });
 
-  it('маршрутизирует ЛС без учёта регистра ника', () => {
+  it('возвращает ошибку при ЛС несуществующему нику', () => {
+    const a = makeClient('a');
+    hub.join(a, 'alice');
+    hub.handle(a, JSON.stringify({ type: 'message', to: 'ghost', text: 'hey' }));
+    expect(a.inbox.at(-1)).toEqual({ type: 'error', reason: 'ghost не в сети' });
+  });
+
+  it('отдаёт историю канала', () => {
+    const a = makeClient('a');
+    hub.join(a, 'alice');
+    hub.handle(a, JSON.stringify({ type: 'message', channel: 'general', text: 'one' }));
+    hub.handle(a, JSON.stringify({ type: 'message', channel: 'general', text: 'two' }));
+    hub.handle(a, JSON.stringify({ type: 'history', channel: 'general' }));
+    const hist = a.inbox.at(-1);
+    expect(hist?.type).toBe('history');
+    expect(hist && hist.type === 'history' && hist.messages.map((m) => m.text)).toEqual(['one', 'two']);
+  });
+
+  it('создаёт канал и рассылает обновлённый список', () => {
     const a = makeClient('a');
     const b = makeClient('b');
     hub.join(a, 'alice');
-    hub.join(b, 'Bob');
-    hub.handle(a, JSON.stringify({ type: 'direct', to: 'bob', text: 'hey' }));
-    expect(chatCount(a, 'hey')).toBe(1);
-    expect(chatCount(b, 'hey')).toBe(1);
+    hub.join(b, 'bob');
+    hub.handle(a, JSON.stringify({ type: 'channel-create', name: 'dev' }));
+    expect(channelsList(a)).toContain('dev');
+    expect(channelsList(b)).toContain('dev');
   });
 
-  it('возвращает ошибку при личном сообщении несуществующему нику', () => {
+  it('не создаёт дубликат канала', () => {
     const a = makeClient('a');
     hub.join(a, 'alice');
-    hub.handle(a, JSON.stringify({ type: 'direct', to: 'ghost', text: 'hey' }));
-    expect(a.inbox.at(-1)).toEqual({ type: 'error', reason: 'ghost не в сети' });
+    hub.handle(a, JSON.stringify({ type: 'channel-create', name: 'general' }));
+    expect(a.inbox.at(-1)).toEqual({ type: 'error', reason: 'Канал уже существует' });
+  });
+
+  it('редактирует своё сообщение и рассылает edited', () => {
+    const a = makeClient('a');
+    const b = makeClient('b');
+    hub.join(a, 'alice');
+    hub.join(b, 'bob');
+    hub.handle(a, JSON.stringify({ type: 'message', channel: 'general', text: 'typo' }));
+    const id = lastMessage(a)!.id;
+    hub.handle(a, JSON.stringify({ type: 'edit', id, text: 'fixed' }));
+    expect(b.inbox.at(-1)).toEqual({ type: 'edited', id, text: 'fixed' });
+  });
+
+  it('не даёт редактировать чужое сообщение', () => {
+    const a = makeClient('a');
+    const b = makeClient('b');
+    hub.join(a, 'alice');
+    hub.join(b, 'bob');
+    hub.handle(a, JSON.stringify({ type: 'message', channel: 'general', text: 'mine' }));
+    const id = lastMessage(a)!.id;
+    hub.handle(b, JSON.stringify({ type: 'edit', id, text: 'hacked' }));
+    expect(b.inbox.some((m) => m.type === 'edited')).toBe(false);
+  });
+
+  it('удаляет своё сообщение и рассылает deleted', () => {
+    const a = makeClient('a');
+    const b = makeClient('b');
+    hub.join(a, 'alice');
+    hub.join(b, 'bob');
+    hub.handle(a, JSON.stringify({ type: 'message', channel: 'general', text: 'bye' }));
+    const id = lastMessage(a)!.id;
+    hub.handle(a, JSON.stringify({ type: 'delete', id }));
+    expect(b.inbox.at(-1)).toEqual({ type: 'deleted', id });
+  });
+
+  it('ретранслирует typing другим в канале, но не себе', () => {
+    const a = makeClient('a');
+    const b = makeClient('b');
+    hub.join(a, 'alice');
+    hub.join(b, 'bob');
+    hub.handle(a, JSON.stringify({ type: 'typing', channel: 'general' }));
+    expect(b.inbox.at(-1)).toEqual({ type: 'typing', from: 'alice', channel: 'general' });
+    expect(a.inbox.some((m) => m.type === 'typing')).toBe(false);
   });
 
   it('обновляет presence на вход и выход', () => {
@@ -106,12 +194,12 @@ describe('Hub', () => {
     hub.join(a, 'alice');
     hub.handle(a, '{not json');
     expect(a.inbox.at(-1)).toEqual({ type: 'error', reason: 'Некорректное сообщение' });
-    expect(a.inbox.some((m) => m.type === 'chat')).toBe(false);
+    expect(a.inbox.some((m) => m.type === 'message')).toBe(false);
   });
 
   it('требует hello до отправки сообщений', () => {
     const a = makeClient('a');
-    hub.handle(a, JSON.stringify({ type: 'public', text: 'hi' }));
+    hub.handle(a, JSON.stringify({ type: 'message', channel: 'general', text: 'hi' }));
     expect(a.inbox.at(-1)).toEqual({ type: 'error', reason: 'Сначала представьтесь (hello)' });
   });
 });

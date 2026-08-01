@@ -1,11 +1,28 @@
 export const NICK_MAX = 24;
 export const TEXT_MAX = 2000;
 export const SIGNAL_MAX = 16384;
+export const CHANNEL_MAX = 24;
+
+const CHANNEL_PATTERN = /^[a-z0-9-]{1,24}$/;
+
+export interface WireMessage {
+  id: number;
+  from: string;
+  text: string;
+  ts: number;
+  edited: boolean;
+  channel?: string;
+  to?: string;
+}
 
 export type ClientMessage =
   | { type: 'hello'; nick: string }
-  | { type: 'public'; text: string }
-  | { type: 'direct'; to: string; text: string }
+  | { type: 'channel-create'; name: string }
+  | { type: 'message'; channel?: string; to?: string; text: string }
+  | { type: 'history'; channel?: string; to?: string }
+  | { type: 'edit'; id: number; text: string }
+  | { type: 'delete'; id: number }
+  | { type: 'typing'; channel?: string; to?: string }
   | { type: 'voice-join' }
   | { type: 'voice-leave' }
   | { type: 'voice-signal'; to: string; data: unknown }
@@ -15,12 +32,15 @@ export type ClientMessage =
   | { type: 'call-end'; to: string }
   | { type: 'call-signal'; to: string; data: unknown };
 
-export type ChatChannel = 'public' | 'direct';
-
 export type ServerMessage =
   | { type: 'welcome'; nick: string }
+  | { type: 'channels'; list: string[] }
   | { type: 'presence'; users: string[] }
-  | { type: 'chat'; channel: ChatChannel; from: string; to?: string; text: string; ts: number }
+  | { type: 'message'; msg: WireMessage }
+  | { type: 'history'; channel?: string; to?: string; messages: WireMessage[] }
+  | { type: 'edited'; id: number; text: string }
+  | { type: 'deleted'; id: number }
+  | { type: 'typing'; from: string; channel?: string; to?: string }
   | { type: 'system'; text: string }
   | { type: 'error'; reason: string }
   | { type: 'voice-roster'; users: string[] }
@@ -40,6 +60,19 @@ function isBoundedString(value: unknown, max: number): value is string {
   return typeof value === 'string' && value.trim().length > 0 && value.length <= max;
 }
 
+export function isValidChannelName(name: unknown): name is string {
+  return typeof name === 'string' && CHANNEL_PATTERN.test(name);
+}
+
+// Ровно одно из channel / to; channel — валидное имя, to — ник.
+function parseTarget(data: Record<string, unknown>): { channel?: string; to?: string } | null {
+  const hasChannel = data.channel !== undefined;
+  const hasTo = data.to !== undefined;
+  if (hasChannel === hasTo) return null;
+  if (hasChannel) return isValidChannelName(data.channel) ? { channel: data.channel } : null;
+  return isBoundedString(data.to, NICK_MAX) ? { to: data.to.trim() } : null;
+}
+
 export function parseClientMessage(raw: string): ClientMessage | null {
   let data: unknown;
   try {
@@ -52,12 +85,26 @@ export function parseClientMessage(raw: string): ClientMessage | null {
   switch (data.type) {
     case 'hello':
       return isBoundedString(data.nick, NICK_MAX) ? { type: 'hello', nick: data.nick.trim() } : null;
-    case 'public':
-      return isBoundedString(data.text, TEXT_MAX) ? { type: 'public', text: data.text } : null;
-    case 'direct':
-      return isBoundedString(data.to, NICK_MAX) && isBoundedString(data.text, TEXT_MAX)
-        ? { type: 'direct', to: data.to.trim(), text: data.text }
-        : null;
+    case 'channel-create':
+      return isValidChannelName(data.name) ? { type: 'channel-create', name: data.name } : null;
+    case 'message': {
+      const target = parseTarget(data);
+      if (!target || !isBoundedString(data.text, TEXT_MAX)) return null;
+      return { type: 'message', ...target, text: data.text };
+    }
+    case 'history': {
+      const target = parseTarget(data);
+      return target ? { type: 'history', ...target } : null;
+    }
+    case 'typing': {
+      const target = parseTarget(data);
+      return target ? { type: 'typing', ...target } : null;
+    }
+    case 'edit':
+      if (typeof data.id !== 'number' || !isBoundedString(data.text, TEXT_MAX)) return null;
+      return { type: 'edit', id: data.id, text: data.text };
+    case 'delete':
+      return typeof data.id === 'number' ? { type: 'delete', id: data.id } : null;
     case 'voice-join':
       return { type: 'voice-join' };
     case 'voice-leave':

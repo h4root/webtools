@@ -1,4 +1,5 @@
-import { NICK_MAX, parseClientMessage, type ServerMessage } from './protocol.ts';
+import { NICK_MAX, parseClientMessage, type ClientMessage, type ServerMessage } from './protocol.ts';
+import { Store, channelKey, dmKey, recipientsOf } from './store.ts';
 
 export interface Client {
   id: string;
@@ -11,6 +12,8 @@ const NICK_PATTERN = /^[\p{L}\p{N} _.-]+$/u;
 export class Hub {
   private readonly clients = new Set<Client>();
   private readonly voice = new Set<Client>();
+
+  constructor(private readonly store: Store = new Store()) {}
 
   join(client: Client, nick: string): void {
     const trimmed = nick.trim();
@@ -26,6 +29,7 @@ export class Hub {
     client.nick = trimmed;
     this.clients.add(client);
     client.send({ type: 'welcome', nick: trimmed });
+    client.send({ type: 'channels', list: this.store.listChannels() });
     this.broadcast({ type: 'system', text: `${trimmed} присоединился` });
     this.broadcastPresence();
   }
@@ -60,11 +64,23 @@ export class Hub {
     }
 
     switch (message.type) {
-      case 'public':
-        this.sendPublic(client, message.text);
+      case 'channel-create':
+        this.createChannel(client, message.name);
         break;
-      case 'direct':
-        this.sendDirect(client, message.to, message.text);
+      case 'message':
+        this.sendMessage(client, message);
+        break;
+      case 'history':
+        this.sendHistory(client, message);
+        break;
+      case 'edit':
+        this.editMessage(client, message.id, message.text);
+        break;
+      case 'delete':
+        this.deleteMessage(client, message.id);
+        break;
+      case 'typing':
+        this.relayTyping(client, message);
         break;
       case 'voice-join':
         this.voiceJoin(client);
@@ -96,6 +112,78 @@ export class Hub {
     }
   }
 
+  private createChannel(client: Client, name: string): void {
+    if (this.store.createChannel(name)) {
+      this.broadcast({ type: 'channels', list: this.store.listChannels() });
+      this.broadcast({ type: 'system', text: `Создан канал #${name}` });
+    } else {
+      client.send({ type: 'error', reason: 'Канал уже существует' });
+    }
+  }
+
+  private sendMessage(client: Client, message: Extract<ClientMessage, { type: 'message' }>): void {
+    if (message.channel) {
+      if (!this.store.hasChannel(message.channel)) {
+        client.send({ type: 'error', reason: 'Нет такого канала' });
+        return;
+      }
+      const wire = this.store.addChannelMessage(message.channel, client.nick!, message.text);
+      this.broadcast({ type: 'message', msg: wire });
+      return;
+    }
+
+    const target = this.findByNick(message.to!);
+    if (!target) {
+      client.send({ type: 'error', reason: `${message.to} не в сети` });
+      return;
+    }
+    const wire = this.store.addDirectMessage(client.nick!, target.nick!, message.text);
+    this.sendToNicks([client.nick!, target.nick!], { type: 'message', msg: wire });
+  }
+
+  private sendHistory(client: Client, message: Extract<ClientMessage, { type: 'history' }>): void {
+    if (message.channel) {
+      client.send({ type: 'history', channel: message.channel, messages: this.store.history(channelKey(message.channel)) });
+    } else {
+      const key = dmKey(client.nick!, message.to!);
+      client.send({ type: 'history', to: message.to, messages: this.store.history(key) });
+    }
+  }
+
+  private editMessage(client: Client, id: number, text: string): void {
+    const message = this.store.edit(id, client.nick!, text);
+    if (!message) return;
+    this.dispatch(recipientsOf(message), { type: 'edited', id, text });
+  }
+
+  private deleteMessage(client: Client, id: number): void {
+    const message = this.store.remove(id, client.nick!);
+    if (!message) return;
+    this.dispatch(recipientsOf(message), { type: 'deleted', id });
+  }
+
+  private relayTyping(client: Client, message: Extract<ClientMessage, { type: 'typing' }>): void {
+    if (message.channel) {
+      for (const c of this.clients) {
+        if (c !== client) c.send({ type: 'typing', from: client.nick!, channel: message.channel });
+      }
+    } else {
+      this.findByNick(message.to!)?.send({ type: 'typing', from: client.nick!, to: client.nick! });
+    }
+  }
+
+  private dispatch(recipients: 'all' | string[], message: ServerMessage): void {
+    if (recipients === 'all') this.broadcast(message);
+    else this.sendToNicks(recipients, message);
+  }
+
+  private sendToNicks(nicks: string[], message: ServerMessage): void {
+    const set = new Set(nicks.map((n) => n.toLowerCase()));
+    for (const c of this.clients) {
+      if (c.nick && set.has(c.nick.toLowerCase())) c.send(message);
+    }
+  }
+
   private findByNick(nick: string): Client | undefined {
     const lower = nick.toLowerCase();
     return [...this.clients].find((c) => c.nick?.toLowerCase() === lower);
@@ -118,38 +206,6 @@ export class Hub {
     const lower = toNick.toLowerCase();
     const target = [...this.voice].find((c) => c.nick?.toLowerCase() === lower);
     target?.send({ type: 'voice-signal', from: client.nick!, data });
-  }
-
-  private sendPublic(client: Client, text: string): void {
-    this.broadcast({
-      type: 'chat',
-      channel: 'public',
-      from: client.nick!,
-      text,
-      ts: Date.now(),
-    });
-  }
-
-  private sendDirect(client: Client, toNick: string, text: string): void {
-    const lower = toNick.toLowerCase();
-    const targets = [...this.clients].filter((c) => c.nick?.toLowerCase() === lower);
-    if (targets.length === 0) {
-      client.send({ type: 'error', reason: `${toNick} не в сети` });
-      return;
-    }
-
-    const message: ServerMessage = {
-      type: 'chat',
-      channel: 'direct',
-      from: client.nick!,
-      to: targets[0].nick!,
-      text,
-      ts: Date.now(),
-    };
-
-    const recipients = new Set<Client>(targets);
-    recipients.add(client);
-    for (const recipient of recipients) recipient.send(message);
   }
 
   private nickTaken(nick: string): boolean {
