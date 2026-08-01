@@ -1,0 +1,23 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "breach-check"
+version = "0.1.0"
+description = "Проверка паролей и email по Have I Been Pwned: пароли через k-anonymity range API. Zero runtime dependencies."
+requires-python = ">=3.11"
+authors = [{ name = "h4root" }]
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[project.scripts]
+breach-check = "breach_check.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/breach_check"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
