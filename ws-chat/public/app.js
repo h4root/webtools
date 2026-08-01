@@ -427,7 +427,7 @@ function renderReactions(row, msg, changed = new Set()) {
     chip.append(face, count);
     chip.addEventListener('click', (e) => {
       e.stopPropagation();
-      if (!chip.classList.contains('mine')) burstReaction(emoji, chip);
+      if (!chip.classList.contains('mine')) burstReaction(emoji, chip.closest('.row'));
       wsSend({ type: 'react', id: msg.id, emoji });
     });
     box.appendChild(chip);
@@ -448,23 +448,23 @@ function applyReaction(id, reactions) {
   if (row) renderReactions(row, msg, changed);
 }
 
-function burstReaction(emoji, anchor) {
-  if (!settings.animationsEnabled()) return;
-  const rect = anchor.getBoundingClientRect();
+function burstReaction(emoji, row) {
+  if (!settings.animationsEnabled() || !row) return;
+  const rect = row.getBoundingClientRect();
   const cx = rect.left + rect.width / 2;
-  const cy = rect.top + rect.height / 2;
+  const cy = rect.bottom;
   for (let i = 0; i < 6; i++) {
     const p = document.createElement('span');
     p.className = 'reaction-burst';
     p.textContent = emoji;
     p.style.left = `${cx}px`;
     p.style.top = `${cy}px`;
-    p.style.fontSize = `${13 + Math.random() * 12}px`;
-    p.style.setProperty('--dx', `${(Math.random() - 0.5) * 90}px`);
-    p.style.setProperty('--dy', `${-40 - Math.random() * 70}px`);
-    p.style.setProperty('--rot', `${(Math.random() - 0.5) * 70}deg`);
+    p.style.fontSize = `${22 + Math.random() * 18}px`;
+    p.style.setProperty('--dx', `${(Math.random() - 0.5) * 120}px`);
+    p.style.setProperty('--dy', `${-60 - Math.random() * 90}px`);
+    p.style.setProperty('--rot', `${(Math.random() - 0.5) * 80}deg`);
     document.body.appendChild(p);
-    setTimeout(() => p.remove(), 850);
+    setTimeout(() => p.remove(), 1150);
   }
 }
 
@@ -478,7 +478,7 @@ function openReactionPicker(anchor, msg) {
     b.textContent = emoji;
     b.addEventListener('click', (e) => {
       e.stopPropagation();
-      if (!msg.reactions?.[emoji]?.includes(myNick)) burstReaction(emoji, b);
+      if (!msg.reactions?.[emoji]?.includes(myNick)) burstReaction(emoji, logEl.querySelector(`[data-id="${msg.id}"]`));
       wsSend({ type: 'react', id: msg.id, emoji });
       closeReactionPicker();
     });

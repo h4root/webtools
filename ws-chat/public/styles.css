@@ -1114,7 +1114,7 @@ html.motion-off *::after {
   z-index: 40;
   pointer-events: none;
   transform: translate(-50%, -50%);
-  animation: reaction-burst 0.8s ease-out forwards;
+  animation: reaction-burst 1.1s ease-out forwards;
 }
 
 @keyframes reaction-burst {
