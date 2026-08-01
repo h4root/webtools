@@ -377,7 +377,7 @@ function fillRow(row, msg) {
   react.appendChild(icon('smiley', 14));
   react.addEventListener('click', (e) => {
     e.stopPropagation();
-    openReactionPicker(row, msg);
+    openReactionPicker(react, msg);
   });
   actions.appendChild(react);
 
@@ -468,7 +468,7 @@ function burstReaction(emoji, anchor) {
   }
 }
 
-function openReactionPicker(row, msg) {
+function openReactionPicker(anchor, msg) {
   closeReactionPicker();
   const pick = document.createElement('div');
   pick.className = 'react-picker';
@@ -484,7 +484,16 @@ function openReactionPicker(row, msg) {
     });
     pick.appendChild(b);
   }
-  row.appendChild(pick);
+  document.body.appendChild(pick);
+
+  const r = anchor.getBoundingClientRect();
+  const pad = 8;
+  const left = Math.max(pad, Math.min(window.innerWidth - pick.offsetWidth - pad, r.left + r.width / 2 - pick.offsetWidth / 2));
+  let top = r.top - pick.offsetHeight - pad;
+  if (top < pad) top = Math.min(window.innerHeight - pick.offsetHeight - pad, r.bottom + pad);
+  pick.style.left = `${left}px`;
+  pick.style.top = `${top}px`;
+
   activePicker = pick;
   setTimeout(() => document.addEventListener('click', closeReactionPicker, { once: true }), 0);
 }

@@ -451,6 +451,7 @@ button {
   flex: 1;
   padding: 14px 18px;
   overflow-y: auto;
+  overflow-x: hidden;
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -1076,18 +1077,18 @@ html.motion-off *::after {
 }
 
 .react-picker {
-  position: absolute;
-  bottom: 100%;
-  left: 0;
-  margin-bottom: 6px;
+  position: fixed;
   display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
   gap: 2px;
+  max-width: min(280px, 92vw);
   padding: 4px;
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: 12px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
-  z-index: 15;
+  z-index: 40;
   animation: pop-in 0.16s ease;
 }
 
