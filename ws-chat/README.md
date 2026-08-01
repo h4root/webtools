@@ -20,6 +20,17 @@ npm start       # прод
 | `HOST`     | `0.0.0.0`    | Адрес привязки (LAN — `0.0.0.0`). |
 | `TLS_KEY`  | —            | Путь к приватному ключу (включает HTTPS). |
 | `TLS_CERT` | —            | Путь к сертификату (включает HTTPS). |
+| `DATA_DIR` | `./data`     | Каталог для персистентной истории (`store.json`). |
+
+## Каналы и сообщения
+
+Discord-подобный текстовый костяк:
+
+- **Именованные текст-каналы** (по умолчанию `general`, `random`) + создание новых из сайдбара; отдельный раздел **Личные** для ЛС.
+- **Персистентная история** на сервере (`store.json`, ключуется по каналу и по паре ников для ЛС) - переживает перезапуск. Клиент подтягивает историю канала при открытии.
+- **Правка и удаление** своих сообщений (инлайн, автор-онли), пометка «изм.», время у каждого сообщения.
+- **Typing-индикатор** по каналу/ЛС и подсветка **@упоминаний** (своё имя выделяется, сообщение помечается).
+- **Адаптивная вёрстка**: на узких экранах сайдбар уезжает за край, открывается гамбургером; панели звонка/настроек подстраиваются.
 
 ## HTTPS (микрофон/камера с других устройств)
 
@@ -72,11 +83,12 @@ openssl req -x509 -newkey rsa:2048 -nodes -keyout key.pem -out cert.pem -days 36
 ```
 src/
   protocol.ts   типы сообщений + валидация входящих
-  chat.ts       Hub - роутинг public / direct + сигналинг голоса и звонка
-  chat.test.ts  тесты роутинга, голоса и звонка
-  server.ts     Express (раздаёт public/) + WebSocketServer
+  store.ts      каналы + персистентная история (JSON), правка/удаление
+  chat.ts       Hub - каналы/ЛС/история/typing + сигналинг голоса и звонка
+  chat.test.ts store.test.ts  тесты
+  server.ts     Express (раздаёт public/) + WebSocketServer + Store
 public/
-  app.js        клиент чата
+  app.js        клиент чата (каналы, ЛС, история, правка, typing, @упоминания, адаптив)
   voice.js      mesh WebRTC-аудио группового голоса (createVoice)
   call.js       приватный 1-на-1 звонок + индикаторы и статистика (createCall)
   settings.js   попап настроек: устройства, эффекты, шрифт (localStorage)
@@ -93,14 +105,15 @@ public/
 Клиент → сервер:
 
 - `{ "type": "hello", "nick": "alice" }`
-- `{ "type": "public", "text": "…" }`
-- `{ "type": "direct", "to": "bob", "text": "…" }`
-- `{ "type": "voice-join" }` / `{ "type": "voice-leave" }`
-- `{ "type": "voice-signal", "to": "bob", "data": … }` - SDP/ICE конкретному нику
-- `{ "type": "call-invite" | "call-accept" | "call-decline" | "call-end", "to": "bob" }` - управление приватным звонком
-- `{ "type": "call-signal", "to": "bob", "data": … }` - SDP/ICE звонка
+- `{ "type": "channel-create", "name": "dev" }`
+- `{ "type": "message", "channel": "general", "text": "…" }` или `{ "type": "message", "to": "bob", "text": "…" }`
+- `{ "type": "history", "channel": "general" }` / `{ "type": "history", "to": "bob" }`
+- `{ "type": "edit", "id": 12, "text": "…" }` / `{ "type": "delete", "id": 12 }`
+- `{ "type": "typing", "channel": "general" }` / `{ "type": "typing", "to": "bob" }`
+- `{ "type": "voice-join" }` / `{ "type": "voice-leave" }` / `{ "type": "voice-signal", "to": "bob", "data": … }`
+- `{ "type": "call-invite" | "call-accept" | "call-decline" | "call-end" | "call-signal", "to": "bob", … }`
 
-Сервер → клиент: `welcome`, `presence`, `chat`, `system`, `error`, `voice-roster` (кто уже в голосе - новичок шлёт им offer), `voice-presence`, `voice-signal`, и зеркальные `call-*` с полем `from` (плюс `reason` у `call-end`/`call-decline`: `offline` / `busy`).
+Сервер → клиент: `welcome`, `channels`, `presence`, `message` (с `msg` = `{ id, from, text, ts, edited, channel? , to? }`), `history`, `edited`, `deleted`, `typing`, `system`, `error`, `voice-roster`/`voice-presence`/`voice-signal`, и зеркальные `call-*` с `from` (плюс `reason: offline / busy`).
 
 ## Тесты
 
