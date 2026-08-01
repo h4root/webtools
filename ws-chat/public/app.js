@@ -427,6 +427,7 @@ function renderReactions(row, msg, changed = new Set()) {
     chip.append(face, count);
     chip.addEventListener('click', (e) => {
       e.stopPropagation();
+      if (!chip.classList.contains('mine')) burstReaction(emoji, chip);
       wsSend({ type: 'react', id: msg.id, emoji });
     });
     box.appendChild(chip);
@@ -447,6 +448,26 @@ function applyReaction(id, reactions) {
   if (row) renderReactions(row, msg, changed);
 }
 
+function burstReaction(emoji, anchor) {
+  if (!settings.animationsEnabled()) return;
+  const rect = anchor.getBoundingClientRect();
+  const cx = rect.left + rect.width / 2;
+  const cy = rect.top + rect.height / 2;
+  for (let i = 0; i < 6; i++) {
+    const p = document.createElement('span');
+    p.className = 'reaction-burst';
+    p.textContent = emoji;
+    p.style.left = `${cx}px`;
+    p.style.top = `${cy}px`;
+    p.style.fontSize = `${13 + Math.random() * 12}px`;
+    p.style.setProperty('--dx', `${(Math.random() - 0.5) * 90}px`);
+    p.style.setProperty('--dy', `${-40 - Math.random() * 70}px`);
+    p.style.setProperty('--rot', `${(Math.random() - 0.5) * 70}deg`);
+    document.body.appendChild(p);
+    setTimeout(() => p.remove(), 850);
+  }
+}
+
 function openReactionPicker(row, msg) {
   closeReactionPicker();
   const pick = document.createElement('div');
@@ -457,6 +478,7 @@ function openReactionPicker(row, msg) {
     b.textContent = emoji;
     b.addEventListener('click', (e) => {
       e.stopPropagation();
+      if (!msg.reactions?.[emoji]?.includes(myNick)) burstReaction(emoji, b);
       wsSend({ type: 'react', id: msg.id, emoji });
       closeReactionPicker();
     });
@@ -549,12 +571,14 @@ function clearTyping(key, nick) {
 function renderTyping() {
   const map = typing.get(activeKey());
   const nicks = map ? [...map.keys()] : [];
-  if (nicks.length === 0) {
-    typingEl.textContent = '';
-    return;
-  }
+  typingEl.replaceChildren();
+  if (nicks.length === 0) return;
   const verb = nicks.length === 1 ? 'печатает' : 'печатают';
-  typingEl.textContent = `${nicks.join(', ')} ${verb}…`;
+  typingEl.appendChild(document.createTextNode(`${nicks.join(', ')} ${verb} `));
+  const dots = document.createElement('span');
+  dots.className = 'typing-dots';
+  dots.append(document.createElement('i'), document.createElement('i'), document.createElement('i'));
+  typingEl.appendChild(dots);
 }
 
 function sendTyping() {
