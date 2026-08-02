@@ -214,7 +214,13 @@ function enterApp() {
   joined = true;
   gate.hidden = true;
   appEl.hidden = false;
-  meEl.textContent = `@${myNick}`;
+  const avatar = document.createElement('span');
+  avatar.className = 'avatar';
+  avatar.textContent = myNick.slice(0, 1).toUpperCase();
+  const name = document.createElement('span');
+  name.className = 'me-name';
+  name.textContent = `@${myNick}`;
+  meEl.replaceChildren(avatar, name);
   renderChannels();
   updateTitle();
   textInput.focus();

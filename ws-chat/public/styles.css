@@ -1264,3 +1264,96 @@ html.motion-off *::after {
   border-color: #e5533c;
   color: #e5533c;
 }
+
+/* --- минималистичный сайдбар (по референсу, зелёный акцент) --- */
+:root {
+  --hover: rgba(255, 255, 255, 0.045);
+  --active-bg: rgba(53, 208, 127, 0.14);
+  --radius-item: 8px;
+}
+
+.me {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  font-weight: 500;
+  color: var(--fg);
+}
+
+.me .avatar {
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--active-bg);
+  color: var(--accent);
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.me .me-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nav {
+  padding: 8px;
+}
+
+.nav-head {
+  padding: 12px 8px 4px;
+  font-size: 10px;
+  letter-spacing: 0.6px;
+  font-weight: 500;
+}
+
+.nav-add {
+  border-radius: 6px;
+}
+
+.channel {
+  gap: 8px;
+  margin: 1px 0;
+  padding: 7px 9px;
+  border-radius: var(--radius-item);
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+.channel:hover {
+  background: var(--hover);
+  color: var(--fg);
+}
+
+.channel.active {
+  background: var(--active-bg);
+  color: var(--accent);
+  font-weight: 500;
+}
+
+.voice-chan-head {
+  justify-content: flex-start;
+}
+
+.voice-members {
+  padding-left: 26px;
+}
+
+.voice-bar {
+  padding: 8px;
+}
+
+.voice-status {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-item);
+}
+
+.vbtn {
+  border-radius: var(--radius-item);
+}
