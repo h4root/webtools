@@ -18,6 +18,10 @@ const logEl = document.getElementById('log');
 const typingEl = document.getElementById('typing');
 const composer = document.getElementById('composer');
 const textInput = document.getElementById('text-input');
+const replyBar = document.getElementById('reply-bar');
+const attachTray = document.getElementById('attach-tray');
+const attachBtn = document.getElementById('attach-btn');
+const fileInput = document.getElementById('file-input');
 const menuBtn = document.getElementById('menu-btn');
 const sidebar = document.getElementById('sidebar');
 const backdrop = document.getElementById('backdrop');
@@ -66,6 +70,8 @@ let voiceChannels = [];
 let voicePresence = {};
 let callPhase = 'idle';
 let lastTypingSent = 0;
+let replyingTo = null;
+let pendingAttachments = [];
 let ws = null;
 let reconnectTimer = null;
 
@@ -426,16 +432,41 @@ function renderText(parent, text) {
 
 function fillRow(row, msg) {
   row.replaceChildren();
+
+  if (msg.replyTo) {
+    const quote = document.createElement('button');
+    quote.type = 'button';
+    quote.className = 'reply-quote';
+    const qwho = document.createElement('span');
+    qwho.className = 'rq-who';
+    qwho.textContent = msg.replyTo.from;
+    const qtext = document.createElement('span');
+    qtext.className = 'rq-text';
+    qtext.textContent = msg.replyTo.text || 'вложение';
+    quote.append(qwho, qtext);
+    quote.addEventListener('click', (e) => {
+      e.stopPropagation();
+      scrollToMessage(msg.replyTo.id);
+    });
+    row.appendChild(quote);
+  }
+
   if (!msg.mine) {
     const who = document.createElement('span');
     who.className = 'who';
     who.textContent = msg.from;
     row.appendChild(who);
   }
-  const text = document.createElement('span');
-  text.className = 'text';
-  const mentionsMe = renderText(text, msg.text);
-  row.appendChild(text);
+
+  let mentionsMe = false;
+  if (msg.text) {
+    const text = document.createElement('span');
+    text.className = 'text';
+    mentionsMe = renderText(text, msg.text);
+    row.appendChild(text);
+  }
+
+  if (msg.attachments?.length) row.appendChild(renderAttachments(msg.attachments));
 
   const meta = document.createElement('span');
   meta.className = 'meta';
@@ -446,6 +477,15 @@ function fillRow(row, msg) {
 
   const actions = document.createElement('span');
   actions.className = 'row-actions';
+  const reply = document.createElement('button');
+  reply.type = 'button';
+  reply.title = 'Ответить';
+  reply.appendChild(icon('reply', 14));
+  reply.addEventListener('click', (e) => {
+    e.stopPropagation();
+    setReply(msg);
+  });
+  actions.appendChild(reply);
   const react = document.createElement('button');
   react.type = 'button';
   react.title = 'Реакция';
@@ -791,6 +831,137 @@ function closeSidebar() {
 
 // --- события ---
 
+function scrollToMessage(id) {
+  const row = logEl.querySelector(`[data-id="${id}"]`);
+  if (!row) return;
+  row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  row.classList.remove('flash');
+  void row.offsetWidth;
+  row.classList.add('flash');
+}
+
+function setReply(msg) {
+  replyingTo = { id: msg.id, from: msg.from, text: msg.text || 'вложение' };
+  renderReplyBar();
+  textInput.focus();
+}
+
+function cancelReply() {
+  replyingTo = null;
+  renderReplyBar();
+}
+
+function renderReplyBar() {
+  replyBar.replaceChildren();
+  if (!replyingTo) {
+    replyBar.hidden = true;
+    return;
+  }
+  replyBar.hidden = false;
+  const label = document.createElement('span');
+  label.className = 'reply-bar-text';
+  const who = document.createElement('b');
+  who.textContent = replyingTo.from;
+  label.append('Ответ ', who, `: ${replyingTo.text.slice(0, 80)}`);
+  const cancel = document.createElement('button');
+  cancel.type = 'button';
+  cancel.className = 'reply-cancel';
+  cancel.appendChild(icon('cross', 14));
+  cancel.addEventListener('click', cancelReply);
+  replyBar.append(label, cancel);
+}
+
+function formatSize(bytes) {
+  if (bytes < 1024) return `${bytes} Б`;
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} КБ`;
+  return `${(bytes / 1024 / 1024).toFixed(1)} МБ`;
+}
+
+function renderAttachments(attachments) {
+  const box = document.createElement('div');
+  box.className = 'attachments';
+  for (const att of attachments) {
+    if (att.mime.startsWith('image/')) {
+      const link = document.createElement('a');
+      link.href = att.url;
+      link.target = '_blank';
+      link.rel = 'noopener';
+      link.className = 'att-image';
+      const img = document.createElement('img');
+      img.src = att.url;
+      img.alt = att.name;
+      img.loading = 'lazy';
+      link.appendChild(img);
+      box.appendChild(link);
+    } else {
+      const link = document.createElement('a');
+      link.href = att.url;
+      link.download = att.name;
+      link.className = 'att-file';
+      link.appendChild(icon('file', 18));
+      const info = document.createElement('span');
+      info.className = 'att-info';
+      const nm = document.createElement('span');
+      nm.className = 'att-name';
+      nm.textContent = att.name;
+      const sz = document.createElement('span');
+      sz.className = 'att-size';
+      sz.textContent = formatSize(att.size);
+      info.append(nm, sz);
+      link.appendChild(info);
+      box.appendChild(link);
+    }
+  }
+  return box;
+}
+
+async function uploadFile(file) {
+  const res = await fetch('/upload', {
+    method: 'POST',
+    headers: {
+      'Content-Type': file.type || 'application/octet-stream',
+      'X-Filename': encodeURIComponent(file.name),
+    },
+    body: file,
+  });
+  if (!res.ok) throw new Error('upload failed');
+  return res.json();
+}
+
+async function addFiles(files) {
+  for (const file of files) {
+    if (pendingAttachments.length >= 10) break;
+    try {
+      pendingAttachments.push(await uploadFile(file));
+      renderAttachTray();
+    } catch {
+      systemLine(`Не удалось загрузить ${file.name}`);
+    }
+  }
+}
+
+function removeAttachment(id) {
+  pendingAttachments = pendingAttachments.filter((a) => a.id !== id);
+  renderAttachTray();
+}
+
+function renderAttachTray() {
+  attachTray.replaceChildren();
+  for (const att of pendingAttachments) {
+    const chip = document.createElement('span');
+    chip.className = 'attach-chip';
+    const nm = document.createElement('span');
+    nm.className = 'ac-name';
+    nm.textContent = att.name;
+    const rm = document.createElement('button');
+    rm.type = 'button';
+    rm.appendChild(icon('cross', 12));
+    rm.addEventListener('click', () => removeAttachment(att.id));
+    chip.append(nm, rm);
+    attachTray.appendChild(chip);
+  }
+}
+
 nickForm.addEventListener('submit', (event) => {
   event.preventDefault();
   const nick = nickInput.value.trim();
@@ -804,9 +975,28 @@ nickForm.addEventListener('submit', (event) => {
 composer.addEventListener('submit', (event) => {
   event.preventDefault();
   const text = textInput.value.trim();
-  if (!text) return;
-  wsSend(active.kind === 'channel' ? { type: 'message', channel: active.id, text } : { type: 'message', to: active.id, text });
+  if (!text && pendingAttachments.length === 0) return;
+  const base = active.kind === 'channel' ? { channel: active.id } : { to: active.id };
+  wsSend({
+    type: 'message',
+    ...base,
+    text,
+    replyTo: replyingTo?.id,
+    attachments: pendingAttachments.length ? pendingAttachments : undefined,
+  });
   textInput.value = '';
+  pendingAttachments = [];
+  renderAttachTray();
+  cancelReply();
+});
+
+attachBtn.addEventListener('click', () => fileInput.click());
+fileInput.addEventListener('change', () => {
+  addFiles([...fileInput.files]);
+  fileInput.value = '';
+});
+textInput.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape' && replyingTo) cancelReply();
 });
 
 textInput.addEventListener('input', () => {
@@ -890,6 +1080,7 @@ function initUI() {
   setButton(callDecline, 'cross', 'Отклонить');
   setButton(callHangup, 'phone', 'Завершить');
   setButton(sendBtn, 'chevron-right');
+  setButton(attachBtn, 'paperclip');
   channelAddBtn.appendChild(icon('plus', 16));
   voiceAddBtn.appendChild(icon('plus', 16));
   menuBtn.appendChild(icon('menu', 20));

@@ -135,7 +135,10 @@ export class Hub {
         client.send({ type: 'error', reason: 'Нет такого канала' });
         return;
       }
-      const wire = this.store.addChannelMessage(message.channel, client.nick!, message.text);
+      const wire = this.store.addChannelMessage(message.channel, client.nick!, message.text, {
+        replyTo: message.replyTo,
+        attachments: message.attachments,
+      });
       this.broadcast({ type: 'message', msg: wire });
       return;
     }
@@ -145,7 +148,10 @@ export class Hub {
       client.send({ type: 'error', reason: `${message.to} не в сети` });
       return;
     }
-    const wire = this.store.addDirectMessage(client.nick!, target.nick!, message.text);
+    const wire = this.store.addDirectMessage(client.nick!, target.nick!, message.text, {
+      replyTo: message.replyTo,
+      attachments: message.attachments,
+    });
     this.sendToNicks([client.nick!, target.nick!], { type: 'message', msg: wire });
   }
 

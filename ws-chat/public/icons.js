@@ -28,6 +28,12 @@ const BODIES = {
     '<g fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path stroke-linecap="round" d="M9 9h.01M15 9h.01M8.5 14a4 4 0 0 0 7 0"/></g>',
   users:
     '<g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><path d="M3.5 20a5.5 5.5 0 0 1 11 0M16 5.3a3 3 0 0 1 0 5.4M20.5 20a5.5 5.5 0 0 0-3.5-5.1"/></g>',
+  reply:
+    '<path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M9 7L4 12l5 5M4 12h10a6 6 0 0 1 6 6v1"/>',
+  paperclip:
+    '<path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M20 11.5L11.5 20a5 5 0 0 1-7-7l9-9a3.5 3.5 0 0 1 5 5l-9 9a2 2 0 0 1-3-3l8-8"/>',
+  file:
+    '<path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8zM14 3v5h5"/>',
 };
 
 export function icon(name, size = 18) {

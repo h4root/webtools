@@ -1,9 +1,10 @@
 import 'dotenv/config';
 import { createServer as createHttpServer } from 'node:http';
 import { createServer as createHttpsServer } from 'node:https';
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { randomBytes } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'node:path';
+import { dirname, join, extname } from 'node:path';
 import express from 'express';
 import { WebSocketServer, WebSocket } from 'ws';
 import { Hub, type Client } from './chat.ts';
@@ -19,6 +20,10 @@ if (!Number.isInteger(PORT) || PORT < 1 || PORT > 65535) {
 }
 
 const publicDir = join(dirname(fileURLToPath(import.meta.url)), '..', 'public');
+const dataDir = process.env.DATA_DIR ?? join(publicDir, '..', 'data');
+const uploadsDir = join(dataDir, 'uploads');
+
+const IMAGE_EXT = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.avif']);
 
 const app = express();
 app.use(
@@ -26,6 +31,45 @@ app.use(
     setHeaders: (res) => res.setHeader('Cache-Control', 'no-cache'),
   }),
 );
+
+app.use(
+  '/uploads',
+  express.static(uploadsDir, {
+    setHeaders: (res, filePath) => {
+      res.setHeader('X-Content-Type-Options', 'nosniff');
+      // Не-картинки отдаём как вложение — чтобы svg/html не исполнялись в origin.
+      if (!IMAGE_EXT.has(extname(filePath).toLowerCase())) {
+        res.setHeader('Content-Disposition', 'attachment');
+      }
+    },
+  }),
+);
+
+app.post('/upload', express.raw({ type: () => true, limit: SIGNAL_MAX * 1600 }), (req, res) => {
+  const body = req.body as Buffer;
+  if (!Buffer.isBuffer(body) || body.length === 0) {
+    res.status(400).json({ error: 'empty' });
+    return;
+  }
+  const rawName = typeof req.headers['x-filename'] === 'string' ? decodeURIComponent(req.headers['x-filename']) : 'file';
+  const name = rawName.slice(0, 255);
+  const mime = req.headers['content-type'] ?? 'application/octet-stream';
+  const ext = safeExt(name);
+  const id = randomBytes(16).toString('hex') + ext;
+  try {
+    mkdirSync(uploadsDir, { recursive: true });
+    writeFileSync(join(uploadsDir, id), body);
+  } catch {
+    res.status(500).json({ error: 'write' });
+    return;
+  }
+  res.json({ id, name, size: body.length, mime });
+});
+
+function safeExt(name: string): string {
+  const ext = extname(name).toLowerCase();
+  return /^\.[a-z0-9]{1,8}$/.test(ext) ? ext : '';
+}
 
 const HEARTBEAT_MS = 30000;
 
@@ -38,7 +82,7 @@ const server = useTls
   : createHttpServer(app);
 
 const wss = new WebSocketServer({ server, maxPayload: Math.max(TEXT_MAX * 4, SIGNAL_MAX * 2) });
-const dataFile = join(process.env.DATA_DIR ?? join(publicDir, '..', 'data'), 'store.json');
+const dataFile = join(dataDir, 'store.json');
 const hub = new Hub(new Store(dataFile));
 
 let nextId = 1;

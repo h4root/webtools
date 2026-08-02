@@ -2,12 +2,36 @@ export const NICK_MAX = 24;
 export const TEXT_MAX = 2000;
 export const SIGNAL_MAX = 16384;
 export const CHANNEL_MAX = 24;
+export const ATTACH_MAX = 10;
+export const ATTACH_SIZE_MAX = 26_214_400;
+
+const ATTACH_ID = /^[a-f0-9]{8,64}(\.[a-z0-9]{1,8})?$/;
 
 export const REACTIONS = ['👍', '❤️', '😂', '🔥', '🎉', '😮', '😢', '👀'];
 
 const CHANNEL_PATTERN = /^[a-z0-9-]{1,24}$/;
 
 export type Reactions = Record<string, string[]>;
+
+export interface Attachment {
+  url: string;
+  name: string;
+  size: number;
+  mime: string;
+}
+
+export interface AttachmentRef {
+  id: string;
+  name: string;
+  size: number;
+  mime: string;
+}
+
+export interface ReplyRef {
+  id: number;
+  from: string;
+  text: string;
+}
 
 export interface WireMessage {
   id: number;
@@ -18,12 +42,14 @@ export interface WireMessage {
   channel?: string;
   to?: string;
   reactions?: Reactions;
+  replyTo?: ReplyRef;
+  attachments?: Attachment[];
 }
 
 export type ClientMessage =
   | { type: 'hello'; nick: string }
   | { type: 'channel-create'; name: string }
-  | { type: 'message'; channel?: string; to?: string; text: string }
+  | { type: 'message'; channel?: string; to?: string; text: string; replyTo?: number; attachments?: AttachmentRef[] }
   | { type: 'history'; channel?: string; to?: string }
   | { type: 'edit'; id: number; text: string }
   | { type: 'delete'; id: number }
@@ -82,6 +108,22 @@ function parseTarget(data: Record<string, unknown>): { channel?: string; to?: st
   return isBoundedString(data.to, NICK_MAX) ? { to: data.to.trim() } : null;
 }
 
+function parseAttachments(value: unknown): AttachmentRef[] | null {
+  if (value === undefined) return [];
+  if (!Array.isArray(value) || value.length > ATTACH_MAX) return null;
+  const out: AttachmentRef[] = [];
+  for (const item of value) {
+    if (!isRecord(item)) return null;
+    const { id, name, size, mime } = item;
+    if (typeof id !== 'string' || !ATTACH_ID.test(id)) return null;
+    if (typeof name !== 'string' || name.length === 0 || name.length > 255) return null;
+    if (typeof size !== 'number' || size < 0 || size > ATTACH_SIZE_MAX) return null;
+    if (typeof mime !== 'string' || mime.length === 0 || mime.length > 128) return null;
+    out.push({ id, name, size, mime });
+  }
+  return out;
+}
+
 export function parseClientMessage(raw: string): ClientMessage | null {
   let data: unknown;
   try {
@@ -98,8 +140,21 @@ export function parseClientMessage(raw: string): ClientMessage | null {
       return isValidChannelName(data.name) ? { type: 'channel-create', name: data.name } : null;
     case 'message': {
       const target = parseTarget(data);
-      if (!target || !isBoundedString(data.text, TEXT_MAX)) return null;
-      return { type: 'message', ...target, text: data.text };
+      if (!target) return null;
+      const attachments = parseAttachments(data.attachments);
+      if (attachments === null) return null;
+      const text = typeof data.text === 'string' ? data.text : '';
+      if (text.length > TEXT_MAX) return null;
+      const hasText = text.trim().length > 0;
+      if (!hasText && attachments.length === 0) return null;
+      const replyTo = typeof data.replyTo === 'number' ? data.replyTo : undefined;
+      return {
+        type: 'message',
+        ...target,
+        text: hasText ? text : '',
+        replyTo,
+        attachments: attachments.length ? attachments : undefined,
+      };
     }
     case 'history': {
       const target = parseTarget(data);

@@ -1,6 +1,6 @@
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
-import type { Reactions, WireMessage } from './protocol.ts';
+import type { AttachmentRef, Reactions, ReplyRef, WireMessage } from './protocol.ts';
 
 export const DEFAULT_CHANNELS = ['general', 'random'];
 export const DEFAULT_VOICE_CHANNELS = ['general', 'games'];
@@ -17,6 +17,13 @@ interface StoredMessage {
   ts: number;
   edited: boolean;
   reactions?: Reactions;
+  replyTo?: ReplyRef;
+  attachments?: AttachmentRef[];
+}
+
+interface MessageExtra {
+  replyTo?: number;
+  attachments?: AttachmentRef[];
 }
 
 export function channelKey(name: string): string {
@@ -37,6 +44,13 @@ function toWire(message: StoredMessage): WireMessage {
     channel: message.channel,
     to: message.to,
     reactions: message.reactions && Object.keys(message.reactions).length ? message.reactions : undefined,
+    replyTo: message.replyTo,
+    attachments: message.attachments?.map((a) => ({
+      url: `/uploads/${a.id}`,
+      name: a.name,
+      size: a.size,
+      mime: a.mime,
+    })),
   };
 }
 
@@ -125,12 +139,39 @@ export class Store {
     return toWire(message);
   }
 
-  addChannelMessage(channel: string, from: string, text: string): WireMessage {
-    return this.append({ id: this.nextId++, key: channelKey(channel), from, channel, text, ts: Date.now(), edited: false });
+  private makeReply(replyTo?: number): ReplyRef | undefined {
+    if (replyTo === undefined) return undefined;
+    const target = this.find(replyTo);
+    if (!target) return undefined;
+    return { id: target.id, from: target.from, text: target.text.slice(0, 120) };
   }
 
-  addDirectMessage(from: string, to: string, text: string): WireMessage {
-    return this.append({ id: this.nextId++, key: dmKey(from, to), from, to, text, ts: Date.now(), edited: false });
+  addChannelMessage(channel: string, from: string, text: string, extra: MessageExtra = {}): WireMessage {
+    return this.append({
+      id: this.nextId++,
+      key: channelKey(channel),
+      from,
+      channel,
+      text,
+      ts: Date.now(),
+      edited: false,
+      replyTo: this.makeReply(extra.replyTo),
+      attachments: extra.attachments,
+    });
+  }
+
+  addDirectMessage(from: string, to: string, text: string, extra: MessageExtra = {}): WireMessage {
+    return this.append({
+      id: this.nextId++,
+      key: dmKey(from, to),
+      from,
+      to,
+      text,
+      ts: Date.now(),
+      edited: false,
+      replyTo: this.makeReply(extra.replyTo),
+      attachments: extra.attachments,
+    });
   }
 
   private trim(key: string): void {

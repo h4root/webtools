@@ -57,9 +57,13 @@
       </header>
       <div class="log" id="log"></div>
       <div class="typing" id="typing"></div>
+      <div class="reply-bar" id="reply-bar" hidden></div>
+      <div class="attach-tray" id="attach-tray"></div>
       <form class="composer" id="composer">
+        <button type="button" class="attach-btn" id="attach-btn" title="Прикрепить"></button>
         <input id="text-input" placeholder="сообщение…" autocomplete="off" maxlength="2000">
         <button type="submit" id="send-btn"></button>
+        <input type="file" id="file-input" multiple hidden>
       </form>
     </section>
 

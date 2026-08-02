@@ -182,6 +182,42 @@ describe('Hub', () => {
     expect(a.inbox.at(-1)).toEqual({ type: 'reaction', id, reactions: {} });
   });
 
+  it('пересылает сообщение с ответом и вложением', () => {
+    const a = makeClient('a');
+    const b = makeClient('b');
+    hub.join(a, 'alice');
+    hub.join(b, 'bob');
+    hub.handle(a, JSON.stringify({ type: 'message', channel: 'general', text: 'first' }));
+    const firstId = lastMessage(a)!.id;
+    hub.handle(
+      b,
+      JSON.stringify({
+        type: 'message',
+        channel: 'general',
+        text: 're',
+        replyTo: firstId,
+        attachments: [{ id: 'aabbccddeeff0011.png', name: 'p.png', size: 5, mime: 'image/png' }],
+      }),
+    );
+    const msg = lastMessage(a)!;
+    expect(msg.replyTo).toEqual({ id: firstId, from: 'alice', text: 'first' });
+    expect(msg.attachments?.[0].url).toBe('/uploads/aabbccddeeff0011.png');
+  });
+
+  it('принимает сообщение без текста, но с вложением', () => {
+    const a = makeClient('a');
+    hub.join(a, 'alice');
+    hub.handle(
+      a,
+      JSON.stringify({
+        type: 'message',
+        channel: 'general',
+        attachments: [{ id: '0011223344556677.png', name: 'p.png', size: 5, mime: 'image/png' }],
+      }),
+    );
+    expect(lastMessage(a)?.attachments).toHaveLength(1);
+  });
+
   it('ретранслирует typing другим в канале, но не себе', () => {
     const a = makeClient('a');
     const b = makeClient('b');

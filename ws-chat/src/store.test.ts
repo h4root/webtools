@@ -48,6 +48,23 @@ describe('Store', () => {
     expect(recipientsOf({ from: 'alice', to: 'bob' })).toEqual(['alice', 'bob']);
   });
 
+  it('прикладывает снапшот ответа и маппит вложения в url', () => {
+    const a = store.addChannelMessage('general', 'alice', 'original');
+    const b = store.addChannelMessage('general', 'bob', 'reply', {
+      replyTo: a.id,
+      attachments: [{ id: 'deadbeef00112233.png', name: 'pic.png', size: 10, mime: 'image/png' }],
+    });
+    expect(b.replyTo).toEqual({ id: a.id, from: 'alice', text: 'original' });
+    expect(b.attachments).toEqual([
+      { url: '/uploads/deadbeef00112233.png', name: 'pic.png', size: 10, mime: 'image/png' },
+    ]);
+  });
+
+  it('игнорирует ответ на несуществующее сообщение', () => {
+    const m = store.addChannelMessage('general', 'alice', 'x', { replyTo: 999 });
+    expect(m.replyTo).toBeUndefined();
+  });
+
   it('переключает реакцию: добавляет и убирает', () => {
     const m = store.addChannelMessage('general', 'alice', 'hey');
     store.toggleReaction(m.id, 'bob', '🔥');
