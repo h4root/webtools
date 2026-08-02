@@ -21,6 +21,9 @@ const textInput = document.getElementById('text-input');
 const menuBtn = document.getElementById('menu-btn');
 const sidebar = document.getElementById('sidebar');
 const backdrop = document.getElementById('backdrop');
+const membersBtn = document.getElementById('members-btn');
+const membersPanel = document.getElementById('members');
+const membersListEl = document.getElementById('members-list');
 const voiceListEl = document.getElementById('voice-list');
 const voiceAddBtn = document.getElementById('voice-add');
 const voiceStatus = document.getElementById('voice-status');
@@ -95,6 +98,8 @@ const voice = createVoice({
   send: wsSend,
   onState: renderVoice,
   onError: (reason) => systemLine(reason),
+  onSpeaking: (nicks) => applySpeaking(nicks),
+  getNick: () => myNick,
 });
 
 const call = createCall({
@@ -154,6 +159,7 @@ function handleServer(message) {
     case 'presence':
       online = message.users.filter((nick) => nick !== myNick);
       renderChannels();
+      renderMembers();
       call.handlePresence(message.users);
       break;
     case 'history': {
@@ -198,6 +204,7 @@ function handleServer(message) {
     case 'voice-presence':
       voicePresence = message.channels;
       renderVoiceChannels();
+      renderMembers();
       voice.handlePresence(message.channels);
       break;
     case 'call-invite':
@@ -335,6 +342,56 @@ function navItem(kind, id, label) {
 }
 
 // --- сообщения ---
+
+function renderMembers() {
+  membersListEl.replaceChildren();
+  const inVoice = new Set();
+  for (const [ch, nicks] of Object.entries(voicePresence)) {
+    if (!nicks.length) continue;
+    for (const n of nicks) inVoice.add(n.toLowerCase());
+    membersListEl.appendChild(memberGroup(ch, nicks, 'sound-on'));
+  }
+  const rest = [myNick, ...online]
+    .filter((n, i, arr) => arr.indexOf(n) === i && !inVoice.has(n.toLowerCase()))
+    .sort((a, b) => a.localeCompare(b));
+  membersListEl.appendChild(memberGroup('В сети', rest));
+}
+
+function memberGroup(label, nicks, iconName) {
+  const wrap = document.createElement('div');
+  wrap.className = 'member-group';
+  const head = document.createElement('div');
+  head.className = 'member-head';
+  if (iconName) head.appendChild(icon(iconName, 13));
+  const text = document.createElement('span');
+  text.textContent = `${label} — ${nicks.length}`;
+  head.appendChild(text);
+  wrap.appendChild(head);
+  for (const nick of nicks) wrap.appendChild(memberRow(nick));
+  return wrap;
+}
+
+function memberRow(nick) {
+  const row = document.createElement('div');
+  row.className = 'member';
+  row.dataset.nick = nick.toLowerCase();
+  const av = document.createElement('span');
+  av.className = 'm-avatar';
+  av.textContent = nick.slice(0, 1).toUpperCase();
+  const name = document.createElement('span');
+  name.className = 'm-name';
+  name.textContent = nick === myNick ? `${nick} (вы)` : nick;
+  row.append(av, name);
+  if (nick !== myNick) row.addEventListener('click', () => openConversation('dm', nick));
+  return row;
+}
+
+function applySpeaking(nicks) {
+  const set = new Set(nicks.map((n) => n.toLowerCase()));
+  for (const row of membersListEl.querySelectorAll('.member')) {
+    row.classList.toggle('speaking', set.has(row.dataset.nick));
+  }
+}
 
 const logAnimation = autoAnimate(logEl, { duration: 180, disrespectUserMotionPreference: true });
 
@@ -773,6 +830,11 @@ menuBtn.addEventListener('click', () => {
 });
 backdrop.addEventListener('click', closeSidebar);
 
+membersBtn.addEventListener('click', () => {
+  membersPanel.hidden = !membersPanel.hidden;
+  membersBtn.classList.toggle('active', !membersPanel.hidden);
+});
+
 voiceMuteBtn.addEventListener('click', () => voice.toggleMute());
 voiceDeafenBtn.addEventListener('click', () => voice.toggleDeafen());
 voiceLeaveBtn.addEventListener('click', () => voice.leave());
@@ -829,12 +891,16 @@ function initUI() {
   setButton(callHangup, 'phone', 'Завершить');
   setButton(sendBtn, 'chevron-right');
   channelAddBtn.appendChild(icon('plus', 16));
+  voiceAddBtn.appendChild(icon('plus', 16));
   menuBtn.appendChild(icon('menu', 20));
+  membersBtn.appendChild(icon('users', 18));
   const { toggle } = mountSettings(settingsEl);
   setButton(toggle, 'gear');
   makeDraggable(callPanel, callGrip);
   settings.onMotionChange(applyMotionState);
   applyMotionState();
+  membersPanel.hidden = window.innerWidth <= 720;
+  membersBtn.classList.toggle('active', !membersPanel.hidden);
 }
 
 initUI();

@@ -1357,3 +1357,122 @@ html.motion-off *::after {
 .vbtn {
   border-radius: var(--radius-item);
 }
+
+/* --- правая панель участников --- */
+.app {
+  grid-template-columns: 220px 1fr auto;
+}
+
+#chat-title {
+  flex: 1;
+}
+
+.chat-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.hbtn {
+  display: inline-flex;
+  padding: 6px;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-item);
+  color: var(--dim);
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+.hbtn:hover {
+  background: var(--hover);
+  color: var(--fg);
+}
+
+.hbtn.active {
+  color: var(--accent);
+}
+
+.members {
+  width: 220px;
+  background: var(--panel);
+  border-left: 1px solid var(--line);
+  overflow-y: auto;
+}
+
+.members-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 10px;
+}
+
+.member-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.member-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px;
+  color: var(--dim);
+  font-size: 10px;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+}
+
+.member {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 6px;
+  border-radius: var(--radius-item);
+  color: var(--fg);
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+
+.member:hover {
+  background: var(--hover);
+}
+
+.m-avatar {
+  width: 26px;
+  height: 26px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--line);
+  color: var(--fg);
+  font-size: 12px;
+  font-weight: 600;
+  transition: box-shadow 0.12s ease;
+}
+
+.member.speaking .m-avatar {
+  box-shadow: 0 0 0 2px var(--accent);
+}
+
+.m-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+}
+
+@media (max-width: 720px) {
+  .members {
+    position: fixed;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 30;
+  }
+}

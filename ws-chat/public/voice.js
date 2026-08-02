@@ -1,16 +1,54 @@
 import { settings, applySink } from './settings.js';
 
 const RTC_CONFIG = { iceServers: [] };
+const SPEAK_THRESHOLD = 0.045;
 
-export function createVoice({ send, onState, onError }) {
+export function createVoice({ send, onState, onError, onSpeaking, getNick }) {
   const calls = new Map();
   let localStream = null;
   let channel = null;
   let muted = false;
   let deafened = false;
+  let audioCtx = null;
+  let localAnalyser = null;
+  let rafId = null;
 
   function emit() {
     onState?.({ channel, muted, deafened });
+  }
+
+  function makeAnalyser(stream) {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    const source = audioCtx.createMediaStreamSource(stream);
+    const analyser = audioCtx.createAnalyser();
+    analyser.fftSize = 512;
+    source.connect(analyser);
+    return analyser;
+  }
+
+  function rms(analyser) {
+    if (!analyser) return 0;
+    const buf = new Uint8Array(analyser.fftSize);
+    analyser.getByteTimeDomainData(buf);
+    let sum = 0;
+    for (const v of buf) {
+      const x = (v - 128) / 128;
+      sum += x * x;
+    }
+    return Math.sqrt(sum / buf.length);
+  }
+
+  function speakingLoop() {
+    if (!channel) return;
+    const speakers = [];
+    const me = getNick?.();
+    if (me && !muted && !deafened && rms(localAnalyser) > SPEAK_THRESHOLD) speakers.push(me);
+    for (const [nick, call] of calls) {
+      if (rms(call.analyser) > SPEAK_THRESHOLD) speakers.push(nick);
+    }
+    onSpeaking?.(speakers);
+    rafId = requestAnimationFrame(speakingLoop);
   }
 
   function applyMic() {
@@ -33,9 +71,12 @@ export function createVoice({ send, onState, onError }) {
     document.body.appendChild(audioEl);
     applySink(audioEl);
 
+    const call = { pc, audioEl, analyser: null };
+
     pc.ontrack = (event) => {
       audioEl.srcObject = event.streams[0];
       applySink(audioEl);
+      call.analyser = makeAnalyser(event.streams[0]);
     };
     pc.onicecandidate = (event) => {
       if (event.candidate) send({ type: 'voice-signal', to: nick, data: { kind: 'ice', candidate: event.candidate } });
@@ -44,7 +85,6 @@ export function createVoice({ send, onState, onError }) {
       if (['failed', 'closed', 'disconnected'].includes(pc.connectionState)) dropPeer(nick);
     };
 
-    const call = { pc, audioEl };
     calls.set(nick, call);
     return call;
   }
@@ -66,11 +106,19 @@ export function createVoice({ send, onState, onError }) {
   }
 
   function teardown() {
+    if (rafId) cancelAnimationFrame(rafId);
+    rafId = null;
     for (const nick of [...calls.keys()]) dropPeer(nick);
     if (localStream) {
       for (const track of localStream.getTracks()) track.stop();
       localStream = null;
     }
+    if (audioCtx) {
+      audioCtx.close();
+      audioCtx = null;
+    }
+    localAnalyser = null;
+    onSpeaking?.([]);
   }
 
   async function join(target) {
@@ -85,8 +133,10 @@ export function createVoice({ send, onState, onError }) {
     muted = false;
     deafened = false;
     applyMic();
+    localAnalyser = makeAnalyser(localStream);
     channel = target;
     send({ type: 'voice-join', channel });
+    rafId = requestAnimationFrame(speakingLoop);
     emit();
   }
 
