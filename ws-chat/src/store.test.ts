@@ -65,6 +65,27 @@ describe('Store', () => {
     expect(m.replyTo).toBeUndefined();
   });
 
+  it('не даёт ответом вытащить текст чужого ЛС в канал', () => {
+    const secret = store.addDirectMessage('alice', 'bob', 'пароль от сейфа 1234');
+    const leak = store.addChannelMessage('general', 'mallory', 'а что там?', { replyTo: secret.id });
+    expect(leak.replyTo).toBeUndefined();
+  });
+
+  it('разрешает ответ внутри того же разговора', () => {
+    const first = store.addDirectMessage('alice', 'bob', 'привет');
+    const second = store.addDirectMessage('bob', 'alice', 'здравствуй', { replyTo: first.id });
+    expect(second.replyTo).toMatchObject({ id: first.id, from: 'alice', text: 'привет' });
+  });
+
+  it('не даёт ставить реакции в чужое ЛС', () => {
+    const dm = store.addDirectMessage('alice', 'bob', 'секрет');
+    expect(store.toggleReaction(dm.id, 'mallory', '🔥')).toBeNull();
+    expect(store.history(dmKey('alice', 'bob'))[0].reactions).toBeUndefined();
+
+    expect(store.toggleReaction(dm.id, 'BOB', '🔥')).not.toBeNull();
+    expect(store.history(dmKey('alice', 'bob'))[0].reactions).toEqual({ '🔥': ['BOB'] });
+  });
+
   it('переключает реакцию: добавляет и убирает', () => {
     const m = store.addChannelMessage('general', 'alice', 'hey');
     store.toggleReaction(m.id, 'bob', '🔥');

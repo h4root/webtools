@@ -139,37 +139,47 @@ export class Store {
     return toWire(message);
   }
 
-  private makeReply(replyTo?: number): ReplyRef | undefined {
+  // Отвечать можно только на сообщение из того же разговора: иначе снапшот
+  // текста утёк бы из чужого ЛС в канал.
+  private makeReply(replyTo: number | undefined, key: string): ReplyRef | undefined {
     if (replyTo === undefined) return undefined;
     const target = this.find(replyTo);
-    if (!target) return undefined;
+    if (!target || target.key !== key) return undefined;
     return { id: target.id, from: target.from, text: target.text.slice(0, 120) };
   }
 
+  private canAccess(message: StoredMessage, nick: string): boolean {
+    if (message.channel !== undefined) return true;
+    const lower = nick.toLowerCase();
+    return message.from.toLowerCase() === lower || message.to?.toLowerCase() === lower;
+  }
+
   addChannelMessage(channel: string, from: string, text: string, extra: MessageExtra = {}): WireMessage {
+    const key = channelKey(channel);
     return this.append({
       id: this.nextId++,
-      key: channelKey(channel),
+      key,
       from,
       channel,
       text,
       ts: Date.now(),
       edited: false,
-      replyTo: this.makeReply(extra.replyTo),
+      replyTo: this.makeReply(extra.replyTo, key),
       attachments: extra.attachments,
     });
   }
 
   addDirectMessage(from: string, to: string, text: string, extra: MessageExtra = {}): WireMessage {
+    const key = dmKey(from, to);
     return this.append({
       id: this.nextId++,
-      key: dmKey(from, to),
+      key,
       from,
       to,
       text,
       ts: Date.now(),
       edited: false,
-      replyTo: this.makeReply(extra.replyTo),
+      replyTo: this.makeReply(extra.replyTo, key),
       attachments: extra.attachments,
     });
   }
@@ -204,7 +214,7 @@ export class Store {
 
   toggleReaction(id: number, nick: string, emoji: string): StoredMessage | null {
     const message = this.find(id);
-    if (!message) return null;
+    if (!message || !this.canAccess(message, nick)) return null;
     const reactions = (message.reactions ??= {});
     const users = reactions[emoji] ?? [];
     reactions[emoji] = users.includes(nick) ? users.filter((n) => n !== nick) : [...users, nick];
