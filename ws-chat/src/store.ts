@@ -75,6 +75,12 @@ export class Store {
       if (Array.isArray(data.voiceChannels) && data.voiceChannels.length) this.voiceChannels = data.voiceChannels;
       if (Array.isArray(data.messages)) this.messages = data.messages;
       if (typeof data.nextId === 'number') this.nextId = data.nextId;
+      // nextId может отсутствовать или отстать (правка файла руками, обрезанная
+      // запись). Пересекающиеся id ломают find(): edit/delete/react попадут в
+      // чужое сообщение, поэтому берём заведомо свободный.
+      for (const message of this.messages) {
+        if (typeof message?.id === 'number' && message.id >= this.nextId) this.nextId = message.id + 1;
+      }
     } catch {
       /* нет файла или битый — стартуем с дефолтов */
     }

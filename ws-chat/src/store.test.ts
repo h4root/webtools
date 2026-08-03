@@ -1,4 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { Store, channelKey, dmKey, recipientsOf } from './store.ts';
 
 describe('Store', () => {
@@ -84,6 +87,25 @@ describe('Store', () => {
 
     expect(store.toggleReaction(dm.id, 'BOB', '🔥')).not.toBeNull();
     expect(store.history(dmKey('alice', 'bob'))[0].reactions).toEqual({ '🔥': ['BOB'] });
+  });
+
+  it('не переиспользует id, если в файле нет корректного nextId', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'ws-chat-'));
+    const file = join(dir, 'store.json');
+    try {
+      writeFileSync(
+        file,
+        JSON.stringify({
+          messages: [{ id: 7, key: channelKey('general'), from: 'alice', channel: 'general', text: 'old', ts: 1, edited: false }],
+        }),
+      );
+      const loaded = new Store(file);
+      const fresh = loaded.addChannelMessage('general', 'bob', 'new');
+      expect(fresh.id).toBe(8);
+      expect(loaded.find(7)?.text).toBe('old');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   it('переключает реакцию: добавляет и убирает', () => {
