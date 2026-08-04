@@ -77,13 +77,10 @@ let myNick = '';
 let authToken = '';
 let isGuest = false;
 let authMode = 'guest';
-// Чем входили в прошлый раз — этим же переподключаемся после обрыва.
 let pendingAuth = null;
 let joined = false;
 let channels = [];
 let online = [];
-// Собеседники по переписке, а не по присутствию: диалог не должен исчезать из
-// сайдбара вместе с ушедшим человеком.
 let dmPartners = [];
 let active = { kind: 'channel', id: 'general' };
 let voiceChannel = null;
@@ -120,9 +117,6 @@ function convOf(key) {
   return conversations.get(key);
 }
 
-// Сигналинг голоса и звонков после реконнекта уже бессмыслен — SDP/ICE
-// протухают вместе с соединением. Копим только то, что имеет смысл доставить
-// с задержкой.
 const QUEUEABLE = new Set(['message', 'edit', 'delete', 'react', 'channel-create', 'voice-channel-create']);
 
 function wsSend(message) {
@@ -130,8 +124,6 @@ function wsSend(message) {
     ws.send(JSON.stringify(message));
     return;
   }
-  // Раньше сообщение просто исчезало: поле ввода уже очищено, а на сервер
-  // ничего не ушло.
   if (joined && QUEUEABLE.has(message.type) && outbox.length < 100) {
     outbox.push(message);
     renderConnState();
@@ -173,8 +165,6 @@ function wsUrl() {
   return `${proto}://${location.host}`;
 }
 
-// После обрыва поднимаемся по токену сессии, а не по нику с паролем: пароль в
-// памяти вкладки не держим.
 function sendHello() {
   if (!ws || ws.readyState !== WebSocket.OPEN) return;
   if (authToken) ws.send(JSON.stringify({ type: 'auth', mode: 'resume', token: authToken }));
@@ -218,8 +208,6 @@ function scheduleReconnect() {
 function handleAuthError(message) {
   const wait = message.retryAfterMs ? ` Подожди ${Math.ceil(message.retryAfterMs / 1000)} с.` : '';
 
-  // Сессия могла протухнуть или её погасили с другого устройства: чинить
-  // нечего, надо входить заново.
   if (authToken) {
     forgetToken();
     if (joined) {
@@ -238,9 +226,7 @@ function forgetToken() {
   authToken = '';
   try {
     localStorage.removeItem(TOKEN_KEY);
-  } catch {
-    /* нечего чистить */
-  }
+  } catch {}
 }
 
 function handleServer(message) {
@@ -250,13 +236,9 @@ function handleServer(message) {
       authToken = message.token;
       isGuest = message.guest;
       pendingAuth = null;
-      // Токен переживает перезагрузку страницы, пароль спрашивать заново не
-      // придётся. Гостя это тоже касается: его личность живёт до выхода.
       try {
         localStorage.setItem(TOKEN_KEY, authToken);
-      } catch {
-        /* приватный режим — обойдёмся сессией на одну вкладку */
-      }
+      } catch {}
       reconnectDelay = RECONNECT_MS;
       if (!joined) enterApp();
       renderConnState();
@@ -345,7 +327,6 @@ function handleServer(message) {
 function finishLogout() {
   forgetToken();
   pendingAuth = null;
-  // Гость уходит навсегда, поэтому переподключаться и что-то досылать не надо.
   outbox = [];
   if (ws) {
     const socket = ws;
@@ -373,14 +354,12 @@ function returnToGate(reason) {
   gate.hidden = false;
   connBanner.hidden = true;
   setGateBusy(false);
-  // Режим ставим до текста: setGateMode чистит поле ошибки.
   setGateMode(isGuest ? 'guest' : 'login');
   gateError.textContent = reason ?? '';
   nickInput.value = myNick;
   nickInput.focus();
 }
 
-// Пользователя стёрли: выкидываем его сообщения и из открытых разговоров тоже.
 function forgetUser(nick) {
   const lower = nick.toLowerCase();
   for (const [key, list] of conversations) {
@@ -438,9 +417,6 @@ function rememberPartner(nick) {
   if (!dmPartners.some((n) => n.toLowerCase() === lower)) dmPartners.unshift(nick);
 }
 
-// Служебные строки живут только на экране: складывать их в историю разговора
-// значило подмешивать «X присоединился» к сообщениям канала и терять их при
-// первой же перезагрузке истории.
 function systemLine(text) {
   appendRow({ id: 0, from: '', text, ts: Date.now(), edited: false, system: true });
 }
@@ -516,7 +492,6 @@ function isOnline(nick) {
   return nick === myNick || online.some((n) => n.toLowerCase() === lower);
 }
 
-// Онлайн + те, с кем есть переписка, + открытый прямо сейчас диалог.
 function dmList() {
   const seen = new Map();
   for (const nick of [...online, ...dmPartners]) {
@@ -565,8 +540,6 @@ function deleteButton(question, onConfirm) {
   });
   return btn;
 }
-
-// --- сообщения ---
 
 function renderMembers() {
   membersListEl.replaceChildren();
@@ -892,8 +865,6 @@ function renderJumpNew() {
   if (missedBelow) jumpNewBtn.textContent = `↓ новых: ${missedBelow}`;
 }
 
-// Прыгать вниз на каждом чужом сообщении нельзя: пользователь может читать
-// историю выше, и лента вырывалась бы у него из-под курсора.
 function appendRow(msg) {
   const stick = atBottom() || msg.from === myNick || msg.system;
   logEl.appendChild(createRow(msg));
@@ -913,8 +884,6 @@ function renderLog() {
   scrollToBottom();
   applyMotionState();
 }
-
-// --- typing ---
 
 function receiveTyping(message) {
   const key = message.channel ? `ch:${message.channel}` : `dm:${message.from.toLowerCase()}`;
@@ -956,8 +925,6 @@ function sendTyping() {
   lastTypingSent = now;
   wsSend(active.kind === 'channel' ? { type: 'typing', channel: active.id } : { type: 'typing', to: active.id });
 }
-
-// --- голос / звонок (без изменений в логике) ---
 
 function renderVoice(state) {
   voiceChannel = state.channel;
@@ -1064,8 +1031,6 @@ function renderLevels(levels) {
   setMeter(partyPeer, levels.remote, levels.remoteSpeaking);
 }
 
-// --- адаптив ---
-
 function openSidebar() {
   sidebar.classList.add('open');
   backdrop.hidden = false;
@@ -1074,8 +1039,6 @@ function closeSidebar() {
   sidebar.classList.remove('open');
   backdrop.hidden = true;
 }
-
-// --- события ---
 
 function scrollToMessage(id) {
   const row = logEl.querySelector(`[data-id="${id}"]`);
@@ -1123,15 +1086,10 @@ function formatSize(bytes) {
   return `${(bytes / 1024 / 1024).toFixed(1)} МБ`;
 }
 
-// Показывать встроенно можно только заведомо безопасные растровые форматы.
-// blob:-ссылка наследует наш origin, поэтому Blob с типом text/html или svg,
-// открытый в новой вкладке, выполнил бы скрипты как страница чата.
 const INLINE_MIME = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/avif', 'image/bmp']);
 
 const blobUrls = new Map();
 
-// Вложения отдаются только по токену в заголовке, поэтому в src/href попадает
-// не серверный адрес, а локальная blob:-ссылка на уже скачанные байты.
 function attachmentUrl(att) {
   if (!blobUrls.has(att.url)) {
     blobUrls.set(
@@ -1148,7 +1106,6 @@ function attachmentUrl(att) {
   return blobUrls.get(att.url);
 }
 
-// Скачанные вложения держатся в памяти вкладки — при выходе их надо отпустить.
 function releaseBlobUrls() {
   for (const pending of blobUrls.values()) {
     pending.then(URL.revokeObjectURL, () => {});
@@ -1280,7 +1237,6 @@ function setGateBusy(busy) {
   passwordInput.disabled = busy;
 }
 
-// Пароль не шифруется транспортом — по http его видит любой, кто слушает сеть.
 function warnIfInsecure() {
   const secure = location.protocol === 'https:' || ['localhost', '127.0.0.1', '::1'].includes(location.hostname);
   gateInsecure.hidden = secure;
@@ -1305,8 +1261,6 @@ nickForm.addEventListener('submit', (event) => {
   setGateBusy(true);
   if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'auth', ...pendingAuth }));
   else connect();
-  // В памяти пароль не задерживаем: он нужен ровно на одну отправку, при
-  // переподключении поднимаемся по токену.
   passwordInput.value = '';
 });
 
@@ -1453,7 +1407,6 @@ function initUI() {
   membersPanel.hidden = window.innerWidth <= 720;
   membersBtn.classList.toggle('active', !membersPanel.hidden);
 
-  // Токен с прошлого раза — входим молча, не спрашивая ник заново.
   try {
     authToken = localStorage.getItem(TOKEN_KEY) ?? '';
   } catch {

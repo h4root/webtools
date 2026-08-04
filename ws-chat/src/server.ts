@@ -26,11 +26,7 @@ const uploadsDir = join(dataDir, 'uploads');
 
 const HEARTBEAT_MS = 30000;
 const SWEEP_MS = 60000;
-// Файл уже залит, но сообщение с ним ещё не отправлено — не выметать.
 const UPLOAD_GRACE_MS = 30 * 60 * 1000;
-// Показывать в браузере встроенно можно только заведомо безопасные растровые
-// форматы. Всё прочее (в том числе svg — это документ со скриптами) уходит
-// вложением, чтобы ничего не исполнилось в нашем origin.
 const INLINE_MIME = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/avif', 'image/bmp']);
 const UPLOADS_PER_MIN = 30;
 
@@ -46,8 +42,6 @@ app.use(
   }),
 );
 
-// Вложения открываются по той же сессии, что и чат, — она переживает и
-// перезагрузку страницы, и обрыв сокета.
 function authorize(req: Request): { nick: string; token: string } | null {
   const header = req.headers.authorization;
   if (typeof header !== 'string' || !header.startsWith('Bearer ')) return null;
@@ -98,9 +92,6 @@ app.post('/upload', express.raw({ type: () => true, limit: ATTACH_SIZE_MAX }), (
   }
 });
 
-// Отдаём только расшифровав и только тому, кто участвует в разговоре, где это
-// вложение приложено. Знания ссылки недостаточно — заголовок обязателен, так
-// что открыть картинку, просто вставив адрес в браузер, нельзя.
 app.get('/uploads/:id', (req, res) => {
   const client = authorize(req);
   if (!client) {
@@ -135,11 +126,7 @@ function safeName(raw: string): string {
   let decoded = raw;
   try {
     decoded = decodeURIComponent(raw);
-  } catch {
-    /* пришло не как URI-компонент — берём как есть */
-  }
-  // Имя используется только в Content-Disposition и в интерфейсе, но пусть в
-  // нём заведомо не будет разделителей пути.
+  } catch {}
   return decoded.replace(/[/\\\r\n]/g, '_').slice(0, 255) || 'file';
 }
 
@@ -163,7 +150,6 @@ wss.on('connection', (ws) => {
   const client: Client = {
     id: String(nextId++),
     nick: null,
-    // До входа токена ещё нет: настоящий приходит вместе с сессией.
     token: '',
     send(message) {
       if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(message));
@@ -196,8 +182,6 @@ const heartbeat = setInterval(() => {
 }, HEARTBEAT_MS);
 heartbeat.unref();
 
-// Блобы, на которые не осталось ссылок (сообщение удалили или его вытеснило из
-// истории), иначе копились бы на диске вечно.
 function sweepUploads(): void {
   const removed = blobs.sweep(store.attachmentIds(), UPLOAD_GRACE_MS);
   if (removed) console.log(`вложения: убрано ${removed} без ссылок`);
@@ -229,6 +213,4 @@ function shutdown(): void {
 
 process.on('SIGINT', shutdown);
 process.on('SIGTERM', shutdown);
-// Подстраховка на случай выхода мимо shutdown (например process.exit при ошибке
-// конфигурации): flush синхронный, поэтому в 'exit' он ещё успевает отработать.
 process.on('exit', () => store.flush());

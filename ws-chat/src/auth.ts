@@ -5,21 +5,16 @@ import { readJson, writeJsonAtomic } from './jsonfile.ts';
 
 const scrypt = promisify(scryptCb) as (password: string, salt: Buffer, keylen: number, options: object) => Promise<Buffer>;
 
-// N=2^15 при r=8 — это ~32 МБ памяти и ~100 мс на проверку: перебор дорожает на
-// порядки, а живой вход этого не замечает. scrypt асинхронный и считается в
-// пуле потоков, поэтому единственный поток сервера не встаёт.
 const SCRYPT = { N: 32768, r: 8, p: 1, maxmem: 96 * 1024 * 1024 };
 const KEY_LEN = 64;
 const SALT_LEN = 16;
 
 export const PASSWORD_MIN = 8;
-// Не ради стойкости, а чтобы килобайтными паролями не грузили пул потоков.
 export const PASSWORD_MAX = 200;
 
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const TOKEN_BYTES = 32;
 
-// После этого числа промахов вход по нику притормаживается, дальше — растёт.
 const FAILURES_BEFORE_LOCK = 5;
 const LOCK_BASE_MS = 2000;
 const LOCK_MAX_MS = 15 * 60 * 1000;
@@ -67,8 +62,6 @@ export class Auth {
   private failures = new Map<string, { count: number; until: number }>();
   private readonly accountsFile: string;
   private readonly sessionsFile: string;
-  // Проверка несуществующего ника должна стоить столько же, сколько настоящая,
-  // иначе по времени ответа сервер выдаёт, какие ники заведены.
   private readonly decoySalt = randomBytes(SALT_LEN);
 
   constructor(private readonly dataDir: string) {
@@ -143,8 +136,6 @@ export class Auth {
 
   private issue(account: Account): string {
     const token = randomBytes(TOKEN_BYTES).toString('hex');
-    // На диск ложится только хэш: утёкший sessions.json не даёт войти ни за
-    // кого, ровно как и с паролями.
     this.sessions.set(sha256(token), {
       tokenHash: sha256(token),
       nick: account.nick,
@@ -190,8 +181,6 @@ export class Auth {
 
     const account = this.find(nick);
     if (!account || account.guest || !account.salt || !account.hash) {
-      // Считаем впустую, чтобы ответ занял столько же времени, сколько с
-      // настоящим аккаунтом.
       await this.derive(password, this.decoySalt);
       this.noteFailure(nick);
       return { ok: false, error: account?.guest ? 'guest-has-no-password' : 'no-account' };
@@ -216,7 +205,6 @@ export class Auth {
       this.saveSessions();
       return null;
     }
-    // Аккаунт мог быть стёрт (вышедший гость), сессия сама по себе не пропуск.
     const account = this.find(session.nick);
     if (!account) {
       this.sessions.delete(session.tokenHash);
@@ -230,8 +218,6 @@ export class Auth {
     if (this.sessions.delete(sha256(token))) this.saveSessions();
   }
 
-  // Выход гостя уносит и аккаунт: ник свободен, вернуться в ту же личность
-  // нельзя, все его сессии мертвы.
   removeAccount(nick: string): void {
     const lower = nick.toLowerCase();
     if (!this.accounts.delete(lower)) return;

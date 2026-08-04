@@ -5,7 +5,6 @@ import type { AttachmentRef, Reactions, ReplyRef, WireMessage } from './protocol
 export const DEFAULT_CHANNELS = ['general', 'random'];
 export const DEFAULT_VOICE_CHANNELS = ['general', 'games'];
 const HISTORY_LIMIT = 200;
-// Каналы никто не чистит, а создать их мог кто угодно и сколько угодно.
 export const CHANNEL_LIMIT = 100;
 const SAVE_DEBOUNCE_MS = 400;
 
@@ -63,8 +62,6 @@ export class Store {
   private nextId = 1;
   private saveTimer: ReturnType<typeof setTimeout> | null = null;
   private dirty = false;
-  // Файл существует, но прочитать его не удалось. Затирать его новым состоянием
-  // нельзя — под ним могут лежать данные, которые ещё можно спасти руками.
   private persistBlocked = false;
 
   constructor(private readonly filePath?: string) {
@@ -87,8 +84,6 @@ export class Store {
     try {
       this.apply(JSON.parse(raw));
     } catch (error) {
-      // Обрезанная или испорченная запись. Молча стартовать с дефолтов нельзя:
-      // следующее же сохранение затрёт остатки, и потеря пройдёт незамеченной.
       const backup = `${this.filePath}.corrupt-${Date.now()}`;
       try {
         renameSync(this.filePath!, backup);
@@ -107,9 +102,6 @@ export class Store {
     if (Array.isArray(voiceChannels) && voiceChannels.length) this.voiceChannels = voiceChannels;
     if (Array.isArray(messages)) this.messages = messages;
     if (typeof nextId === 'number') this.nextId = nextId;
-    // nextId может отсутствовать или отстать (правка файла руками, обрезанная
-    // запись). Пересекающиеся id ломают find(): edit/delete/react попадут в
-    // чужое сообщение, поэтому берём заведомо свободный.
     for (const message of this.messages) {
       if (typeof message?.id === 'number' && message.id >= this.nextId) this.nextId = message.id + 1;
     }
@@ -139,8 +131,6 @@ export class Store {
     }
   }
 
-  // Дебаунс сохранения означает, что последние сообщения живут только в памяти.
-  // Без явного сброса на выходе они теряются при каждом штатном рестарте.
   flush(): void {
     if (this.saveTimer) {
       clearTimeout(this.saveTimer);
@@ -164,7 +154,6 @@ export class Store {
     return true;
   }
 
-  // Последний текстовый канал не удаляем — чату надо куда-то писать.
   removeChannel(name: string): boolean {
     if (!this.channels.includes(name) || this.channels.length <= 1) return false;
     this.channels = this.channels.filter((c) => c !== name);
@@ -203,8 +192,6 @@ export class Store {
     return toWire(message);
   }
 
-  // Отвечать можно только на сообщение из того же разговора: иначе снапшот
-  // текста утёк бы из чужого ЛС в канал.
   private makeReply(replyTo: number | undefined, key: string): ReplyRef | undefined {
     if (replyTo === undefined) return undefined;
     const target = this.find(replyTo);
@@ -259,8 +246,6 @@ export class Store {
     return this.messages.find((m) => m.id === id);
   }
 
-  // Ник занимается регистронезависимо, поэтому и авторство сверяем так же:
-  // иначе Alice, перезашедшая как alice, теряет доступ к своим сообщениям.
   private isAuthor(message: StoredMessage, nick: string): boolean {
     return message.from.toLowerCase() === nick.toLowerCase();
   }
@@ -294,10 +279,6 @@ export class Store {
     return message;
   }
 
-  // Гость уходит — от него не остаётся ничего: сообщения в каналах, вся личная
-  // переписка и цитаты его текста в чужих ответах. Снапшот ответа специально
-  // переживает обычное удаление сообщения, но здесь это была бы дыра: текст
-  // стёртого пользователя продолжал бы висеть в ленте.
   purgeUser(nick: string): { removed: number } {
     const lower = nick.toLowerCase();
     const before = this.messages.length;
@@ -328,9 +309,6 @@ export class Store {
     return { removed: before - this.messages.length };
   }
 
-  // Собеседники, с которыми у ника есть переписка, свежие сверху. Без этого
-  // список ЛС можно было строить только из тех, кто сейчас онлайн, и диалог
-  // вместе со всей историей пропадал из интерфейса, стоило человеку выйти.
   dmPartners(nick: string): { nick: string; ts: number }[] {
     const lower = nick.toLowerCase();
     const latest = new Map<string, { nick: string; ts: number }>();
@@ -347,7 +325,6 @@ export class Store {
     return [...latest.values()].sort((a, b) => b.ts - a.ts);
   }
 
-  // Все блобы, на которые ещё кто-то ссылается, — вход для BlobStore.sweep().
   attachmentIds(): Set<string> {
     const ids = new Set<string>();
     for (const message of this.messages) {
@@ -356,8 +333,6 @@ export class Store {
     return ids;
   }
 
-  // Скачать вложение может только участник разговора, в котором оно приложено:
-  // иначе ссылка на картинку из ЛС читалась бы кем угодно.
   findAttachment(id: string, nick: string): AttachmentRef | null {
     for (const message of this.messages) {
       const attachment = message.attachments?.find((a) => a.id === id);

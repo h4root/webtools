@@ -2,7 +2,6 @@ import { settings, applySink } from './settings.js';
 
 const RTC_CONFIG = { iceServers: [] };
 const SPEAK_THRESHOLD = 0.045;
-// Сколько ждать восстановления ICE, прежде чем разрывать связь с участником.
 const DROP_GRACE_MS = 8000;
 
 export function createVoice({ send, onState, onError, onSpeaking, getNick }) {
@@ -95,8 +94,6 @@ export function createVoice({ send, onState, onError, onSpeaking, getNick }) {
         dropPeer(nick);
         return;
       }
-      // disconnected обычно рассасывается сам: рвать пира на первом же лаге
-      // значило переустанавливать связь на каждой помехе в сети.
       if (state === 'disconnected' && !call.dropTimer) {
         call.dropTimer = setTimeout(() => {
           call.dropTimer = null;
@@ -144,9 +141,6 @@ export function createVoice({ send, onState, onError, onSpeaking, getNick }) {
 
   async function join(target) {
     if (channel === target || joining) return;
-    // Микрофон запрашиваем до того, как рвать текущий канал: иначе отказ в
-    // доступе оставлял бы нас без связи, но всё ещё числящимися в старом
-    // канале — молчаливым призраком в списке участников.
     joining = true;
     let stream;
     try {
@@ -224,9 +218,7 @@ export function createVoice({ send, onState, onError, onSpeaking, getNick }) {
     } else if (data.kind === 'ice') {
       try {
         await call.pc.addIceCandidate(data.candidate);
-      } catch {
-        /* ICE может прийти раньше remoteDescription — браузер отбросит */
-      }
+      } catch {}
     }
   }
 

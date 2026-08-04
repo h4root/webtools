@@ -136,7 +136,6 @@ describe('Store', () => {
 
     const left = store.history(channelKey('general'));
     expect(left.map((m) => m.text)).toEqual(['согласен', 'не трогать']);
-    // Цитата хранила текст гостя — иначе он остался бы висеть в чужом ответе.
     expect(left.find((m) => m.id === quote.id)?.replyTo).toBeUndefined();
     expect(left.find((m) => m.id === keep.id)?.reactions).toEqual({ '🔥': ['bob'] });
     expect(store.history(dmKey('гость', 'alice'))).toHaveLength(0);
@@ -178,7 +177,6 @@ describe('Store: персистентность', () => {
   it('flush сохраняет то, что ещё висит в дебаунсе', () => {
     const store = new Store(file);
     store.addChannelMessage('general', 'alice', 'до выключения');
-    // Без flush сообщение живёт только в памяти — так оно и терялось на Ctrl+C.
     expect(existsSync(file)).toBe(false);
 
     store.flush();
@@ -216,7 +214,6 @@ describe('Store: персистентность', () => {
       store.addChannelMessage('general', 'alice', `msg ${i}`);
       await new Promise((resolve) => setTimeout(resolve, 120));
     }
-    // Дебаунс со сбросом таймера на каждом сообщении не дал бы записи ни разу.
     expect(existsSync(file)).toBe(true);
     store.flush();
     expect(new Store(file).history(channelKey('general'))).toHaveLength(5);

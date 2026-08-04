@@ -35,7 +35,6 @@ describe('BlobStore', () => {
 
     const onDisk = readFileSync(join(dir, id));
     expect(onDisk.includes(secret)).toBe(false);
-    // Имя файла тоже не должно быть хэшем содержимого.
     expect(id).not.toContain('СЕКРЕТ');
     expect(readdirSync(dir)).toEqual([id]);
   });

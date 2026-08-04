@@ -4,12 +4,8 @@ export const SIGNAL_MAX = 16384;
 export const CHANNEL_MAX = 24;
 export const ATTACH_MAX = 10;
 export const ATTACH_SIZE_MAX = 26_214_400;
-// Потолок на приём: сам минимум проверяет Auth, здесь только защита от того,
-// чтобы килобайтными «паролями» грузили KDF.
 export const PASSWORD_LIMIT = 200;
 
-// id блоба выводится из его содержимого на сервере (см. blobs.ts), поэтому он
-// строго 32 hex-символа — ни расширения, ни чего-либо клиентского в нём нет.
 const ATTACH_ID = /^[a-f0-9]{32}$/;
 
 export const REACTIONS = ['👍', '❤️', '😂', '🔥', '🎉', '😮', '😢', '👀'];
@@ -76,12 +72,9 @@ export type ClientMessage =
   | { type: 'call-signal'; to: string; data: unknown };
 
 export type ServerMessage =
-  // token — ключ и к сессии, и к HTTP-ручкам вложений; передаётся заголовком,
-  // а не в URL.
   | { type: 'welcome'; nick: string; token: string; guest: boolean }
   | { type: 'auth-error'; reason: string; retryAfterMs?: number }
   | { type: 'logged-out' }
-  // Пользователь стёрт: клиенты выкидывают его сообщения из памяти.
   | { type: 'purged'; nick: string }
   | { type: 'channels'; list: string[] }
   | { type: 'presence'; users: string[] }
@@ -116,7 +109,6 @@ export function isValidChannelName(name: unknown): name is string {
   return typeof name === 'string' && CHANNEL_PATTERN.test(name);
 }
 
-// Ровно одно из channel / to; channel — валидное имя, to — ник.
 function parseTarget(data: Record<string, unknown>): { channel?: string; to?: string } | null {
   const hasChannel = data.channel !== undefined;
   const hasTo = data.to !== undefined;
@@ -159,8 +151,6 @@ export function parseClientMessage(raw: string): ClientMessage | null {
       }
       if (!isBoundedString(data.nick, NICK_MAX)) return null;
       if (mode === 'guest') return { type: 'auth', mode, nick: data.nick.trim() };
-      // Длину пароля не режем молча: слишком короткий или слишком длинный
-      // должен получить внятный ответ, а не «некорректное сообщение».
       if (typeof data.password !== 'string' || data.password.length > PASSWORD_LIMIT) return null;
       return { type: 'auth', mode, nick: data.nick.trim(), password: data.password };
     }

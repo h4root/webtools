@@ -12,7 +12,6 @@ export interface Client {
   close?(): void;
 }
 
-// Ровно то, что Hub спрашивает у хранилища блобов: настоящие размер и mime.
 export interface BlobLookup {
   stat(id: string): { id: string; size: number; mime: string } | null;
 }
@@ -44,7 +43,6 @@ export class Hub {
     private readonly auth?: Auth,
   ) {}
 
-  // Вход разложен на две части: authenticate решает, кто это, join впускает.
   private async authenticate(client: Client, message: Extract<ClientMessage, { type: 'auth' }>): Promise<void> {
     if (message.mode === 'resume') {
       const session = this.auth!.resume(message.token!);
@@ -88,9 +86,6 @@ export class Hub {
     }
     const previous = this.findByNick(trimmed);
     if (previous) {
-      // Один и тот же аккаунт открыт в двух местах: вытесняем старое
-      // соединение. Раньше это решал ник плюс токен сокета, теперь — сессия,
-      // так что чужой ник этим не отнять.
       this.leave(previous);
       previous.close?.();
     }
@@ -108,8 +103,6 @@ export class Hub {
     this.broadcastPresence();
   }
 
-  // Выход гостя стирает его целиком: аккаунт, все сессии и всё написанное.
-  // Для аккаунта с паролем гасится только текущая сессия.
   logout(client: Client): void {
     const nick = client.nick!;
     const guest = client.guest;
@@ -145,8 +138,6 @@ export class Hub {
 
     if (message.type === 'auth') {
       if (client.nick || !this.auth) return;
-      // scrypt считается заметное время: без этого замка один сокет мог бы
-      // запустить сколько угодно параллельных проверок пароля.
       if (client.authPending) return;
       client.authPending = true;
       void this.authenticate(client, message).finally(() => {
@@ -249,7 +240,6 @@ export class Hub {
       client.send({ type: 'error', reason: 'Канал не удалить' });
       return;
     }
-    // Тех, кто был внутри, надо вывести — канала больше нет.
     for (const [peer, channel] of [...this.voiceOf]) {
       if (channel === name) this.voiceOf.delete(peer);
     }
@@ -258,8 +248,6 @@ export class Hub {
     this.broadcast({ type: 'system', text: `Голосовой канал ${name} удалён` });
   }
 
-  // Размер и mime, присланные клиентом, — просто его слова. Берём настоящие из
-  // блоба, а ссылки на несуществующие блобы выкидываем.
   private resolveAttachments(refs: AttachmentRef[] | undefined): AttachmentRef[] | undefined {
     if (!refs?.length) return undefined;
     const out: AttachmentRef[] = [];
@@ -291,8 +279,6 @@ export class Hub {
       return;
     }
 
-    // Адресата может не быть в сети: сообщение всё равно ложится в историю и
-    // дожидается его там. Раньше офлайн-собеседнику написать было нельзя вовсе.
     const target = this.findByNick(message.to!);
     const to = target?.nick ?? message.to!;
     const wire = this.store.addDirectMessage(client.nick!, to, message.text, {

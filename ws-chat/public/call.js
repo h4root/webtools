@@ -2,7 +2,6 @@ import { settings, applySink } from './settings.js';
 
 const RTC_CONFIG = { iceServers: [] };
 const RING_TIMEOUT_MS = 30000;
-// Сколько ждать восстановления ICE, прежде чем считать звонок оборванным.
 const DROP_GRACE_MS = 8000;
 const STATS_MS = 1000;
 const SPEAK_THRESHOLD = 0.045;
@@ -123,8 +122,6 @@ export function createCall({ send, onState, onLevels, onError }) {
         hangup();
         return;
       }
-      // disconnected — это ещё не разрыв: пара секунд потерь в Wi-Fi, и ICE
-      // сам восстанавливается. Раньше на этом звонок обрывался.
       if (state === 'disconnected' && !dropTimer) {
         dropTimer = setTimeout(() => {
           dropTimer = null;
@@ -349,9 +346,7 @@ export function createCall({ send, onState, onLevels, onError }) {
     } else if (data.kind === 'ice') {
       try {
         await pc.addIceCandidate(data.candidate);
-      } catch {
-        /* ICE может прийти раньше remoteDescription — браузер отбросит */
-      }
+      } catch {}
     }
   }
 

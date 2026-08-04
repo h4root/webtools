@@ -3,11 +3,6 @@ import { gzipSync, gunzipSync } from 'node:zlib';
 import { chmodSync, mkdirSync, readFileSync, readdirSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-// Формат файла на диске:
-//   'WSC1' (4) | metaLen (2, BE) | meta JSON (metaLen) | iv (12) | tag (16) | ciphertext
-// meta лежит открытым текстом, но входит в AAD — подменить mime или размер, не
-// сломав проверку GCM, нельзя. Хэша содержимого в meta намеренно нет: он был бы
-// отпечатком, по которому имеющий доступ к диску опознал бы известный файл.
 const MAGIC = Buffer.from('WSC1');
 const IV_LEN = 12;
 const TAG_LEN = 16;
@@ -16,8 +11,6 @@ const HEAD_LEN = MAGIC.length + 2;
 
 export const BLOB_ID = /^[a-f0-9]{32}$/;
 
-// Сжатие оправдано только если оно реально что-то даёт: jpeg/png/видео уже
-// сжаты, и gzip на них тратит время, увеличивая размер.
 const GZIP_MIN_GAIN = 0.95;
 
 export interface BlobMeta {
@@ -40,9 +33,6 @@ export class BlobStore {
     if (key.length !== KEY_LEN) throw new Error(`ключ должен быть ${KEY_LEN} байт, получено ${key.length}`);
   }
 
-  // id детерминированно выводится из содержимого, поэтому один и тот же файл,
-  // залитый десять раз, лежит на диске один раз. HMAC, а не сам хэш: иначе имя
-  // файла выдавало бы, что именно в нём лежит.
   private idFor(plain: Buffer): string {
     const digest = createHash('sha256').update(plain).digest();
     return createHmac('sha256', this.key).update('blob:').update(digest).digest('hex').slice(0, 32);
@@ -59,10 +49,8 @@ export class BlobStore {
 
     try {
       statSync(file);
-      return { id, size: plain.length, mime }; // такой блоб уже есть
-    } catch {
-      /* нет — пишем */
-    }
+      return { id, size: plain.length, mime };
+    } catch {}
 
     let payload = plain;
     const packed = gzipSync(plain);
@@ -139,21 +127,14 @@ export class BlobStore {
       plain = Buffer.concat([decipher.update(body), decipher.final()]);
       if (meta.gz) plain = gunzipSync(plain);
     } catch {
-      return null; // не тот ключ, подмена или битый файл
+      return null;
     }
 
-    // Имя файла выводится из содержимого, так что несовпадение означает, что
-    // блоб подложили под чужой id.
     if (this.idFor(plain) !== id) return null;
 
     return { data: plain, meta: { id, size: plain.length, mime: meta.mime } };
   }
 
-  // Сообщение удалили или его вытеснило из истории — файл больше никому не
-  // нужен. Считаем по факту ссылок, а не счётчиком: при дедупликации один блоб
-  // делят несколько сообщений, и рассинхрон счётчика стирал бы живые вложения.
-  // minAgeMs защищает от гонки: файл уже загружен, но сообщение с ним ещё висит
-  // в поле ввода, так что ссылок на него пока нет ни у кого.
   sweep(keep: Set<string>, minAgeMs = 0): number {
     let removed = 0;
     let names: string[];
@@ -169,15 +150,12 @@ export class BlobStore {
         if (minAgeMs > 0 && statSync(join(this.dir, name)).mtimeMs > cutoff) continue;
         unlinkSync(join(this.dir, name));
         removed++;
-      } catch {
-        /* уже удалён или занят — не страшно */
-      }
+      } catch {}
     }
     return removed;
   }
 }
 
-// Ключ переживает рестарт, иначе все старые вложения превратятся в тыкву.
 export function loadKey(dataDir: string, fromEnv?: string): Buffer {
   if (fromEnv) {
     const key = Buffer.from(fromEnv, 'hex');

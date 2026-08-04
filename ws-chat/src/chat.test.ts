@@ -345,7 +345,6 @@ describe('Hub: вход и выход', () => {
 
   async function auth(client: TestClient, body: object): Promise<void> {
     hub.handle(client, JSON.stringify({ type: 'auth', ...body }));
-    // authenticate асинхронный: даём scrypt досчитать.
     await vi.waitFor(() => {
       expect(client.inbox.some((m) => m.type === 'welcome' || m.type === 'auth-error')).toBe(true);
     });
@@ -421,7 +420,6 @@ describe('Hub: вход и выход', () => {
     expect(guest.inbox.some((m) => m.type === 'logged-out')).toBe(true);
     expect(watcher.inbox.some((m) => m.type === 'purged' && m.nick === 'гость')).toBe(true);
 
-    // Ни сессия, ни ник за гостем больше не числятся.
     const returning = makeClient('returning');
     await auth(returning, { mode: 'resume', token });
     expect(returning.nick).toBeNull();
