@@ -1,8 +1,8 @@
-import { describe, it, expect, beforeEach } from 'vitest';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { mkdtempSync, rmSync, writeFileSync, existsSync, readdirSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { Store, channelKey, dmKey, recipientsOf } from './store.ts';
+import { Store, channelKey, dmKey, recipientsOf, CHANNEL_LIMIT } from './store.ts';
 
 describe('Store', () => {
   let store: Store;
@@ -55,11 +55,11 @@ describe('Store', () => {
     const a = store.addChannelMessage('general', 'alice', 'original');
     const b = store.addChannelMessage('general', 'bob', 'reply', {
       replyTo: a.id,
-      attachments: [{ id: 'deadbeef00112233.png', name: 'pic.png', size: 10, mime: 'image/png' }],
+      attachments: [{ id: 'deadbeef001122334455667788990011', name: 'pic.png', size: 10, mime: 'image/png' }],
     });
     expect(b.replyTo).toEqual({ id: a.id, from: 'alice', text: 'original' });
     expect(b.attachments).toEqual([
-      { url: '/uploads/deadbeef00112233.png', name: 'pic.png', size: 10, mime: 'image/png' },
+      { url: '/uploads/deadbeef001122334455667788990011', name: 'pic.png', size: 10, mime: 'image/png' },
     ]);
   });
 
@@ -108,6 +108,27 @@ describe('Store', () => {
     }
   });
 
+  it('не плодит каналы без предела', () => {
+    for (let i = 0; i < 200; i++) store.createChannel(`c${i}`);
+    expect(store.listChannels()).toHaveLength(CHANNEL_LIMIT);
+  });
+
+  it('удаляет канал вместе с историей, но не последний', () => {
+    store.addChannelMessage('random', 'alice', 'пока');
+    expect(store.removeChannel('random')).toBe(true);
+    expect(store.hasChannel('random')).toBe(false);
+    expect(store.history(channelKey('random'))).toHaveLength(0);
+
+    expect(store.removeChannel('general')).toBe(false);
+    expect(store.listChannels()).toEqual(['general']);
+  });
+
+  it('регистр ника не мешает править и удалять своё сообщение', () => {
+    const m = store.addChannelMessage('general', 'Alice', 'typo');
+    expect(store.edit(m.id, 'alice', 'fixed')?.text).toBe('fixed');
+    expect(store.remove(m.id, 'ALICE')).not.toBeNull();
+  });
+
   it('переключает реакцию: добавляет и убирает', () => {
     const m = store.addChannelMessage('general', 'alice', 'hey');
     store.toggleReaction(m.id, 'bob', '🔥');
@@ -117,5 +138,67 @@ describe('Store', () => {
     expect(store.history(channelKey('general'))[0].reactions).toEqual({ '🔥': ['carol'] });
     store.toggleReaction(m.id, 'carol', '🔥');
     expect(store.history(channelKey('general'))[0].reactions).toBeUndefined();
+  });
+});
+
+describe('Store: персистентность', () => {
+  let dir: string;
+  let file: string;
+
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), 'ws-chat-'));
+    file = join(dir, 'store.json');
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('flush сохраняет то, что ещё висит в дебаунсе', () => {
+    const store = new Store(file);
+    store.addChannelMessage('general', 'alice', 'до выключения');
+    // Без flush сообщение живёт только в памяти — так оно и терялось на Ctrl+C.
+    expect(existsSync(file)).toBe(false);
+
+    store.flush();
+    expect(new Store(file).history(channelKey('general')).map((m) => m.text)).toEqual(['до выключения']);
+  });
+
+  it('flush без изменений не трогает файл и не оставляет временных', () => {
+    const store = new Store(file);
+    store.addChannelMessage('general', 'alice', 'once');
+    store.flush();
+    const first = readFileSync(file, 'utf8');
+
+    store.flush();
+    expect(readFileSync(file, 'utf8')).toBe(first);
+    expect(readdirSync(dir)).toEqual(['store.json']);
+  });
+
+  it('не затирает битый файл, а откладывает его рядом', () => {
+    writeFileSync(file, '{"messages": [{"id": 1,');
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const store = new Store(file);
+    store.addChannelMessage('general', 'alice', 'новая жизнь');
+    store.flush();
+
+    const corrupt = readdirSync(dir).filter((name) => name.includes('.corrupt-'));
+    expect(corrupt).toHaveLength(1);
+    expect(readFileSync(join(dir, corrupt[0]), 'utf8')).toBe('{"messages": [{"id": 1,');
+    expect(new Store(file).history(channelKey('general')).map((m) => m.text)).toEqual(['новая жизнь']);
+  });
+
+  it('под непрерывным потоком сообщений всё равно сохраняется', async () => {
+    const store = new Store(file);
+    for (let i = 0; i < 5; i++) {
+      store.addChannelMessage('general', 'alice', `msg ${i}`);
+      await new Promise((resolve) => setTimeout(resolve, 120));
+    }
+    // Дебаунс со сбросом таймера на каждом сообщении не дал бы записи ни разу.
+    expect(existsSync(file)).toBe(true);
+    store.flush();
+    expect(new Store(file).history(channelKey('general'))).toHaveLength(5);
   });
 });
