@@ -4,6 +4,9 @@ export const SIGNAL_MAX = 16384;
 export const CHANNEL_MAX = 24;
 export const ATTACH_MAX = 10;
 export const ATTACH_SIZE_MAX = 26_214_400;
+// Потолок на приём: сам минимум проверяет Auth, здесь только защита от того,
+// чтобы килобайтными «паролями» грузили KDF.
+export const PASSWORD_LIMIT = 200;
 
 // id блоба выводится из его содержимого на сервере (см. blobs.ts), поэтому он
 // строго 32 hex-символа — ни расширения, ни чего-либо клиентского в нём нет.
@@ -48,8 +51,11 @@ export interface WireMessage {
   attachments?: Attachment[];
 }
 
+export type AuthMode = 'guest' | 'register' | 'login' | 'resume';
+
 export type ClientMessage =
-  | { type: 'hello'; nick: string; resume?: string }
+  | { type: 'auth'; mode: AuthMode; nick?: string; password?: string; token?: string }
+  | { type: 'logout' }
   | { type: 'channel-create'; name: string }
   | { type: 'channel-delete'; name: string }
   | { type: 'voice-channel-delete'; name: string }
@@ -70,9 +76,13 @@ export type ClientMessage =
   | { type: 'call-signal'; to: string; data: unknown };
 
 export type ServerMessage =
-  // token — ключ к HTTP-ручкам вложений; он живёт ровно столько же, сколько
-  // сокет, и передаётся заголовком, а не в URL.
-  | { type: 'welcome'; nick: string; token: string }
+  // token — ключ и к сессии, и к HTTP-ручкам вложений; передаётся заголовком,
+  // а не в URL.
+  | { type: 'welcome'; nick: string; token: string; guest: boolean }
+  | { type: 'auth-error'; reason: string; retryAfterMs?: number }
+  | { type: 'logged-out' }
+  // Пользователь стёрт: клиенты выкидывают его сообщения из памяти.
+  | { type: 'purged'; nick: string }
   | { type: 'channels'; list: string[] }
   | { type: 'presence'; users: string[] }
   | { type: 'dms'; list: { nick: string; ts: number }[] }
@@ -141,11 +151,21 @@ export function parseClientMessage(raw: string): ClientMessage | null {
   if (!isRecord(data)) return null;
 
   switch (data.type) {
-    case 'hello': {
+    case 'auth': {
+      const mode = data.mode;
+      if (mode !== 'guest' && mode !== 'register' && mode !== 'login' && mode !== 'resume') return null;
+      if (mode === 'resume') {
+        return typeof data.token === 'string' && data.token.length <= 128 ? { type: 'auth', mode, token: data.token } : null;
+      }
       if (!isBoundedString(data.nick, NICK_MAX)) return null;
-      const resume = typeof data.resume === 'string' && data.resume.length <= 128 ? data.resume : undefined;
-      return { type: 'hello', nick: data.nick.trim(), resume };
+      if (mode === 'guest') return { type: 'auth', mode, nick: data.nick.trim() };
+      // Длину пароля не режем молча: слишком короткий или слишком длинный
+      // должен получить внятный ответ, а не «некорректное сообщение».
+      if (typeof data.password !== 'string' || data.password.length > PASSWORD_LIMIT) return null;
+      return { type: 'auth', mode, nick: data.nick.trim(), password: data.password };
     }
+    case 'logout':
+      return { type: 'logout' };
     case 'channel-create':
       return isValidChannelName(data.name) ? { type: 'channel-create', name: data.name } : null;
     case 'channel-delete':

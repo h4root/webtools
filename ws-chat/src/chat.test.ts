@@ -1,6 +1,10 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { Hub, type Client } from './chat.ts';
-import { Store } from './store.ts';
+import { Store, channelKey } from './store.ts';
+import { Auth } from './auth.ts';
 import type { ServerMessage } from './protocol.ts';
 
 type TestClient = Client & { inbox: ServerMessage[]; closed: boolean };
@@ -65,13 +69,15 @@ describe('Hub', () => {
     expect(channelsList(a)).toContain('general');
   });
 
-  it('отклоняет занятый ник без учёта регистра', () => {
+  it('вытесняет прошлое соединение того же аккаунта', () => {
     const a = makeClient('a');
     const b = makeClient('b');
     hub.join(a, 'alice');
     hub.join(b, 'Alice');
-    expect(b.nick).toBeNull();
-    expect(b.inbox.at(-1)).toEqual({ type: 'error', reason: 'Ник уже занят' });
+
+    expect(b.nick).toBe('Alice');
+    expect(a.closed).toBe(true);
+    expect(lastPresence(b)).toEqual(['Alice']);
   });
 
   it('рассылает сообщение канала всем и присваивает id', () => {
@@ -244,33 +250,6 @@ describe('Hub', () => {
     expect(lastMessage(a)?.attachments).toHaveLength(1);
   });
 
-  it('не отдаёт занятый ник тому, у кого нет токена прошлой сессии', () => {
-    const a = makeClient('a');
-    const impostor = makeClient('impostor');
-    hub.join(a, 'alice');
-
-    hub.handle(impostor, JSON.stringify({ type: 'hello', nick: 'alice' }));
-    hub.handle(impostor, JSON.stringify({ type: 'hello', nick: 'alice', resume: 'угадайка' }));
-
-    expect(impostor.nick).toBeNull();
-    expect(impostor.inbox.filter((m) => m.type === 'error' && m.reason === 'Ник уже занят')).toHaveLength(2);
-    expect(a.closed).toBe(false);
-  });
-
-  it('пускает переподключение с тем же ником по токену прошлой сессии', () => {
-    const a = makeClient('a');
-    hub.join(a, 'alice');
-    const welcome = a.inbox.find((m) => m.type === 'welcome');
-    const token = welcome?.type === 'welcome' ? welcome.token : '';
-
-    const again = makeClient('a2');
-    hub.handle(again, JSON.stringify({ type: 'hello', nick: 'alice', resume: token }));
-
-    expect(again.nick).toBe('alice');
-    expect(a.closed).toBe(true);
-    expect(lastPresence(again)).toEqual(['alice']);
-  });
-
   it('берёт размер и mime вложения из блоба, а не из слов клиента', () => {
     const blobs = {
       stat: (id: string) => (id === 'a'.repeat(32) ? { id, size: 4242, mime: 'image/png' } : null),
@@ -342,10 +321,132 @@ describe('Hub', () => {
     expect(a.inbox.some((m) => m.type === 'message')).toBe(false);
   });
 
-  it('требует hello до отправки сообщений', () => {
+  it('требует входа до отправки сообщений', () => {
     const a = makeClient('a');
     hub.handle(a, JSON.stringify({ type: 'message', channel: 'general', text: 'hi' }));
-    expect(a.inbox.at(-1)).toEqual({ type: 'error', reason: 'Сначала представьтесь (hello)' });
+    expect(a.inbox.at(-1)).toEqual({ type: 'error', reason: 'Сначала войди' });
+  });
+});
+
+describe('Hub: вход и выход', () => {
+  let dir: string;
+  let store: Store;
+  let hub: Hub;
+
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), 'ws-chat-hub-auth-'));
+    store = new Store();
+    hub = new Hub(store, undefined, new Auth(dir));
+  });
+
+  afterEach(() => {
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  async function auth(client: TestClient, body: object): Promise<void> {
+    hub.handle(client, JSON.stringify({ type: 'auth', ...body }));
+    // authenticate асинхронный: даём scrypt досчитать.
+    await vi.waitFor(() => {
+      expect(client.inbox.some((m) => m.type === 'welcome' || m.type === 'auth-error')).toBe(true);
+    });
+  }
+
+  function welcomeOf(client: TestClient) {
+    const message = client.inbox.find((m) => m.type === 'welcome');
+    return message?.type === 'welcome' ? message : undefined;
+  }
+
+  it('пускает гостя без пароля', async () => {
+    const a = makeClient('a');
+    await auth(a, { mode: 'guest', nick: 'гость' });
+
+    expect(a.nick).toBe('гость');
+    expect(welcomeOf(a)).toMatchObject({ nick: 'гость', guest: true });
+  });
+
+  it('регистрирует с паролем и пускает обратно по нему', async () => {
+    const a = makeClient('a');
+    await auth(a, { mode: 'register', nick: 'alice', password: 'достаточно-длинный' });
+    expect(welcomeOf(a)).toMatchObject({ nick: 'alice', guest: false });
+
+    const again = makeClient('a2');
+    await auth(again, { mode: 'login', nick: 'alice', password: 'достаточно-длинный' });
+    expect(again.nick).toBe('alice');
+  });
+
+  it('не пускает по неверному паролю и не занимает чужой ник гостем', async () => {
+    const a = makeClient('a');
+    await auth(a, { mode: 'register', nick: 'alice', password: 'достаточно-длинный' });
+
+    const impostor = makeClient('impostor');
+    await auth(impostor, { mode: 'login', nick: 'alice', password: 'наугад' });
+    expect(impostor.nick).toBeNull();
+    expect(impostor.inbox.at(-1)).toMatchObject({ type: 'auth-error', reason: 'Неверный ник или пароль' });
+
+    const guest = makeClient('guest');
+    await auth(guest, { mode: 'guest', nick: 'ALICE' });
+    expect(guest.nick).toBeNull();
+    expect(guest.inbox.at(-1)).toMatchObject({ type: 'auth-error' });
+  });
+
+  it('поднимает сессию по токену и не ведётся на чужой', async () => {
+    const a = makeClient('a');
+    await auth(a, { mode: 'guest', nick: 'гость' });
+    const token = welcomeOf(a)!.token;
+
+    const again = makeClient('a2');
+    await auth(again, { mode: 'resume', token });
+    expect(again.nick).toBe('гость');
+    expect(a.closed).toBe(true);
+
+    const stranger = makeClient('stranger');
+    await auth(stranger, { mode: 'resume', token: 'подобранный' });
+    expect(stranger.nick).toBeNull();
+    expect(stranger.inbox.at(-1)).toMatchObject({ type: 'auth-error', reason: 'Сессия истекла' });
+  });
+
+  it('выход гостя стирает его написанное и освобождает ник', async () => {
+    const guest = makeClient('guest');
+    const watcher = makeClient('watcher');
+    await auth(guest, { mode: 'guest', nick: 'гость' });
+    await auth(watcher, { mode: 'guest', nick: 'наблюдатель' });
+    const token = welcomeOf(guest)!.token;
+
+    hub.handle(guest, JSON.stringify({ type: 'message', channel: 'general', text: 'скоро исчезнет' }));
+    expect(store.history(channelKey('general'))).toHaveLength(1);
+
+    hub.handle(guest, JSON.stringify({ type: 'logout' }));
+
+    expect(store.history(channelKey('general'))).toHaveLength(0);
+    expect(guest.inbox.some((m) => m.type === 'logged-out')).toBe(true);
+    expect(watcher.inbox.some((m) => m.type === 'purged' && m.nick === 'гость')).toBe(true);
+
+    // Ни сессия, ни ник за гостем больше не числятся.
+    const returning = makeClient('returning');
+    await auth(returning, { mode: 'resume', token });
+    expect(returning.nick).toBeNull();
+
+    const newcomer = makeClient('newcomer');
+    await auth(newcomer, { mode: 'guest', nick: 'гость' });
+    expect(newcomer.nick).toBe('гость');
+  });
+
+  it('выход по паролю гасит сессию, но не трогает написанное', async () => {
+    const a = makeClient('a');
+    await auth(a, { mode: 'register', nick: 'alice', password: 'достаточно-длинный' });
+    const token = welcomeOf(a)!.token;
+    hub.handle(a, JSON.stringify({ type: 'message', channel: 'general', text: 'останется' }));
+
+    hub.handle(a, JSON.stringify({ type: 'logout' }));
+    expect(store.history(channelKey('general')).map((m) => m.text)).toEqual(['останется']);
+
+    const returning = makeClient('returning');
+    await auth(returning, { mode: 'resume', token });
+    expect(returning.nick).toBeNull();
+
+    const back = makeClient('back');
+    await auth(back, { mode: 'login', nick: 'alice', password: 'достаточно-длинный' });
+    expect(back.nick).toBe('alice');
   });
 });
 

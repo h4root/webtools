@@ -1,10 +1,13 @@
 import { NICK_MAX, parseClientMessage, type AttachmentRef, type ClientMessage, type ServerMessage } from './protocol.ts';
 import { Store, channelKey, dmKey, recipientsOf } from './store.ts';
+import type { Auth } from './auth.ts';
 
 export interface Client {
   id: string;
   nick: string | null;
   token: string;
+  guest?: boolean;
+  authPending?: boolean;
   send(message: ServerMessage): void;
   close?(): void;
 }
@@ -14,8 +17,22 @@ export interface BlobLookup {
   stat(id: string): { id: string; size: number; mime: string } | null;
 }
 
+const AUTH_ERRORS: Record<string, string> = {
+  'nick-taken': 'Ник уже занят',
+  'nick-registered': 'Этот ник зарегистрирован — войди с паролем',
+  'no-account': 'Неверный ник или пароль',
+  'bad-password': 'Неверный ник или пароль',
+  'weak-password': 'Пароль должен быть не короче 8 символов',
+  'locked': 'Слишком много попыток, подожди',
+  'guest-has-no-password': 'Этот ник занят гостем',
+};
+
 const NICK_PATTERN = /^[\p{L}\p{N} _.-]+$/u;
 const NAME_MAX = 255;
+
+function isValidNick(nick: string): boolean {
+  return nick.length > 0 && nick.length <= NICK_MAX && NICK_PATTERN.test(nick);
+}
 
 export class Hub {
   private readonly clients = new Set<Client>();
@@ -24,38 +41,87 @@ export class Hub {
   constructor(
     private readonly store: Store = new Store(),
     private readonly blobs?: BlobLookup,
+    private readonly auth?: Auth,
   ) {}
 
-  join(client: Client, nick: string, resume?: string): void {
+  // Вход разложен на две части: authenticate решает, кто это, join впускает.
+  private async authenticate(client: Client, message: Extract<ClientMessage, { type: 'auth' }>): Promise<void> {
+    if (message.mode === 'resume') {
+      const session = this.auth!.resume(message.token!);
+      if (!session) {
+        client.send({ type: 'auth-error', reason: 'Сессия истекла' });
+        return;
+      }
+      this.join(client, session.nick, message.token!, session.guest);
+      return;
+    }
+
+    const nick = message.nick!.trim();
+    if (!isValidNick(nick)) {
+      client.send({ type: 'auth-error', reason: 'Недопустимый ник' });
+      return;
+    }
+
+    const result =
+      message.mode === 'guest'
+        ? await this.auth!.registerGuest(nick)
+        : message.mode === 'register'
+          ? await this.auth!.register(nick, message.password!)
+          : await this.auth!.login(nick, message.password!);
+
+    if (!result.ok) {
+      client.send({
+        type: 'auth-error',
+        reason: AUTH_ERRORS[result.error!] ?? 'Не удалось войти',
+        retryAfterMs: result.retryAfterMs,
+      });
+      return;
+    }
+    this.join(client, result.nick!, result.token!, result.guest!);
+  }
+
+  join(client: Client, nick: string, token = client.token, guest = false): void {
     const trimmed = nick.trim();
-    if (trimmed.length === 0 || trimmed.length > NICK_MAX || !NICK_PATTERN.test(trimmed)) {
-      client.send({ type: 'error', reason: 'Недопустимый ник' });
+    if (!isValidNick(trimmed)) {
+      client.send({ type: 'auth-error', reason: 'Недопустимый ник' });
       return;
     }
     const previous = this.findByNick(trimmed);
     if (previous) {
-      // Реконнект после обрыва: сервер ещё не заметил, что старый сокет мёртв
-      // (хартбит раз в 30 с), и без вытеснения клиент застревал на «Ник уже
-      // занят» навсегда. Но вытеснять по одному лишь совпадению ника нельзя —
-      // так любой желающий выбивал бы других из чата. Пускаем только с токеном
-      // прошлой сессии: он есть лишь у того, кто ею и был.
-      if (resume !== previous.token) {
-        client.send({ type: 'error', reason: 'Ник уже занят' });
-        return;
-      }
+      // Один и тот же аккаунт открыт в двух местах: вытесняем старое
+      // соединение. Раньше это решал ник плюс токен сокета, теперь — сессия,
+      // так что чужой ник этим не отнять.
       this.leave(previous);
       previous.close?.();
     }
 
     client.nick = trimmed;
+    client.token = token;
+    client.guest = guest;
     this.clients.add(client);
-    client.send({ type: 'welcome', nick: trimmed, token: client.token });
+    client.send({ type: 'welcome', nick: trimmed, token, guest });
     client.send({ type: 'channels', list: this.store.listChannels() });
     client.send({ type: 'dms', list: this.store.dmPartners(trimmed) });
     client.send({ type: 'voice-channels', list: this.store.listVoiceChannels() });
     client.send({ type: 'voice-presence', channels: this.voicePresenceMap() });
     this.broadcast({ type: 'system', text: `${trimmed} присоединился` });
     this.broadcastPresence();
+  }
+
+  // Выход гостя стирает его целиком: аккаунт, все сессии и всё написанное.
+  // Для аккаунта с паролем гасится только текущая сессия.
+  logout(client: Client): void {
+    const nick = client.nick!;
+    const guest = client.guest;
+    this.auth?.revoke(client.token);
+    if (guest) {
+      this.auth?.removeAccount(nick);
+      this.store.purgeUser(nick);
+    }
+
+    client.send({ type: 'logged-out' });
+    this.leave(client);
+    if (guest) this.broadcast({ type: 'purged', nick });
   }
 
   leave(client: Client): void {
@@ -77,13 +143,25 @@ export class Hub {
       return;
     }
 
-    if (message.type === 'hello') {
-      if (!client.nick) this.join(client, message.nick, message.resume);
+    if (message.type === 'auth') {
+      if (client.nick || !this.auth) return;
+      // scrypt считается заметное время: без этого замка один сокет мог бы
+      // запустить сколько угодно параллельных проверок пароля.
+      if (client.authPending) return;
+      client.authPending = true;
+      void this.authenticate(client, message).finally(() => {
+        client.authPending = false;
+      });
       return;
     }
 
     if (!client.nick || !this.clients.has(client)) {
-      client.send({ type: 'error', reason: 'Сначала представьтесь (hello)' });
+      client.send({ type: 'error', reason: 'Сначала войди' });
+      return;
+    }
+
+    if (message.type === 'logout') {
+      this.logout(client);
       return;
     }
 
