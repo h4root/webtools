@@ -1,5 +1,5 @@
-import { readFileSync, writeFileSync, mkdirSync, renameSync, unlinkSync } from 'node:fs';
-import { dirname } from 'node:path';
+import { readFileSync, renameSync } from 'node:fs';
+import { writeJsonAtomic } from './jsonfile.ts';
 import type { AttachmentRef, Reactions, ReplyRef, WireMessage } from './protocol.ts';
 
 export const DEFAULT_CHANNELS = ['general', 'random'];
@@ -124,31 +124,18 @@ export class Store {
     }, SAVE_DEBOUNCE_MS);
   }
 
-  // Запись через временный файл: оборванный writeFileSync оставил бы обрезанный
-  // JSON, а его уже не отличить от валидного — вся история ушла бы в мусор.
   private save(): void {
     if (!this.filePath || this.persistBlocked || !this.dirty) return;
-    const tmp = `${this.filePath}.tmp`;
     try {
-      mkdirSync(dirname(this.filePath), { recursive: true });
-      writeFileSync(
-        tmp,
-        JSON.stringify({
-          channels: this.channels,
-          voiceChannels: this.voiceChannels,
-          messages: this.messages,
-          nextId: this.nextId,
-        }),
-      );
-      renameSync(tmp, this.filePath);
+      writeJsonAtomic(this.filePath, {
+        channels: this.channels,
+        voiceChannels: this.voiceChannels,
+        messages: this.messages,
+        nextId: this.nextId,
+      });
       this.dirty = false;
     } catch (error) {
       console.error(`store: не сохранить ${this.filePath}: ${(error as Error).message}`);
-      try {
-        unlinkSync(tmp);
-      } catch {
-        /* временного файла может и не быть */
-      }
     }
   }
 
@@ -305,6 +292,40 @@ export class Store {
     if (Object.keys(reactions).length === 0) delete message.reactions;
     this.scheduleSave();
     return message;
+  }
+
+  // Гость уходит — от него не остаётся ничего: сообщения в каналах, вся личная
+  // переписка и цитаты его текста в чужих ответах. Снапшот ответа специально
+  // переживает обычное удаление сообщения, но здесь это была бы дыра: текст
+  // стёртого пользователя продолжал бы висеть в ленте.
+  purgeUser(nick: string): { removed: number } {
+    const lower = nick.toLowerCase();
+    const before = this.messages.length;
+    const gone = new Set<number>();
+
+    this.messages = this.messages.filter((message) => {
+      const mine = message.from.toLowerCase() === lower;
+      const inMyDm = message.to !== undefined && (mine || message.to.toLowerCase() === lower);
+      if (mine || inMyDm) {
+        gone.add(message.id);
+        return false;
+      }
+      return true;
+    });
+
+    for (const message of this.messages) {
+      if (message.replyTo && gone.has(message.replyTo.id)) delete message.replyTo;
+      if (!message.reactions) continue;
+      for (const [emoji, users] of Object.entries(message.reactions)) {
+        const left = users.filter((user) => user.toLowerCase() !== lower);
+        if (left.length) message.reactions[emoji] = left;
+        else delete message.reactions[emoji];
+      }
+      if (Object.keys(message.reactions).length === 0) delete message.reactions;
+    }
+
+    if (before !== this.messages.length) this.scheduleSave();
+    return { removed: before - this.messages.length };
   }
 
   // Собеседники, с которыми у ника есть переписка, свежие сверху. Без этого

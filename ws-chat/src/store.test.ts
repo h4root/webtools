@@ -123,6 +123,26 @@ describe('Store', () => {
     expect(store.listChannels()).toEqual(['general']);
   });
 
+  it('purgeUser уносит сообщения, ЛС, реакции и цитаты ушедшего', () => {
+    const guestMsg = store.addChannelMessage('general', 'гость', 'меня тут не было');
+    store.addDirectMessage('гость', 'alice', 'личное');
+    store.addDirectMessage('alice', 'гость', 'ответ в личку');
+    const quote = store.addChannelMessage('general', 'alice', 'согласен', { replyTo: guestMsg.id });
+    const keep = store.addChannelMessage('general', 'alice', 'не трогать');
+    store.toggleReaction(keep.id, 'гость', '🔥');
+    store.toggleReaction(keep.id, 'bob', '🔥');
+
+    expect(store.purgeUser('ГОСТЬ').removed).toBe(3);
+
+    const left = store.history(channelKey('general'));
+    expect(left.map((m) => m.text)).toEqual(['согласен', 'не трогать']);
+    // Цитата хранила текст гостя — иначе он остался бы висеть в чужом ответе.
+    expect(left.find((m) => m.id === quote.id)?.replyTo).toBeUndefined();
+    expect(left.find((m) => m.id === keep.id)?.reactions).toEqual({ '🔥': ['bob'] });
+    expect(store.history(dmKey('гость', 'alice'))).toHaveLength(0);
+    expect(store.dmPartners('alice')).toEqual([]);
+  });
+
   it('регистр ника не мешает править и удалять своё сообщение', () => {
     const m = store.addChannelMessage('general', 'Alice', 'typo');
     expect(store.edit(m.id, 'alice', 'fixed')?.text).toBe('fixed');
