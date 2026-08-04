@@ -1,35 +1,57 @@
-import { NICK_MAX, parseClientMessage, type ClientMessage, type ServerMessage } from './protocol.ts';
+import { NICK_MAX, parseClientMessage, type AttachmentRef, type ClientMessage, type ServerMessage } from './protocol.ts';
 import { Store, channelKey, dmKey, recipientsOf } from './store.ts';
 
 export interface Client {
   id: string;
   nick: string | null;
+  token: string;
   send(message: ServerMessage): void;
+  close?(): void;
+}
+
+// Ровно то, что Hub спрашивает у хранилища блобов: настоящие размер и mime.
+export interface BlobLookup {
+  stat(id: string): { id: string; size: number; mime: string } | null;
 }
 
 const NICK_PATTERN = /^[\p{L}\p{N} _.-]+$/u;
+const NAME_MAX = 255;
 
 export class Hub {
   private readonly clients = new Set<Client>();
   private readonly voiceOf = new Map<Client, string>();
 
-  constructor(private readonly store: Store = new Store()) {}
+  constructor(
+    private readonly store: Store = new Store(),
+    private readonly blobs?: BlobLookup,
+  ) {}
 
-  join(client: Client, nick: string): void {
+  join(client: Client, nick: string, resume?: string): void {
     const trimmed = nick.trim();
     if (trimmed.length === 0 || trimmed.length > NICK_MAX || !NICK_PATTERN.test(trimmed)) {
       client.send({ type: 'error', reason: 'Недопустимый ник' });
       return;
     }
-    if (this.nickTaken(trimmed)) {
-      client.send({ type: 'error', reason: 'Ник уже занят' });
-      return;
+    const previous = this.findByNick(trimmed);
+    if (previous) {
+      // Реконнект после обрыва: сервер ещё не заметил, что старый сокет мёртв
+      // (хартбит раз в 30 с), и без вытеснения клиент застревал на «Ник уже
+      // занят» навсегда. Но вытеснять по одному лишь совпадению ника нельзя —
+      // так любой желающий выбивал бы других из чата. Пускаем только с токеном
+      // прошлой сессии: он есть лишь у того, кто ею и был.
+      if (resume !== previous.token) {
+        client.send({ type: 'error', reason: 'Ник уже занят' });
+        return;
+      }
+      this.leave(previous);
+      previous.close?.();
     }
 
     client.nick = trimmed;
     this.clients.add(client);
-    client.send({ type: 'welcome', nick: trimmed });
+    client.send({ type: 'welcome', nick: trimmed, token: client.token });
     client.send({ type: 'channels', list: this.store.listChannels() });
+    client.send({ type: 'dms', list: this.store.dmPartners(trimmed) });
     client.send({ type: 'voice-channels', list: this.store.listVoiceChannels() });
     client.send({ type: 'voice-presence', channels: this.voicePresenceMap() });
     this.broadcast({ type: 'system', text: `${trimmed} присоединился` });
@@ -56,7 +78,7 @@ export class Hub {
     }
 
     if (message.type === 'hello') {
-      if (!client.nick) this.join(client, message.nick);
+      if (!client.nick) this.join(client, message.nick, message.resume);
       return;
     }
 
@@ -68,6 +90,12 @@ export class Hub {
     switch (message.type) {
       case 'channel-create':
         this.createChannel(client, message.name);
+        break;
+      case 'channel-delete':
+        this.deleteChannel(client, message.name);
+        break;
+      case 'voice-channel-delete':
+        this.deleteVoiceChannel(client, message.name);
         break;
       case 'message':
         this.sendMessage(client, message);
@@ -125,11 +153,53 @@ export class Hub {
       this.broadcast({ type: 'channels', list: this.store.listChannels() });
       this.broadcast({ type: 'system', text: `Создан канал #${name}` });
     } else {
-      client.send({ type: 'error', reason: 'Канал уже существует' });
+      client.send({ type: 'error', reason: 'Канал уже существует или их слишком много' });
     }
   }
 
+  private deleteChannel(client: Client, name: string): void {
+    if (this.store.removeChannel(name)) {
+      this.broadcast({ type: 'channels', list: this.store.listChannels() });
+      this.broadcast({ type: 'system', text: `Канал #${name} удалён вместе с историей` });
+    } else {
+      client.send({ type: 'error', reason: 'Канал не удалить' });
+    }
+  }
+
+  private deleteVoiceChannel(client: Client, name: string): void {
+    if (!this.store.removeVoiceChannel(name)) {
+      client.send({ type: 'error', reason: 'Канал не удалить' });
+      return;
+    }
+    // Тех, кто был внутри, надо вывести — канала больше нет.
+    for (const [peer, channel] of [...this.voiceOf]) {
+      if (channel === name) this.voiceOf.delete(peer);
+    }
+    this.broadcast({ type: 'voice-channels', list: this.store.listVoiceChannels() });
+    this.broadcastVoicePresence();
+    this.broadcast({ type: 'system', text: `Голосовой канал ${name} удалён` });
+  }
+
+  // Размер и mime, присланные клиентом, — просто его слова. Берём настоящие из
+  // блоба, а ссылки на несуществующие блобы выкидываем.
+  private resolveAttachments(refs: AttachmentRef[] | undefined): AttachmentRef[] | undefined {
+    if (!refs?.length) return undefined;
+    const out: AttachmentRef[] = [];
+    for (const ref of refs) {
+      const real = this.blobs ? this.blobs.stat(ref.id) : { id: ref.id, size: ref.size, mime: ref.mime };
+      if (!real) continue;
+      out.push({ id: real.id, size: real.size, mime: real.mime, name: ref.name.slice(0, NAME_MAX) });
+    }
+    return out.length ? out : undefined;
+  }
+
   private sendMessage(client: Client, message: Extract<ClientMessage, { type: 'message' }>): void {
+    const attachments = this.resolveAttachments(message.attachments);
+    if (!message.text && !attachments) {
+      client.send({ type: 'error', reason: 'Вложение не найдено' });
+      return;
+    }
+
     if (message.channel) {
       if (!this.store.hasChannel(message.channel)) {
         client.send({ type: 'error', reason: 'Нет такого канала' });
@@ -137,22 +207,21 @@ export class Hub {
       }
       const wire = this.store.addChannelMessage(message.channel, client.nick!, message.text, {
         replyTo: message.replyTo,
-        attachments: message.attachments,
+        attachments,
       });
       this.broadcast({ type: 'message', msg: wire });
       return;
     }
 
+    // Адресата может не быть в сети: сообщение всё равно ложится в историю и
+    // дожидается его там. Раньше офлайн-собеседнику написать было нельзя вовсе.
     const target = this.findByNick(message.to!);
-    if (!target) {
-      client.send({ type: 'error', reason: `${message.to} не в сети` });
-      return;
-    }
-    const wire = this.store.addDirectMessage(client.nick!, target.nick!, message.text, {
+    const to = target?.nick ?? message.to!;
+    const wire = this.store.addDirectMessage(client.nick!, to, message.text, {
       replyTo: message.replyTo,
-      attachments: message.attachments,
+      attachments,
     });
-    this.sendToNicks([client.nick!, target.nick!], { type: 'message', msg: wire });
+    this.sendToNicks([client.nick!, to], { type: 'message', msg: wire });
   }
 
   private sendHistory(client: Client, message: Extract<ClientMessage, { type: 'history' }>): void {
@@ -245,14 +314,6 @@ export class Hub {
     const lower = toNick.toLowerCase();
     const target = [...this.voiceOf].find(([c, ch]) => ch === channel && c.nick?.toLowerCase() === lower)?.[0];
     target?.send({ type: 'voice-signal', from: client.nick!, data });
-  }
-
-  private nickTaken(nick: string): boolean {
-    const lower = nick.toLowerCase();
-    for (const c of this.clients) {
-      if (c.nick?.toLowerCase() === lower) return true;
-    }
-    return false;
   }
 
   private onlineNicks(): string[] {

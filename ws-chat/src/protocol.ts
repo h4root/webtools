@@ -5,7 +5,9 @@ export const CHANNEL_MAX = 24;
 export const ATTACH_MAX = 10;
 export const ATTACH_SIZE_MAX = 26_214_400;
 
-const ATTACH_ID = /^[a-f0-9]{8,64}(\.[a-z0-9]{1,8})?$/;
+// id блоба выводится из его содержимого на сервере (см. blobs.ts), поэтому он
+// строго 32 hex-символа — ни расширения, ни чего-либо клиентского в нём нет.
+const ATTACH_ID = /^[a-f0-9]{32}$/;
 
 export const REACTIONS = ['👍', '❤️', '😂', '🔥', '🎉', '😮', '😢', '👀'];
 
@@ -47,8 +49,10 @@ export interface WireMessage {
 }
 
 export type ClientMessage =
-  | { type: 'hello'; nick: string }
+  | { type: 'hello'; nick: string; resume?: string }
   | { type: 'channel-create'; name: string }
+  | { type: 'channel-delete'; name: string }
+  | { type: 'voice-channel-delete'; name: string }
   | { type: 'message'; channel?: string; to?: string; text: string; replyTo?: number; attachments?: AttachmentRef[] }
   | { type: 'history'; channel?: string; to?: string }
   | { type: 'edit'; id: number; text: string }
@@ -66,9 +70,12 @@ export type ClientMessage =
   | { type: 'call-signal'; to: string; data: unknown };
 
 export type ServerMessage =
-  | { type: 'welcome'; nick: string }
+  // token — ключ к HTTP-ручкам вложений; он живёт ровно столько же, сколько
+  // сокет, и передаётся заголовком, а не в URL.
+  | { type: 'welcome'; nick: string; token: string }
   | { type: 'channels'; list: string[] }
   | { type: 'presence'; users: string[] }
+  | { type: 'dms'; list: { nick: string; ts: number }[] }
   | { type: 'message'; msg: WireMessage }
   | { type: 'history'; channel?: string; to?: string; messages: WireMessage[] }
   | { type: 'edited'; id: number; text: string }
@@ -134,10 +141,17 @@ export function parseClientMessage(raw: string): ClientMessage | null {
   if (!isRecord(data)) return null;
 
   switch (data.type) {
-    case 'hello':
-      return isBoundedString(data.nick, NICK_MAX) ? { type: 'hello', nick: data.nick.trim() } : null;
+    case 'hello': {
+      if (!isBoundedString(data.nick, NICK_MAX)) return null;
+      const resume = typeof data.resume === 'string' && data.resume.length <= 128 ? data.resume : undefined;
+      return { type: 'hello', nick: data.nick.trim(), resume };
+    }
     case 'channel-create':
       return isValidChannelName(data.name) ? { type: 'channel-create', name: data.name } : null;
+    case 'channel-delete':
+      return isValidChannelName(data.name) ? { type: 'channel-delete', name: data.name } : null;
+    case 'voice-channel-delete':
+      return isValidChannelName(data.name) ? { type: 'voice-channel-delete', name: data.name } : null;
     case 'message': {
       const target = parseTarget(data);
       if (!target) return null;

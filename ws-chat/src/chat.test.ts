@@ -1,17 +1,23 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { Hub, type Client } from './chat.ts';
+import { Store } from './store.ts';
 import type { ServerMessage } from './protocol.ts';
 
-type TestClient = Client & { inbox: ServerMessage[] };
+type TestClient = Client & { inbox: ServerMessage[]; closed: boolean };
 
 function makeClient(id: string): TestClient {
   const inbox: ServerMessage[] = [];
   return {
     id,
     nick: null,
+    token: `token-${id}`,
     inbox,
+    closed: false,
     send(message) {
       inbox.push(message);
+    },
+    close() {
+      this.closed = true;
     },
   };
 }
@@ -101,11 +107,31 @@ describe('Hub', () => {
     expect(lastMessage(b)).toMatchObject({ from: 'alice', to: 'Bob' });
   });
 
-  it('возвращает ошибку при ЛС несуществующему нику', () => {
+  it('принимает ЛС офлайн-адресату и отдаёт ему при следующем заходе', () => {
     const a = makeClient('a');
     hub.join(a, 'alice');
-    hub.handle(a, JSON.stringify({ type: 'message', to: 'ghost', text: 'hey' }));
-    expect(a.inbox.at(-1)).toEqual({ type: 'error', reason: 'ghost не в сети' });
+    hub.handle(a, JSON.stringify({ type: 'message', to: 'bob', text: 'вернёшься — прочитаешь' }));
+
+    expect(a.inbox.some((m) => m.type === 'error')).toBe(false);
+    expect(lastMessage(a)).toMatchObject({ from: 'alice', to: 'bob', text: 'вернёшься — прочитаешь' });
+
+    const b = makeClient('b');
+    hub.join(b, 'bob');
+    hub.handle(b, JSON.stringify({ type: 'history', to: 'alice' }));
+    const hist = b.inbox.at(-1);
+    expect(hist?.type === 'history' && hist.messages.map((m) => m.text)).toEqual(['вернёшься — прочитаешь']);
+  });
+
+  it('показывает собеседников по переписке, а не по тому, кто сейчас онлайн', () => {
+    const a = makeClient('a');
+    hub.join(a, 'alice');
+    hub.handle(a, JSON.stringify({ type: 'message', to: 'bob', text: 'привет' }));
+    hub.leave(a);
+
+    const again = makeClient('a2');
+    hub.join(again, 'alice');
+    const dms = again.inbox.find((m) => m.type === 'dms');
+    expect(dms?.type === 'dms' && dms.list.map((d) => d.nick)).toEqual(['bob']);
   });
 
   it('отдаёт историю канала', () => {
@@ -133,7 +159,7 @@ describe('Hub', () => {
     const a = makeClient('a');
     hub.join(a, 'alice');
     hub.handle(a, JSON.stringify({ type: 'channel-create', name: 'general' }));
-    expect(a.inbox.at(-1)).toEqual({ type: 'error', reason: 'Канал уже существует' });
+    expect(a.inbox.at(-1)).toEqual({ type: 'error', reason: 'Канал уже существует или их слишком много' });
   });
 
   it('редактирует своё сообщение и рассылает edited', () => {
@@ -196,12 +222,12 @@ describe('Hub', () => {
         channel: 'general',
         text: 're',
         replyTo: firstId,
-        attachments: [{ id: 'aabbccddeeff0011.png', name: 'p.png', size: 5, mime: 'image/png' }],
+        attachments: [{ id: 'aabbccddeeff00112233445566778899', name: 'p.png', size: 5, mime: 'image/png' }],
       }),
     );
     const msg = lastMessage(a)!;
     expect(msg.replyTo).toEqual({ id: firstId, from: 'alice', text: 'first' });
-    expect(msg.attachments?.[0].url).toBe('/uploads/aabbccddeeff0011.png');
+    expect(msg.attachments?.[0].url).toBe('/uploads/aabbccddeeff00112233445566778899');
   });
 
   it('принимает сообщение без текста, но с вложением', () => {
@@ -212,10 +238,80 @@ describe('Hub', () => {
       JSON.stringify({
         type: 'message',
         channel: 'general',
-        attachments: [{ id: '0011223344556677.png', name: 'p.png', size: 5, mime: 'image/png' }],
+        attachments: [{ id: '00112233445566778899aabbccddeeff', name: 'p.png', size: 5, mime: 'image/png' }],
       }),
     );
     expect(lastMessage(a)?.attachments).toHaveLength(1);
+  });
+
+  it('не отдаёт занятый ник тому, у кого нет токена прошлой сессии', () => {
+    const a = makeClient('a');
+    const impostor = makeClient('impostor');
+    hub.join(a, 'alice');
+
+    hub.handle(impostor, JSON.stringify({ type: 'hello', nick: 'alice' }));
+    hub.handle(impostor, JSON.stringify({ type: 'hello', nick: 'alice', resume: 'угадайка' }));
+
+    expect(impostor.nick).toBeNull();
+    expect(impostor.inbox.filter((m) => m.type === 'error' && m.reason === 'Ник уже занят')).toHaveLength(2);
+    expect(a.closed).toBe(false);
+  });
+
+  it('пускает переподключение с тем же ником по токену прошлой сессии', () => {
+    const a = makeClient('a');
+    hub.join(a, 'alice');
+    const welcome = a.inbox.find((m) => m.type === 'welcome');
+    const token = welcome?.type === 'welcome' ? welcome.token : '';
+
+    const again = makeClient('a2');
+    hub.handle(again, JSON.stringify({ type: 'hello', nick: 'alice', resume: token }));
+
+    expect(again.nick).toBe('alice');
+    expect(a.closed).toBe(true);
+    expect(lastPresence(again)).toEqual(['alice']);
+  });
+
+  it('берёт размер и mime вложения из блоба, а не из слов клиента', () => {
+    const blobs = {
+      stat: (id: string) => (id === 'a'.repeat(32) ? { id, size: 4242, mime: 'image/png' } : null),
+    };
+    const withBlobs = new Hub(new Store(), blobs);
+    const a = makeClient('a');
+    withBlobs.join(a, 'alice');
+
+    withBlobs.handle(
+      a,
+      JSON.stringify({
+        type: 'message',
+        channel: 'general',
+        attachments: [
+          { id: 'a'.repeat(32), name: 'p.png', size: 1, mime: 'text/html' },
+          { id: 'b'.repeat(32), name: 'нет такого.png', size: 5, mime: 'image/png' },
+        ],
+      }),
+    );
+
+    expect(lastMessage(a)?.attachments).toEqual([
+      { url: `/uploads/${'a'.repeat(32)}`, name: 'p.png', size: 4242, mime: 'image/png' },
+    ]);
+  });
+
+  it('отклоняет сообщение, у которого всё вложения оказались несуществующими', () => {
+    const withBlobs = new Hub(new Store(), { stat: () => null });
+    const a = makeClient('a');
+    withBlobs.join(a, 'alice');
+
+    withBlobs.handle(
+      a,
+      JSON.stringify({
+        type: 'message',
+        channel: 'general',
+        attachments: [{ id: 'c'.repeat(32), name: 'p.png', size: 5, mime: 'image/png' }],
+      }),
+    );
+
+    expect(lastMessage(a)).toBeUndefined();
+    expect(a.inbox.some((m) => m.type === 'error' && m.reason === 'Вложение не найдено')).toBe(true);
   });
 
   it('ретранслирует typing другим в канале, но не себе', () => {
