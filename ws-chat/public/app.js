@@ -51,8 +51,11 @@ const callHangup = document.getElementById('call-hangup');
 const callGrip = document.getElementById('call-grip');
 const sendBtn = document.getElementById('send-btn');
 const settingsEl = document.getElementById('settings');
+const connBanner = document.getElementById('conn-banner');
+const jumpNewBtn = document.getElementById('jump-new');
 
 const RECONNECT_MS = 2000;
+const RECONNECT_MAX_MS = 15000;
 const TYPING_SEND_MS = 2500;
 const TYPING_SHOW_MS = 5000;
 const REACTIONS = ['👍', '❤️', '😂', '🔥', '🎉', '😮', '😢', '👀'];
@@ -60,10 +63,14 @@ const REACTIONS = ['👍', '❤️', '😂', '🔥', '🎉', '😮', '😢', '�
 let activePicker = null;
 
 let myNick = '';
+let authToken = '';
 let pendingNick = '';
 let joined = false;
 let channels = [];
 let online = [];
+// Собеседники по переписке, а не по присутствию: диалог не должен исчезать из
+// сайдбара вместе с ушедшим человеком.
+let dmPartners = [];
 let active = { kind: 'channel', id: 'general' };
 let voiceChannel = null;
 let voiceChannels = [];
@@ -74,6 +81,10 @@ let replyingTo = null;
 let pendingAttachments = [];
 let ws = null;
 let reconnectTimer = null;
+let reconnectDelay = RECONNECT_MS;
+let helloTimer = null;
+let outbox = [];
+let missedBelow = 0;
 
 const conversations = new Map();
 const loaded = new Set();
@@ -96,8 +107,37 @@ function convOf(key) {
   return conversations.get(key);
 }
 
+// Сигналинг голоса и звонков после реконнекта уже бессмыслен — SDP/ICE
+// протухают вместе с соединением. Копим только то, что имеет смысл доставить
+// с задержкой.
+const QUEUEABLE = new Set(['message', 'edit', 'delete', 'react', 'channel-create', 'voice-channel-create']);
+
 function wsSend(message) {
-  if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(message));
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify(message));
+    return;
+  }
+  // Раньше сообщение просто исчезало: поле ввода уже очищено, а на сервер
+  // ничего не ушло.
+  if (joined && QUEUEABLE.has(message.type) && outbox.length < 100) {
+    outbox.push(message);
+    renderConnState();
+  }
+}
+
+function flushOutbox() {
+  const pending = outbox;
+  outbox = [];
+  for (const message of pending) wsSend(message);
+}
+
+function renderConnState() {
+  const online = ws && ws.readyState === WebSocket.OPEN && joined;
+  connBanner.hidden = Boolean(online);
+  if (online) return;
+  connBanner.textContent = outbox.length
+    ? `Нет связи — переподключаюсь, в очереди ${outbox.length}`
+    : 'Нет связи — переподключаюсь…';
 }
 
 const voice = createVoice({
@@ -120,9 +160,20 @@ function wsUrl() {
   return `${proto}://${location.host}`;
 }
 
+function sendHello() {
+  // resume — токен прошлой сессии: он доказывает серверу, что ник возвращает
+  // себе тот же клиент, а не кто-то посторонний.
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({ type: 'hello', nick: pendingNick, resume: authToken || undefined }));
+  }
+}
+
 function connect() {
   ws = new WebSocket(wsUrl());
-  ws.addEventListener('open', () => ws.send(JSON.stringify({ type: 'hello', nick: pendingNick })));
+  ws.addEventListener('open', () => {
+    reconnectDelay = RECONNECT_MS;
+    sendHello();
+  });
   ws.addEventListener('message', (event) => {
     let message;
     try {
@@ -136,6 +187,9 @@ function connect() {
     voice.reset();
     call.hangup();
     loaded.clear();
+    clearTimeout(helloTimer);
+    helloTimer = null;
+    renderConnState();
     scheduleReconnect();
   });
   ws.addEventListener('error', () => ws.close());
@@ -146,15 +200,33 @@ function scheduleReconnect() {
   reconnectTimer = setTimeout(() => {
     reconnectTimer = null;
     connect();
-  }, RECONNECT_MS);
+  }, reconnectDelay);
+  reconnectDelay = Math.min(RECONNECT_MAX_MS, reconnectDelay * 2);
+}
+
+// Сокет открыт, но нас не пустили: чаще всего сервер ещё держит наше прошлое
+// соединение и отпустит ник, как только заметит обрыв. Раньше клиент на этом
+// месте замолкал навсегда — до перезагрузки страницы.
+function retryHello() {
+  if (helloTimer) return;
+  helloTimer = setTimeout(() => {
+    helloTimer = null;
+    sendHello();
+  }, reconnectDelay);
+  reconnectDelay = Math.min(RECONNECT_MAX_MS, reconnectDelay * 2);
+  renderConnState();
 }
 
 function handleServer(message) {
   switch (message.type) {
     case 'welcome':
       myNick = message.nick;
+      authToken = message.token;
       pendingNick = message.nick;
+      reconnectDelay = RECONNECT_MS;
       if (!joined) enterApp();
+      renderConnState();
+      flushOutbox();
       break;
     case 'channels':
       channels = message.list;
@@ -167,6 +239,10 @@ function handleServer(message) {
       renderChannels();
       renderMembers();
       call.handlePresence(message.users);
+      break;
+    case 'dms':
+      dmPartners = message.list.map((d) => d.nick);
+      renderChannels();
       break;
     case 'history': {
       const key = message.channel ? `ch:${message.channel}` : `dm:${message.to.toLowerCase()}`;
@@ -195,6 +271,7 @@ function handleServer(message) {
       break;
     case 'error':
       if (!joined) gateError.textContent = message.reason;
+      else if (message.reason === 'Ник уже занят') retryHello();
       else systemLine(message.reason);
       break;
     case 'voice-channels':
@@ -243,6 +320,7 @@ function receiveMessage(msg) {
   const key = messageKey(msg);
   convOf(key).push(msg);
   clearTyping(key, msg.from);
+  if (msg.to !== undefined) rememberPartner(msg.from === myNick ? msg.to : msg.from);
   if (key === activeKey()) {
     appendRow(msg);
     renderTyping();
@@ -252,11 +330,17 @@ function receiveMessage(msg) {
   renderChannels();
 }
 
+function rememberPartner(nick) {
+  if (!nick || nick === myNick) return;
+  const lower = nick.toLowerCase();
+  if (!dmPartners.some((n) => n.toLowerCase() === lower)) dmPartners.unshift(nick);
+}
+
+// Служебные строки живут только на экране: складывать их в историю разговора
+// значило подмешивать «X присоединился» к сообщениям канала и терять их при
+// первой же перезагрузке истории.
 function systemLine(text) {
-  const key = activeKey();
-  const msg = { id: -Date.now(), from: '', text, ts: Date.now(), edited: false, system: true };
-  convOf(key).push(msg);
-  appendRow(msg);
+  appendRow({ id: 0, from: '', text, ts: Date.now(), edited: false, system: true });
 }
 
 function findMessage(id) {
@@ -319,17 +403,33 @@ function renderChannels() {
     channelListEl.appendChild(navItem('channel', name, `# ${name}`));
   }
   dmListEl.replaceChildren();
-  for (const nick of online) {
-    dmListEl.appendChild(navItem('dm', nick, `@ ${nick}`));
+  for (const nick of dmList()) {
+    dmListEl.appendChild(navItem('dm', nick, `@ ${nick}`, !isOnline(nick)));
   }
   updateCallButton();
 }
 
-function navItem(kind, id, label) {
+function isOnline(nick) {
+  const lower = nick.toLowerCase();
+  return nick === myNick || online.some((n) => n.toLowerCase() === lower);
+}
+
+// Онлайн + те, с кем есть переписка, + открытый прямо сейчас диалог.
+function dmList() {
+  const seen = new Map();
+  for (const nick of [...online, ...dmPartners]) {
+    if (nick !== myNick) seen.set(nick.toLowerCase(), nick);
+  }
+  if (active.kind === 'dm' && !seen.has(active.id.toLowerCase())) seen.set(active.id.toLowerCase(), active.id);
+  return [...seen.values()].sort((a, b) => Number(isOnline(b)) - Number(isOnline(a)) || a.localeCompare(b));
+}
+
+function navItem(kind, id, label, offline = false) {
   const key = keyOf(kind, id);
   const item = document.createElement('li');
   const isActive = kind === active.kind && id.toLowerCase() === active.id.toLowerCase();
   item.className = isActive ? 'channel active' : 'channel';
+  if (offline) item.classList.add('offline');
 
   const text = document.createElement('span');
   text.textContent = label;
@@ -343,8 +443,25 @@ function navItem(kind, id, label) {
     item.appendChild(badge);
   }
 
+  if (kind === 'channel' && channels.length > 1) {
+    item.appendChild(deleteButton(`Удалить канал #${id} вместе с историей?`, () => wsSend({ type: 'channel-delete', name: id })));
+  }
+
   item.addEventListener('click', () => openConversation(kind, id));
   return item;
+}
+
+function deleteButton(question, onConfirm) {
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'chan-del';
+  btn.title = 'Удалить';
+  btn.appendChild(icon('cross', 12));
+  btn.addEventListener('click', (event) => {
+    event.stopPropagation();
+    if (confirm(question)) onConfirm();
+  });
+  return btn;
 }
 
 // --- сообщения ---
@@ -656,16 +773,42 @@ function startEdit(row, msg) {
   input.addEventListener('blur', () => fillRow(row, msg));
 }
 
-function appendRow(msg) {
-  logEl.appendChild(createRow(msg));
+const BOTTOM_SLACK_PX = 80;
+
+function atBottom() {
+  return logEl.scrollHeight - logEl.scrollTop - logEl.clientHeight <= BOTTOM_SLACK_PX;
+}
+
+function scrollToBottom() {
   logEl.scrollTop = logEl.scrollHeight;
+  missedBelow = 0;
+  renderJumpNew();
+}
+
+function renderJumpNew() {
+  jumpNewBtn.hidden = missedBelow === 0;
+  if (missedBelow) jumpNewBtn.textContent = `↓ новых: ${missedBelow}`;
+}
+
+// Прыгать вниз на каждом чужом сообщении нельзя: пользователь может читать
+// историю выше, и лента вырывалась бы у него из-под курсора.
+function appendRow(msg) {
+  const stick = atBottom() || msg.from === myNick || msg.system;
+  logEl.appendChild(createRow(msg));
+  if (stick) {
+    scrollToBottom();
+  } else {
+    missedBelow++;
+    renderJumpNew();
+  }
 }
 
 function renderLog() {
   logAnimation.disable();
   logEl.replaceChildren();
   for (const msg of convOf(activeKey())) logEl.appendChild(createRow(msg));
-  logEl.scrollTop = logEl.scrollHeight;
+  missedBelow = 0;
+  scrollToBottom();
   applyMotionState();
 }
 
@@ -746,6 +889,7 @@ function renderVoiceChannels() {
       if (voiceChannel === name) voice.leave();
       else voice.join(name);
     });
+    head.appendChild(deleteButton(`Удалить голосовой канал ${name}?`, () => wsSend({ type: 'voice-channel-delete', name })));
     li.appendChild(head);
 
     const members = voicePresence[name] ?? [];
@@ -877,27 +1021,65 @@ function formatSize(bytes) {
   return `${(bytes / 1024 / 1024).toFixed(1)} МБ`;
 }
 
+// Показывать встроенно можно только заведомо безопасные растровые форматы.
+// blob:-ссылка наследует наш origin, поэтому Blob с типом text/html или svg,
+// открытый в новой вкладке, выполнил бы скрипты как страница чата.
+const INLINE_MIME = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/avif', 'image/bmp']);
+
+const blobUrls = new Map();
+
+// Вложения отдаются только по токену в заголовке, поэтому в src/href попадает
+// не серверный адрес, а локальная blob:-ссылка на уже скачанные байты.
+function attachmentUrl(att) {
+  if (!blobUrls.has(att.url)) {
+    blobUrls.set(
+      att.url,
+      fetch(att.url, { headers: { Authorization: `Bearer ${authToken}` } })
+        .then((res) => (res.ok ? res.blob() : Promise.reject(new Error(String(res.status)))))
+        .then((data) => URL.createObjectURL(new Blob([data], { type: INLINE_MIME.has(att.mime) ? att.mime : 'application/octet-stream' })))
+        .catch((error) => {
+          blobUrls.delete(att.url);
+          throw error;
+        }),
+    );
+  }
+  return blobUrls.get(att.url);
+}
+
 function renderAttachments(attachments) {
   const box = document.createElement('div');
   box.className = 'attachments';
   for (const att of attachments) {
-    if (att.mime.startsWith('image/')) {
+    if (INLINE_MIME.has(att.mime)) {
       const link = document.createElement('a');
-      link.href = att.url;
       link.target = '_blank';
       link.rel = 'noopener';
       link.className = 'att-image';
       const img = document.createElement('img');
-      img.src = att.url;
       img.alt = att.name;
       img.loading = 'lazy';
+      attachmentUrl(att).then(
+        (url) => {
+          img.src = url;
+          link.href = url;
+        },
+        () => {
+          link.replaceChildren(document.createTextNode(`Не удалось загрузить ${att.name}`));
+          link.classList.add('att-failed');
+        },
+      );
       link.appendChild(img);
       box.appendChild(link);
     } else {
       const link = document.createElement('a');
-      link.href = att.url;
       link.download = att.name;
       link.className = 'att-file';
+      attachmentUrl(att).then(
+        (url) => {
+          link.href = url;
+        },
+        () => link.classList.add('att-failed'),
+      );
       link.appendChild(icon('file', 18));
       const info = document.createElement('span');
       info.className = 'att-info';
@@ -921,10 +1103,11 @@ async function uploadFile(file) {
     headers: {
       'Content-Type': file.type || 'application/octet-stream',
       'X-Filename': encodeURIComponent(file.name),
+      Authorization: `Bearer ${authToken}`,
     },
     body: file,
   });
-  if (!res.ok) throw new Error('upload failed');
+  if (!res.ok) throw new Error(res.status === 429 ? 'слишком много загрузок подряд' : `ошибка ${res.status}`);
   return res.json();
 }
 
@@ -934,8 +1117,8 @@ async function addFiles(files) {
     try {
       pendingAttachments.push(await uploadFile(file));
       renderAttachTray();
-    } catch {
-      systemLine(`Не удалось загрузить ${file.name}`);
+    } catch (error) {
+      systemLine(`Не удалось загрузить ${file.name}: ${error.message}`);
     }
   }
 }
@@ -1019,6 +1202,14 @@ menuBtn.addEventListener('click', () => {
   else openSidebar();
 });
 backdrop.addEventListener('click', closeSidebar);
+
+jumpNewBtn.addEventListener('click', scrollToBottom);
+logEl.addEventListener('scroll', () => {
+  if (missedBelow && atBottom()) {
+    missedBelow = 0;
+    renderJumpNew();
+  }
+});
 
 membersBtn.addEventListener('click', () => {
   membersPanel.hidden = !membersPanel.hidden;

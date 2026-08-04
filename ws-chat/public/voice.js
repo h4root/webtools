@@ -2,6 +2,8 @@ import { settings, applySink } from './settings.js';
 
 const RTC_CONFIG = { iceServers: [] };
 const SPEAK_THRESHOLD = 0.045;
+// Сколько ждать восстановления ICE, прежде чем разрывать связь с участником.
+const DROP_GRACE_MS = 8000;
 
 export function createVoice({ send, onState, onError, onSpeaking, getNick }) {
   const calls = new Map();
@@ -12,6 +14,7 @@ export function createVoice({ send, onState, onError, onSpeaking, getNick }) {
   let audioCtx = null;
   let localAnalyser = null;
   let rafId = null;
+  let joining = false;
 
   function emit() {
     onState?.({ channel, muted, deafened });
@@ -71,7 +74,7 @@ export function createVoice({ send, onState, onError, onSpeaking, getNick }) {
     document.body.appendChild(audioEl);
     applySink(audioEl);
 
-    const call = { pc, audioEl, analyser: null };
+    const call = { pc, audioEl, analyser: null, dropTimer: null };
 
     pc.ontrack = (event) => {
       audioEl.srcObject = event.streams[0];
@@ -82,7 +85,24 @@ export function createVoice({ send, onState, onError, onSpeaking, getNick }) {
       if (event.candidate) send({ type: 'voice-signal', to: nick, data: { kind: 'ice', candidate: event.candidate } });
     };
     pc.onconnectionstatechange = () => {
-      if (['failed', 'closed', 'disconnected'].includes(pc.connectionState)) dropPeer(nick);
+      const state = pc.connectionState;
+      if (state === 'connected') {
+        clearTimeout(call.dropTimer);
+        call.dropTimer = null;
+        return;
+      }
+      if (state === 'failed' || state === 'closed') {
+        dropPeer(nick);
+        return;
+      }
+      // disconnected обычно рассасывается сам: рвать пира на первом же лаге
+      // значило переустанавливать связь на каждой помехе в сети.
+      if (state === 'disconnected' && !call.dropTimer) {
+        call.dropTimer = setTimeout(() => {
+          call.dropTimer = null;
+          if (pc.connectionState === 'disconnected') dropPeer(nick);
+        }, DROP_GRACE_MS);
+      }
     };
 
     calls.set(nick, call);
@@ -92,6 +112,7 @@ export function createVoice({ send, onState, onError, onSpeaking, getNick }) {
   function dropPeer(nick) {
     const call = calls.get(nick);
     if (!call) return;
+    clearTimeout(call.dropTimer);
     call.pc.close();
     call.audioEl.srcObject = null;
     call.audioEl.remove();
@@ -122,14 +143,23 @@ export function createVoice({ send, onState, onError, onSpeaking, getNick }) {
   }
 
   async function join(target) {
-    if (channel === target) return;
-    if (channel) teardown();
+    if (channel === target || joining) return;
+    // Микрофон запрашиваем до того, как рвать текущий канал: иначе отказ в
+    // доступе оставлял бы нас без связи, но всё ещё числящимися в старом
+    // канале — молчаливым призраком в списке участников.
+    joining = true;
+    let stream;
     try {
-      localStream = await navigator.mediaDevices.getUserMedia({ audio: settings.audioConstraints(), video: false });
+      stream = await navigator.mediaDevices.getUserMedia({ audio: settings.audioConstraints(), video: false });
     } catch {
+      joining = false;
       onError?.('Нет доступа к микрофону');
       return;
     }
+    joining = false;
+
+    if (channel) teardown();
+    localStream = stream;
     muted = false;
     deafened = false;
     applyMic();

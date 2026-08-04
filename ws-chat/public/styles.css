@@ -44,6 +44,7 @@
   --dim: #6f8577;
   --accent: #35d07f;
   --mine: #1b3a2a;
+  --warn: #d0a03a;
 }
 
 * {
@@ -251,6 +252,68 @@ button {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  position: relative;
+}
+
+.conn-banner {
+  padding: 6px 18px;
+  font-size: 12px;
+  text-align: center;
+  color: var(--warn);
+  background: color-mix(in srgb, var(--warn) 12%, transparent);
+  border-bottom: 1px solid var(--line);
+}
+
+/* Плашка «новые сообщения»: висит над лентой, у самого поля ввода. */
+.jump-new {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: 92px;
+  z-index: 5;
+  padding: 6px 14px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--panel);
+  color: var(--fg);
+  font-family: var(--font);
+  font-size: 12px;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgb(0 0 0 / 45%);
+}
+
+.jump-new:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.chan-del {
+  margin-left: auto;
+  padding: 2px;
+  border: 0;
+  background: none;
+  color: var(--dim);
+  cursor: pointer;
+  opacity: 0;
+  flex-shrink: 0;
+}
+
+.channel:hover .chan-del,
+.chan-del:focus-visible {
+  opacity: 1;
+}
+
+.chan-del:hover {
+  color: var(--warn);
+}
+
+.channel.offline span:first-child {
+  opacity: 0.5;
+}
+
+.att-failed {
+  color: var(--dim);
+  font-size: 12px;
 }
 
 .chat-header {

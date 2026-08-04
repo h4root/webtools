@@ -2,6 +2,8 @@ import { settings, applySink } from './settings.js';
 
 const RTC_CONFIG = { iceServers: [] };
 const RING_TIMEOUT_MS = 30000;
+// Сколько ждать восстановления ICE, прежде чем считать звонок оборванным.
+const DROP_GRACE_MS = 8000;
 const STATS_MS = 1000;
 const SPEAK_THRESHOLD = 0.045;
 
@@ -14,6 +16,7 @@ export function createCall({ send, onState, onLevels, onError }) {
   let localStream = null;
   let remoteAudio = null;
   let ringTimer = null;
+  let dropTimer = null;
   let statsTimer = null;
   let rafId = null;
   let audioCtx = null;
@@ -109,9 +112,27 @@ export function createCall({ send, onState, onLevels, onError }) {
       if (event.candidate) send({ type: 'call-signal', to: peer, data: { kind: 'ice', candidate: event.candidate } });
     };
     pc.onconnectionstatechange = () => {
-      if (['failed', 'disconnected', 'closed'].includes(pc.connectionState)) {
+      const state = pc.connectionState;
+      if (state === 'connected') {
+        clearDropTimer();
+        return;
+      }
+      if (state === 'failed' || state === 'closed') {
+        clearDropTimer();
         onError?.('Соединение потеряно');
         hangup();
+        return;
+      }
+      // disconnected — это ещё не разрыв: пара секунд потерь в Wi-Fi, и ICE
+      // сам восстанавливается. Раньше на этом звонок обрывался.
+      if (state === 'disconnected' && !dropTimer) {
+        dropTimer = setTimeout(() => {
+          dropTimer = null;
+          if (pc.connectionState === 'disconnected') {
+            onError?.('Соединение потеряно');
+            hangup();
+          }
+        }, DROP_GRACE_MS);
       }
     };
   }
@@ -201,8 +222,16 @@ export function createCall({ send, onState, onLevels, onError }) {
     }
   }
 
+  function clearDropTimer() {
+    if (dropTimer) {
+      clearTimeout(dropTimer);
+      dropTimer = null;
+    }
+  }
+
   function teardown() {
     clearRing();
+    clearDropTimer();
     if (statsTimer) clearInterval(statsTimer);
     if (rafId) cancelAnimationFrame(rafId);
     statsTimer = null;
