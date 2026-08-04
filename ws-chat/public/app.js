@@ -8,6 +8,15 @@ const gate = document.getElementById('gate');
 const nickForm = document.getElementById('nick-form');
 const nickInput = document.getElementById('nick-input');
 const gateError = document.getElementById('gate-error');
+const gateHint = document.getElementById('gate-hint');
+const gateInsecure = document.getElementById('gate-insecure');
+const gateSubmit = document.getElementById('gate-submit');
+const passwordRow = document.getElementById('password-row');
+const passwordInput = document.getElementById('password-input');
+const modeGuestBtn = document.getElementById('mode-guest');
+const modeLoginBtn = document.getElementById('mode-login');
+const modeRegisterBtn = document.getElementById('mode-register');
+const logoutBtn = document.getElementById('logout-btn');
 const appEl = document.getElementById('app');
 const meEl = document.getElementById('me');
 const channelListEl = document.getElementById('channel-list');
@@ -62,9 +71,14 @@ const REACTIONS = ['👍', '❤️', '😂', '🔥', '🎉', '😮', '😢', '�
 
 let activePicker = null;
 
+const TOKEN_KEY = 'ws-chat-token';
+
 let myNick = '';
 let authToken = '';
-let pendingNick = '';
+let isGuest = false;
+let authMode = 'guest';
+// Чем входили в прошлый раз — этим же переподключаемся после обрыва.
+let pendingAuth = null;
 let joined = false;
 let channels = [];
 let online = [];
@@ -82,7 +96,6 @@ let pendingAttachments = [];
 let ws = null;
 let reconnectTimer = null;
 let reconnectDelay = RECONNECT_MS;
-let helloTimer = null;
 let outbox = [];
 let missedBelow = 0;
 
@@ -160,12 +173,12 @@ function wsUrl() {
   return `${proto}://${location.host}`;
 }
 
+// После обрыва поднимаемся по токену сессии, а не по нику с паролем: пароль в
+// памяти вкладки не держим.
 function sendHello() {
-  // resume — токен прошлой сессии: он доказывает серверу, что ник возвращает
-  // себе тот же клиент, а не кто-то посторонний.
-  if (ws && ws.readyState === WebSocket.OPEN) {
-    ws.send(JSON.stringify({ type: 'hello', nick: pendingNick, resume: authToken || undefined }));
-  }
+  if (!ws || ws.readyState !== WebSocket.OPEN) return;
+  if (authToken) ws.send(JSON.stringify({ type: 'auth', mode: 'resume', token: authToken }));
+  else if (pendingAuth) ws.send(JSON.stringify({ type: 'auth', ...pendingAuth }));
 }
 
 function connect() {
@@ -187,8 +200,6 @@ function connect() {
     voice.reset();
     call.hangup();
     loaded.clear();
-    clearTimeout(helloTimer);
-    helloTimer = null;
     renderConnState();
     scheduleReconnect();
   });
@@ -204,17 +215,32 @@ function scheduleReconnect() {
   reconnectDelay = Math.min(RECONNECT_MAX_MS, reconnectDelay * 2);
 }
 
-// Сокет открыт, но нас не пустили: чаще всего сервер ещё держит наше прошлое
-// соединение и отпустит ник, как только заметит обрыв. Раньше клиент на этом
-// месте замолкал навсегда — до перезагрузки страницы.
-function retryHello() {
-  if (helloTimer) return;
-  helloTimer = setTimeout(() => {
-    helloTimer = null;
-    sendHello();
-  }, reconnectDelay);
-  reconnectDelay = Math.min(RECONNECT_MAX_MS, reconnectDelay * 2);
-  renderConnState();
+function handleAuthError(message) {
+  const wait = message.retryAfterMs ? ` Подожди ${Math.ceil(message.retryAfterMs / 1000)} с.` : '';
+
+  // Сессия могла протухнуть или её погасили с другого устройства: чинить
+  // нечего, надо входить заново.
+  if (authToken) {
+    forgetToken();
+    if (joined) {
+      returnToGate(message.reason + wait);
+    } else {
+      gateError.textContent = message.reason + wait;
+      setGateBusy(false);
+    }
+    return;
+  }
+  gateError.textContent = message.reason + wait;
+  setGateBusy(false);
+}
+
+function forgetToken() {
+  authToken = '';
+  try {
+    localStorage.removeItem(TOKEN_KEY);
+  } catch {
+    /* нечего чистить */
+  }
 }
 
 function handleServer(message) {
@@ -222,7 +248,15 @@ function handleServer(message) {
     case 'welcome':
       myNick = message.nick;
       authToken = message.token;
-      pendingNick = message.nick;
+      isGuest = message.guest;
+      pendingAuth = null;
+      // Токен переживает перезагрузку страницы, пароль спрашивать заново не
+      // придётся. Гостя это тоже касается: его личность живёт до выхода.
+      try {
+        localStorage.setItem(TOKEN_KEY, authToken);
+      } catch {
+        /* приватный режим — обойдёмся сессией на одну вкладку */
+      }
       reconnectDelay = RECONNECT_MS;
       if (!joined) enterApp();
       renderConnState();
@@ -269,9 +303,17 @@ function handleServer(message) {
     case 'system':
       systemLine(message.text);
       break;
+    case 'auth-error':
+      handleAuthError(message);
+      break;
+    case 'logged-out':
+      finishLogout();
+      break;
+    case 'purged':
+      forgetUser(message.nick);
+      break;
     case 'error':
       if (!joined) gateError.textContent = message.reason;
-      else if (message.reason === 'Ник уже занят') retryHello();
       else systemLine(message.reason);
       break;
     case 'voice-channels':
@@ -300,6 +342,66 @@ function handleServer(message) {
   }
 }
 
+function finishLogout() {
+  forgetToken();
+  pendingAuth = null;
+  // Гость уходит навсегда, поэтому переподключаться и что-то досылать не надо.
+  outbox = [];
+  if (ws) {
+    const socket = ws;
+    ws = null;
+    socket.close();
+  }
+  returnToGate(isGuest ? 'Гостевая личность стёрта' : 'Вы вышли');
+}
+
+function returnToGate(reason) {
+  joined = false;
+  voice.reset();
+  call.hangup();
+  clearTimeout(reconnectTimer);
+  reconnectTimer = null;
+  conversations.clear();
+  loaded.clear();
+  unread.clear();
+  typing.clear();
+  dmPartners = [];
+  online = [];
+  releaseBlobUrls();
+  logEl.replaceChildren();
+  appEl.hidden = true;
+  gate.hidden = false;
+  connBanner.hidden = true;
+  setGateBusy(false);
+  // Режим ставим до текста: setGateMode чистит поле ошибки.
+  setGateMode(isGuest ? 'guest' : 'login');
+  gateError.textContent = reason ?? '';
+  nickInput.value = myNick;
+  nickInput.focus();
+}
+
+// Пользователя стёрли: выкидываем его сообщения и из открытых разговоров тоже.
+function forgetUser(nick) {
+  const lower = nick.toLowerCase();
+  for (const [key, list] of conversations) {
+    if (key === `dm:${lower}`) {
+      conversations.delete(key);
+      loaded.delete(key);
+      unread.delete(key);
+      continue;
+    }
+    const left = list.filter((msg) => msg.from.toLowerCase() !== lower);
+    for (const msg of left) {
+      if (msg.replyTo && msg.replyTo.from.toLowerCase() === lower) delete msg.replyTo;
+    }
+    conversations.set(key, left);
+  }
+  dmPartners = dmPartners.filter((n) => n.toLowerCase() !== lower);
+  if (active.kind === 'dm' && active.id.toLowerCase() === lower) openConversation('channel', channels[0] ?? 'general');
+  else renderLog();
+  renderChannels();
+}
+
 function enterApp() {
   joined = true;
   gate.hidden = true;
@@ -308,7 +410,7 @@ function enterApp() {
   avatar.className = 'avatar';
   avatar.textContent = myNick.slice(0, 1).toUpperCase();
   const name = document.createElement('span');
-  name.className = 'me-name';
+  name.className = isGuest ? 'me-name guest' : 'me-name';
   name.textContent = `@${myNick}`;
   meEl.replaceChildren(avatar, name);
   renderChannels();
@@ -1046,6 +1148,14 @@ function attachmentUrl(att) {
   return blobUrls.get(att.url);
 }
 
+// Скачанные вложения держатся в памяти вкладки — при выходе их надо отпустить.
+function releaseBlobUrls() {
+  for (const pending of blobUrls.values()) {
+    pending.then(URL.revokeObjectURL, () => {});
+  }
+  blobUrls.clear();
+}
+
 function renderAttachments(attachments) {
   const box = document.createElement('div');
   box.className = 'attachments';
@@ -1145,14 +1255,70 @@ function renderAttachTray() {
   }
 }
 
+const GATE_MODES = {
+  guest: { label: 'войти гостем', hint: 'Личность живёт до выхода: нажмёшь «Выйти» — ник освободится, а всё написанное будет стёрто.' },
+  login: { label: 'войти', hint: '' },
+  register: { label: 'зарегистрироваться', hint: 'Пароль от 8 символов. Ник закрепится за тобой, история останется после выхода.' },
+};
+
+function setGateMode(mode) {
+  authMode = mode;
+  gateError.textContent = '';
+  gateSubmit.textContent = GATE_MODES[mode].label;
+  gateHint.textContent = GATE_MODES[mode].hint;
+  passwordRow.hidden = mode === 'guest';
+  passwordInput.autocomplete = mode === 'register' ? 'new-password' : 'current-password';
+  modeGuestBtn.hidden = mode === 'guest';
+  modeLoginBtn.hidden = mode === 'login';
+  modeRegisterBtn.hidden = mode === 'register';
+  if (mode !== 'guest') passwordInput.focus();
+}
+
+function setGateBusy(busy) {
+  gateSubmit.disabled = busy;
+  nickInput.disabled = busy;
+  passwordInput.disabled = busy;
+}
+
+// Пароль не шифруется транспортом — по http его видит любой, кто слушает сеть.
+function warnIfInsecure() {
+  const secure = location.protocol === 'https:' || ['localhost', '127.0.0.1', '::1'].includes(location.hostname);
+  gateInsecure.hidden = secure;
+  if (!secure) {
+    gateInsecure.textContent =
+      'Соединение не шифруется (http). Пароль уйдёт открытым текстом и его увидит любой, кто слушает эту сеть. Для входа с паролем подними сервер по HTTPS — гостевой вход этим не затронут.';
+  }
+}
+
 nickForm.addEventListener('submit', (event) => {
   event.preventDefault();
   const nick = nickInput.value.trim();
   if (!nick) return;
-  pendingNick = nick;
+  const password = passwordInput.value;
+  if (authMode !== 'guest' && !password) {
+    gateError.textContent = 'Введи пароль';
+    return;
+  }
+
+  pendingAuth = authMode === 'guest' ? { mode: 'guest', nick } : { mode: authMode, nick, password };
   gateError.textContent = '';
-  if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'hello', nick }));
+  setGateBusy(true);
+  if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'auth', ...pendingAuth }));
   else connect();
+  // В памяти пароль не задерживаем: он нужен ровно на одну отправку, при
+  // переподключении поднимаемся по токену.
+  passwordInput.value = '';
+});
+
+modeGuestBtn.addEventListener('click', () => setGateMode('guest'));
+modeLoginBtn.addEventListener('click', () => setGateMode('login'));
+modeRegisterBtn.addEventListener('click', () => setGateMode('register'));
+
+logoutBtn.addEventListener('click', () => {
+  const question = isGuest
+    ? 'Выйти? Гостевая личность стирается: ник освободится, а все твои сообщения и вложения будут удалены безвозвратно.'
+    : 'Выйти из аккаунта на этом устройстве?';
+  if (confirm(question)) wsSend({ type: 'logout' });
 });
 
 composer.addEventListener('submit', (event) => {
@@ -1265,6 +1431,9 @@ function makeDraggable(panel, handle) {
 }
 
 function initUI() {
+  warnIfInsecure();
+  setGateMode('guest');
+  logoutBtn.appendChild(icon('cross', 16));
   setButton(voiceLeaveBtn, 'cross');
   setButton(callBtn, 'phone', 'Позвонить');
   setButton(callAccept, 'phone', 'Принять');
@@ -1283,6 +1452,17 @@ function initUI() {
   applyMotionState();
   membersPanel.hidden = window.innerWidth <= 720;
   membersBtn.classList.toggle('active', !membersPanel.hidden);
+
+  // Токен с прошлого раза — входим молча, не спрашивая ник заново.
+  try {
+    authToken = localStorage.getItem(TOKEN_KEY) ?? '';
+  } catch {
+    authToken = '';
+  }
+  if (authToken) {
+    setGateBusy(true);
+    connect();
+  }
 }
 
 initUI();

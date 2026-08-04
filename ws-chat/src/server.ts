@@ -2,7 +2,6 @@ import 'dotenv/config';
 import { createServer as createHttpServer } from 'node:http';
 import { createServer as createHttpsServer } from 'node:https';
 import { readFileSync } from 'node:fs';
-import { randomBytes } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import express, { type Request } from 'express';
@@ -10,6 +9,7 @@ import { WebSocketServer, WebSocket } from 'ws';
 import { Hub, type Client } from './chat.ts';
 import { Store } from './store.ts';
 import { BlobStore, loadKey } from './blobs.ts';
+import { Auth } from './auth.ts';
 import { ATTACH_SIZE_MAX, TEXT_MAX, SIGNAL_MAX } from './protocol.ts';
 
 const PORT = Number(process.env.PORT ?? 3000);
@@ -36,11 +36,8 @@ const UPLOADS_PER_MIN = 30;
 
 const store = new Store(join(dataDir, 'store.json'));
 const blobs = new BlobStore(uploadsDir, loadKey(dataDir, process.env.UPLOAD_KEY));
-const hub = new Hub(store, blobs);
-
-// Сессия живёт ровно столько же, сколько сокет: закрылся — токен мгновенно
-// перестал открывать вложения, никаких сроков годности сверять не надо.
-const sessions = new Map<string, Client>();
+const auth = new Auth(dataDir);
+const hub = new Hub(store, blobs, auth);
 
 const app = express();
 app.use(
@@ -49,11 +46,14 @@ app.use(
   }),
 );
 
-function authorize(req: Request): Client | null {
+// Вложения открываются по той же сессии, что и чат, — она переживает и
+// перезагрузку страницы, и обрыв сокета.
+function authorize(req: Request): { nick: string; token: string } | null {
   const header = req.headers.authorization;
   if (typeof header !== 'string' || !header.startsWith('Bearer ')) return null;
-  const client = sessions.get(header.slice('Bearer '.length));
-  return client?.nick ? client : null;
+  const token = header.slice('Bearer '.length);
+  const session = auth.resume(token);
+  return session ? { nick: session.nick, token } : null;
 }
 
 const uploadRate = new Map<string, { count: number; until: number }>();
@@ -108,7 +108,7 @@ app.get('/uploads/:id', (req, res) => {
     return;
   }
 
-  const attachment = store.findAttachment(req.params.id, client.nick!);
+  const attachment = store.findAttachment(req.params.id, client.nick);
   if (!attachment) {
     res.status(404).json({ error: 'not-found' });
     return;
@@ -163,7 +163,8 @@ wss.on('connection', (ws) => {
   const client: Client = {
     id: String(nextId++),
     nick: null,
-    token: randomBytes(24).toString('hex'),
+    // До входа токена ещё нет: настоящий приходит вместе с сессией.
+    token: '',
     send(message) {
       if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(message));
     },
@@ -171,16 +172,13 @@ wss.on('connection', (ws) => {
       ws.close();
     },
   };
-  sessions.set(client.token, client);
 
   ws.on('message', (data) => hub.handle(client, data.toString()));
   ws.on('close', () => {
-    sessions.delete(client.token);
     uploadRate.delete(client.token);
     hub.leave(client);
   });
   ws.on('error', () => {
-    sessions.delete(client.token);
     hub.leave(client);
     ws.terminate();
   });

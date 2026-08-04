@@ -10,15 +10,28 @@
   <div id="gate" class="gate">
     <form id="nick-form" class="nick-form">
       <h1>ws-chat</h1>
-      <input id="nick-input" placeholder="никнейм" maxlength="24" autocomplete="off" autofocus>
-      <button type="submit">войти</button>
+      <p id="gate-insecure" class="gate-insecure" hidden></p>
+      <input id="nick-input" placeholder="никнейм" maxlength="24" autocomplete="username" autofocus>
+      <div id="password-row" hidden>
+        <input id="password-input" type="password" placeholder="пароль" maxlength="200" autocomplete="current-password">
+      </div>
+      <button type="submit" id="gate-submit">войти гостем</button>
+      <p id="gate-hint" class="gate-hint"></p>
+      <div class="gate-modes">
+        <button type="button" class="gate-link" id="mode-guest" hidden>войти гостем</button>
+        <button type="button" class="gate-link" id="mode-login">войти с паролем</button>
+        <button type="button" class="gate-link" id="mode-register">зарегистрироваться</button>
+      </div>
       <p id="gate-error" class="gate-error"></p>
     </form>
   </div>
 
   <main id="app" class="app" hidden>
     <aside class="sidebar" id="sidebar">
-      <div class="me" id="me"></div>
+      <div class="me-row">
+        <div class="me" id="me"></div>
+        <button type="button" class="hbtn" id="logout-btn" title="Выйти"></button>
+      </div>
       <nav class="nav">
         <div class="nav-head">
           <span>Каналы</span>
