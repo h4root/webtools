@@ -66,6 +66,8 @@ const jumpNewBtn = document.getElementById('jump-new');
 const dropBtn = document.getElementById('drop-btn');
 const dropPanel = document.getElementById('drop-panel');
 const dropMount = document.getElementById('drop-mount');
+const dropCloseBtn = document.getElementById('drop-close');
+const sidebarCloseBtn = document.getElementById('sidebar-close');
 
 const RECONNECT_MS = 2000;
 const RECONNECT_MAX_MS = 15000;
@@ -354,9 +356,8 @@ function returnToGate(reason) {
   online = [];
   releaseBlobUrls();
   logEl.replaceChildren();
-  closeDrop();
-  dropPanel.hidden = true;
-  dropBtn.classList.remove('active');
+  setDropPanel(false);
+  closeSidebar();
   appEl.hidden = true;
   gate.hidden = false;
   connBanner.hidden = true;
@@ -1038,13 +1039,26 @@ function renderLevels(levels) {
   setMeter(partyPeer, levels.remote, levels.remoteSpeaking);
 }
 
+const NARROW = 720;
+
+function isNarrow() {
+  return window.innerWidth <= NARROW;
+}
+
 function openSidebar() {
+  if (isNarrow()) closeRightPanels();
   sidebar.classList.add('open');
   backdrop.hidden = false;
 }
 function closeSidebar() {
   sidebar.classList.remove('open');
   backdrop.hidden = true;
+}
+
+function closeRightPanels() {
+  setDropPanel(false);
+  membersPanel.hidden = true;
+  membersBtn.classList.remove('active');
 }
 
 function scrollToMessage(id) {
@@ -1339,8 +1353,13 @@ logEl.addEventListener('scroll', () => {
 });
 
 membersBtn.addEventListener('click', () => {
-  membersPanel.hidden = !membersPanel.hidden;
-  membersBtn.classList.toggle('active', !membersPanel.hidden);
+  const open = membersPanel.hidden;
+  if (open && isNarrow()) {
+    closeSidebar();
+    setDropPanel(false);
+  }
+  membersPanel.hidden = !open;
+  membersBtn.classList.toggle('active', open);
 });
 
 let drop = null;
@@ -1371,11 +1390,30 @@ function closeDrop() {
   drop = null;
 }
 
+function setDropPanel(open) {
+  dropPanel.hidden = !open;
+  dropBtn.classList.toggle('active', open);
+  if (open) openDrop();
+  else closeDrop();
+}
+
 dropBtn.addEventListener('click', () => {
-  dropPanel.hidden = !dropPanel.hidden;
-  dropBtn.classList.toggle('active', !dropPanel.hidden);
-  if (dropPanel.hidden) closeDrop();
-  else openDrop();
+  const open = dropPanel.hidden;
+  if (open && isNarrow()) {
+    closeSidebar();
+    membersPanel.hidden = true;
+    membersBtn.classList.remove('active');
+  }
+  setDropPanel(open);
+});
+
+dropCloseBtn.addEventListener('click', () => setDropPanel(false));
+sidebarCloseBtn.addEventListener('click', closeSidebar);
+
+document.addEventListener('keydown', (event) => {
+  if (event.key !== 'Escape') return;
+  if (sidebar.classList.contains('open')) closeSidebar();
+  else if (!dropPanel.hidden) setDropPanel(false);
 });
 
 voiceMuteBtn.addEventListener('click', () => voice.toggleMute());
@@ -1429,7 +1467,8 @@ function makeDraggable(panel, handle) {
 function initUI() {
   warnIfInsecure();
   setGateMode('guest');
-  logoutBtn.appendChild(icon('cross', 16));
+  logoutBtn.appendChild(icon('sign-out', 16));
+  sidebarCloseBtn.appendChild(icon('cross', 18));
   setButton(voiceLeaveBtn, 'cross');
   setButton(callBtn, 'phone', 'Позвонить');
   setButton(callAccept, 'phone', 'Принять');

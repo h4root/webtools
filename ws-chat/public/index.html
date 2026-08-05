@@ -30,7 +30,8 @@
     <aside class="sidebar" id="sidebar">
       <div class="me-row">
         <div class="me" id="me"></div>
-        <button type="button" class="hbtn" id="logout-btn" title="Выйти"></button>
+        <button type="button" class="hbtn" id="logout-btn" title="Выйти из аккаунта"></button>
+        <button type="button" class="hbtn sidebar-close" id="sidebar-close" title="Закрыть меню"></button>
       </div>
       <nav class="nav">
         <div class="nav-head">
@@ -88,7 +89,10 @@
     </aside>
 
     <aside class="drop-panel" id="drop-panel" hidden>
-      <div class="drop-head">Передача файлов напрямую</div>
+      <div class="drop-head">
+        <span>Передача файлов</span>
+        <button type="button" class="hbtn" id="drop-close" title="Закрыть"></button>
+      </div>
       <p class="drop-note">Файлы идут между устройствами, минуя сервер. Размер не ограничен.</p>
       <div id="drop-mount" class="lan-drop"></div>
     </aside>

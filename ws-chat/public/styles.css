@@ -146,8 +146,11 @@ body {
 }
 
 .me-row .hbtn {
-  margin-right: 10px;
   flex-shrink: 0;
+}
+
+.me-row .hbtn:last-child {
+  margin-right: 10px;
 }
 
 .me-name.guest::after {
@@ -1107,7 +1110,7 @@ html.motion-off *::after {
   position: fixed;
   inset: 0;
   background: rgba(0, 0, 0, 0.5);
-  z-index: 25;
+  z-index: 28;
 }
 
 @media (max-width: 720px) {
@@ -1486,7 +1489,7 @@ html.motion-off *::after {
 }
 
 .drop-panel {
-  width: 280px;
+  width: min(280px, 40vw);
   padding: 12px;
   background: var(--panel);
   border-left: 1px solid var(--line);
@@ -1494,6 +1497,10 @@ html.motion-off *::after {
 }
 
 .drop-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
   font-weight: 600;
   margin-bottom: 6px;
 }
@@ -1623,13 +1630,22 @@ html.motion-off *::after {
   background: #e5533c;
 }
 
+.me-row .sidebar-close {
+  display: none;
+}
+
 @media (max-width: 720px) {
   .drop-panel {
     position: fixed;
     right: 0;
     top: 0;
     bottom: 0;
-    z-index: 25;
+    width: min(320px, 100vw);
+    z-index: 26;
+  }
+
+  .me-row .sidebar-close {
+    display: inline-flex;
   }
 }
 
@@ -1745,7 +1761,8 @@ html.motion-off *::after {
     top: 0;
     right: 0;
     bottom: 0;
-    z-index: 30;
+    width: min(280px, 100vw);
+    z-index: 26;
   }
 }
 
