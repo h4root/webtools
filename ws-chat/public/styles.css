@@ -1481,10 +1481,159 @@ html.motion-off *::after {
   border-radius: var(--radius-item);
 }
 
-/* --- правая панель участников --- */
 .app {
   grid-template-columns: 220px 1fr auto;
 }
+
+.drop-panel {
+  width: 280px;
+  padding: 12px;
+  background: var(--panel);
+  border-left: 1px solid var(--line);
+  overflow-y: auto;
+}
+
+.drop-head {
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.drop-note {
+  margin: 0 0 14px;
+  color: var(--dim);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.lan-drop-me {
+  color: var(--accent);
+  font-size: 12px;
+  margin-bottom: 6px;
+}
+
+.lan-drop-hint {
+  margin: 0 0 10px;
+  color: var(--dim);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.lan-drop-peers,
+.lan-drop-asks,
+.lan-drop-transfers {
+  margin: 0 0 12px;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.peer {
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.peer:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.ask {
+  padding: 10px;
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ask-who {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.ask-files {
+  color: var(--dim);
+  font-size: 12px;
+  white-space: pre-line;
+  word-break: break-all;
+}
+
+.ask-warn {
+  color: var(--warn);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.ask-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.ask-actions button {
+  padding: 5px 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--fg);
+  font-family: var(--font);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.ask-accept {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.ask-actions button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.transfer {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+}
+
+.transfer-status {
+  color: var(--dim);
+}
+
+.transfer .bar {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--line);
+  overflow: hidden;
+}
+
+.transfer .fill {
+  height: 100%;
+  width: 0;
+  background: var(--accent);
+  transition: width 0.2s;
+}
+
+.transfer.err .fill {
+  background: #e5533c;
+}
+
+@media (max-width: 720px) {
+  .drop-panel {
+    position: fixed;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    z-index: 25;
+  }
+}
+
+/* --- правая панель участников --- */
 
 #chat-title {
   flex: 1;

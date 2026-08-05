@@ -10,6 +10,7 @@ import { Hub, type Client } from './chat.ts';
 import { Store } from './store.ts';
 import { BlobStore, loadKey } from './blobs.ts';
 import { Auth } from './auth.ts';
+import { attachSignaling } from 'lan-drop';
 import { ATTACH_SIZE_MAX, TEXT_MAX, SIGNAL_MAX } from './protocol.ts';
 
 const PORT = Number(process.env.PORT ?? 3000);
@@ -35,9 +36,17 @@ const blobs = new BlobStore(uploadsDir, loadKey(dataDir, process.env.UPLOAD_KEY)
 const auth = new Auth(dataDir);
 const hub = new Hub(store, blobs, auth);
 
+const dropClientDir = join(dirname(fileURLToPath(import.meta.resolve('lan-drop/client'))));
+
 const app = express();
 app.use(
   express.static(publicDir, {
+    setHeaders: (res) => res.setHeader('Cache-Control', 'no-cache'),
+  }),
+);
+app.use(
+  '/drop-client',
+  express.static(dropClientDir, {
     setHeaders: (res) => res.setHeader('Cache-Control', 'no-cache'),
   }),
 );
@@ -138,7 +147,30 @@ const server = useTls
   ? createHttpsServer({ key: readFileSync(tlsKey!), cert: readFileSync(tlsCert!) }, app)
   : createHttpServer(app);
 
-const wss = new WebSocketServer({ server, maxPayload: Math.max(TEXT_MAX * 4, SIGNAL_MAX * 2) });
+const maxPayload = Math.max(TEXT_MAX * 4, SIGNAL_MAX * 2);
+const wss = new WebSocketServer({ noServer: true, maxPayload });
+const dropWss = new WebSocketServer({ noServer: true, maxPayload });
+
+attachSignaling(dropWss, {
+  authenticate: (raw) => {
+    const parsed = JSON.parse(raw);
+    if (typeof parsed?.token !== 'string') return null;
+    const session = auth.resume(parsed.token);
+    if (!session) return null;
+    const device = typeof parsed.device === 'string' ? parsed.device.replace(/[^\p{L}\p{N} .-]/gu, '').slice(0, 16).trim() : '';
+    return { name: device ? `${session.nick} · ${device}` : session.nick };
+  },
+});
+
+server.on('upgrade', (request, socket, head) => {
+  const { pathname } = new URL(request.url ?? '/', 'http://localhost');
+  const target = pathname === '/drop' ? dropWss : pathname === '/' ? wss : null;
+  if (!target) {
+    socket.destroy();
+    return;
+  }
+  target.handleUpgrade(request, socket, head, (ws) => target.emit('connection', ws, request));
+});
 
 let nextId = 1;
 const alive = new WeakMap<WebSocket, boolean>();
@@ -191,11 +223,6 @@ const sweeper = setInterval(sweepUploads, SWEEP_MS);
 sweeper.unref();
 sweepUploads();
 
-wss.on('close', () => {
-  clearInterval(heartbeat);
-  clearInterval(sweeper);
-});
-
 server.listen(PORT, HOST, () => {
   const scheme = useTls ? 'https' : 'http';
   console.log(`chat server on ${scheme}://${HOST}:${PORT}`);
@@ -207,7 +234,10 @@ server.listen(PORT, HOST, () => {
 function shutdown(): void {
   console.log('останавливаюсь');
   store.flush();
+  clearInterval(heartbeat);
+  clearInterval(sweeper);
   for (const ws of wss.clients) ws.close();
+  for (const ws of dropWss.clients) ws.close();
   server.close(() => process.exit(0));
 }
 

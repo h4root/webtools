@@ -2,6 +2,7 @@ import { createVoice } from './voice.js';
 import { createCall } from './call.js';
 import { icon, setButton } from './icons.js';
 import { mountSettings, settings } from './settings.js';
+import { mountLanDrop } from '/drop-client/lan-drop.js';
 import autoAnimate from './vendor/auto-animate.mjs';
 
 const gate = document.getElementById('gate');
@@ -62,6 +63,9 @@ const sendBtn = document.getElementById('send-btn');
 const settingsEl = document.getElementById('settings');
 const connBanner = document.getElementById('conn-banner');
 const jumpNewBtn = document.getElementById('jump-new');
+const dropBtn = document.getElementById('drop-btn');
+const dropPanel = document.getElementById('drop-panel');
+const dropMount = document.getElementById('drop-mount');
 
 const RECONNECT_MS = 2000;
 const RECONNECT_MAX_MS = 15000;
@@ -350,6 +354,9 @@ function returnToGate(reason) {
   online = [];
   releaseBlobUrls();
   logEl.replaceChildren();
+  closeDrop();
+  dropPanel.hidden = true;
+  dropBtn.classList.remove('active');
   appEl.hidden = true;
   gate.hidden = false;
   connBanner.hidden = true;
@@ -1336,6 +1343,41 @@ membersBtn.addEventListener('click', () => {
   membersBtn.classList.toggle('active', !membersPanel.hidden);
 });
 
+let drop = null;
+
+function deviceLabel() {
+  const ua = navigator.userAgent;
+  if (/iPhone/.test(ua)) return 'iPhone';
+  if (/iPad/.test(ua)) return 'iPad';
+  if (/Android/.test(ua)) return 'Android';
+  if (/Macintosh/.test(ua)) return 'Mac';
+  if (/Windows/.test(ua)) return 'Windows';
+  if (/Linux/.test(ua)) return 'Linux';
+  return '';
+}
+
+function openDrop() {
+  if (drop) return;
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  drop = mountLanDrop(dropMount, {
+    url: `${proto}://${location.host}/drop`,
+    auth: () => ({ token: authToken, device: deviceLabel() }),
+    emptyHint: 'Никого рядом. Откройте эту панель на другом устройстве — увидите его здесь.',
+  });
+}
+
+function closeDrop() {
+  drop?.destroy();
+  drop = null;
+}
+
+dropBtn.addEventListener('click', () => {
+  dropPanel.hidden = !dropPanel.hidden;
+  dropBtn.classList.toggle('active', !dropPanel.hidden);
+  if (dropPanel.hidden) closeDrop();
+  else openDrop();
+});
+
 voiceMuteBtn.addEventListener('click', () => voice.toggleMute());
 voiceDeafenBtn.addEventListener('click', () => voice.toggleDeafen());
 voiceLeaveBtn.addEventListener('click', () => voice.leave());
@@ -1399,6 +1441,7 @@ function initUI() {
   voiceAddBtn.appendChild(icon('plus', 16));
   menuBtn.appendChild(icon('menu', 20));
   membersBtn.appendChild(icon('users', 18));
+  dropBtn.appendChild(icon('paperclip', 18));
   const { toggle } = mountSettings(settingsEl);
   setButton(toggle, 'gear');
   makeDraggable(callPanel, callGrip);

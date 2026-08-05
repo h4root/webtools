@@ -13,6 +13,7 @@
   "dependencies": {
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
+    "lan-drop": "file:../lan-drop",
     "ws": "^8.18.0"
   },
   "devDependencies": {
