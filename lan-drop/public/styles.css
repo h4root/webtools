@@ -85,6 +85,76 @@ body {
   transform: scale(1.04);
 }
 
+.lan-drop-asks {
+  margin: 0 0 16px;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.ask {
+  padding: 12px 14px;
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  background: var(--panel);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ask-who {
+  font-weight: 600;
+}
+
+.ask-files {
+  color: var(--dim);
+  font-size: 12px;
+  white-space: pre-line;
+}
+
+.ask-warn {
+  color: #d0a03a;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.ask-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.ask-actions button {
+  padding: 6px 14px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--fg);
+  font: inherit;
+  cursor: pointer;
+}
+
+.ask-accept {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.ask-decline:hover {
+  border-color: var(--err);
+  color: var(--err);
+}
+
+.ask-actions button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.transfer-status {
+  color: var(--dim);
+  font-size: 12px;
+}
+
 .lan-drop-transfers {
   align-self: stretch;
   list-style: none;
