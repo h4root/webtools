@@ -1635,6 +1635,10 @@ html.motion-off *::after {
 }
 
 @media (max-width: 720px) {
+  .app {
+    grid-template-columns: 1fr;
+  }
+
   .drop-panel {
     position: fixed;
     right: 0;
@@ -1646,6 +1650,12 @@ html.motion-off *::after {
 
   .me-row .sidebar-close {
     display: inline-flex;
+  }
+
+  .me-row .hbtn,
+  .drop-head .hbtn,
+  .chat-actions .hbtn {
+    padding: 10px;
   }
 }
 

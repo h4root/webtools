@@ -1469,6 +1469,7 @@ function initUI() {
   setGateMode('guest');
   logoutBtn.appendChild(icon('sign-out', 16));
   sidebarCloseBtn.appendChild(icon('cross', 18));
+  dropCloseBtn.appendChild(icon('cross', 16));
   setButton(voiceLeaveBtn, 'cross');
   setButton(callBtn, 'phone', 'Позвонить');
   setButton(callAccept, 'phone', 'Принять');
