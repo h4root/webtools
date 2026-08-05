@@ -76,7 +76,12 @@ import { WebSocketServer } from 'ws';
 import { attachSignaling } from 'lan-drop';
 
 const dropWss = new WebSocketServer({ noServer: true });
-attachSignaling(dropWss);
+attachSignaling(dropWss, {
+  authenticate: (raw) => {
+    const session = mySessions.resolve(JSON.parse(raw).token);
+    return session ? { name: session.user } : null;
+  },
+});
 
 // ...своя WSS для чата на другом пути...
 server.on('upgrade', (req, socket, head) => {
@@ -89,6 +94,13 @@ server.on('upgrade', (req, socket, head) => {
 });
 ```
 
+Без `authenticate` сигналинг открыт всем, кто дотянулся до пути, — это годится
+для standalone-инстанса в доверенной сети, но не для приложения с входом. С
+хуком пир молчит, пока первым сообщением не предъявит пропуск: до этого он не
+попадает в реестр, не видит других и не может слать сигналы. Что считать
+пропуском, решает хост-приложение — lan-drop про его сессии ничего не знает.
+Непредставившихся отключает по таймауту (`authTimeoutMs`, по умолчанию 10 с).
+
 **Фронтенд** — смонтировать виджет в любой контейнер, указав WS-url этого пути:
 
 ```js
@@ -96,9 +108,15 @@ import { mountLanDrop } from 'lan-drop/client';
 
 const drop = mountLanDrop(document.getElementById('drop'), {
   url: `ws://${location.host}/drop`,
+  auth: () => ({ token: mySessionToken }),
+  emptyHint: 'Никого рядом.',
 });
 // drop.destroy() — снять виджет и закрыть соединения
 ```
+
+`auth` отправляется первым сообщением при каждом подключении, включая
+переподключения после обрыва, поэтому передавай функцию, а не готовое значение:
+токен к тому моменту может смениться.
 
 ## Тесты
 

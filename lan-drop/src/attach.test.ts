@@ -8,9 +8,13 @@ class FakeWs extends EventEmitter {
   OPEN = 1;
   sent: ServerMessage[] = [];
   terminated = false;
+  closed = false;
   pings = 0;
   send(data: string) {
     this.sent.push(JSON.parse(data));
+  }
+  close() {
+    this.closed = true;
   }
   ping() {
     this.pings++;
@@ -67,6 +71,75 @@ describe('attachSignaling', () => {
     wss.connect(b);
     a.emit('close');
     expect(b.sent.at(-1)).toEqual({ type: 'peer-left', id: welcomeId(a) });
+  });
+});
+
+describe('attachSignaling с проверкой доступа', () => {
+  let wss: FakeWss;
+  let seen: string[];
+
+  beforeEach(() => {
+    wss = new FakeWss();
+    seen = [];
+    attachSignaling(wss as never, {
+      authenticate: (raw) => {
+        seen.push(raw);
+        const parsed = JSON.parse(raw);
+        return parsed.token === 'good' ? { name: `пир ${parsed.token}` } : null;
+      },
+    });
+  });
+
+  it('молчит до предъявления пропуска', () => {
+    const ws = new FakeWs();
+    wss.connect(ws);
+    expect(ws.sent).toEqual([]);
+  });
+
+  it('впускает по валидному пропуску и берёт имя от хоста', () => {
+    const ws = new FakeWs();
+    wss.connect(ws);
+    ws.emit('message', JSON.stringify({ token: 'good' }));
+
+    expect(seen).toHaveLength(1);
+    expect(ws.sent.find((m) => m.type === 'welcome')).toMatchObject({ type: 'welcome', name: 'пир good' });
+  });
+
+  it('отбривает негодный пропуск и закрывает сокет', () => {
+    const ws = new FakeWs();
+    wss.connect(ws);
+    ws.emit('message', JSON.stringify({ token: 'bad' }));
+
+    expect(ws.sent.at(-1)).toEqual({ type: 'error', reason: 'Нет доступа' });
+    expect(ws.closed).toBe(true);
+    expect(ws.sent.some((m) => m.type === 'welcome')).toBe(false);
+  });
+
+  it('не пускает сигналы мимо проверки', () => {
+    const a = new FakeWs();
+    const b = new FakeWs();
+    wss.connect(a);
+    wss.connect(b);
+    a.emit('message', JSON.stringify({ token: 'good' }));
+
+    const outsider = new FakeWs();
+    wss.connect(outsider);
+    outsider.emit('message', JSON.stringify({ type: 'signal', to: welcomeId(a), data: { sdp: 'x' } }));
+
+    expect(a.sent.some((m) => m.type === 'signal')).toBe(false);
+    expect(outsider.closed).toBe(true);
+  });
+
+  it('не даёт непредставившимся висеть вечно', () => {
+    vi.useFakeTimers();
+    const silentWss = new FakeWss();
+    attachSignaling(silentWss as never, { authenticate: () => null, authTimeoutMs: 5000 });
+    const ws = new FakeWs();
+    silentWss.connect(ws);
+
+    vi.advanceTimersByTime(5000);
+    expect(ws.terminated).toBe(true);
+    vi.useRealTimers();
   });
 });
 

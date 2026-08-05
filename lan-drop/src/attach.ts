@@ -2,12 +2,20 @@ import type { WebSocketServer, WebSocket } from 'ws';
 import { Signaling, type Peer } from './signaling.ts';
 import { generateName } from './names.ts';
 
+export interface AuthenticatedPeer {
+  name: string;
+}
+
 export interface AttachOptions {
   heartbeatMs?: number;
+  authenticate?: (raw: string) => AuthenticatedPeer | null;
+  authTimeoutMs?: number;
 }
 
 export function attachSignaling(wss: WebSocketServer, options: AttachOptions = {}): () => void {
   const heartbeatMs = options.heartbeatMs ?? 30000;
+  const authTimeoutMs = options.authTimeoutMs ?? 10000;
+  const authenticate = options.authenticate;
   const signaling = new Signaling();
   const alive = new WeakMap<WebSocket, boolean>();
   let nextId = 1;
@@ -25,12 +33,45 @@ export function attachSignaling(wss: WebSocketServer, options: AttachOptions = {
       },
     };
 
-    signaling.join(peer);
+    let admitted = false;
+    const admit = (): void => {
+      admitted = true;
+      signaling.join(peer);
+    };
 
-    ws.on('message', (data) => signaling.handle(peer, data.toString()));
-    ws.on('close', () => signaling.leave(peer));
+    let authTimer: ReturnType<typeof setTimeout> | null = null;
+    if (authenticate) {
+      authTimer = setTimeout(() => ws.terminate(), authTimeoutMs);
+      authTimer.unref?.();
+    } else {
+      admit();
+    }
+
+    ws.on('message', (data) => {
+      const raw = data.toString();
+      if (admitted) {
+        signaling.handle(peer, raw);
+        return;
+      }
+
+      const granted = safeAuthenticate(authenticate!, raw);
+      if (!granted) {
+        peer.send({ type: 'error', reason: 'Нет доступа' });
+        ws.close();
+        return;
+      }
+      if (authTimer) clearTimeout(authTimer);
+      peer.name = granted.name;
+      admit();
+    });
+
+    ws.on('close', () => {
+      if (authTimer) clearTimeout(authTimer);
+      if (admitted) signaling.leave(peer);
+    });
     ws.on('error', () => {
-      signaling.leave(peer);
+      if (authTimer) clearTimeout(authTimer);
+      if (admitted) signaling.leave(peer);
       ws.terminate();
     });
   };
@@ -56,4 +97,13 @@ export function attachSignaling(wss: WebSocketServer, options: AttachOptions = {
   wss.on('close', stop);
 
   return stop;
+}
+
+function safeAuthenticate(authenticate: (raw: string) => AuthenticatedPeer | null, raw: string): AuthenticatedPeer | null {
+  try {
+    const granted = authenticate(raw);
+    return granted && typeof granted.name === 'string' && granted.name.length > 0 ? granted : null;
+  } catch {
+    return null;
+  }
 }

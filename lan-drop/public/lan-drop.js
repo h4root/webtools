@@ -53,6 +53,11 @@ export function mountLanDrop(container, options = {}) {
 
   function connect() {
     ws = new WebSocket(url);
+    ws.addEventListener('open', () => {
+      if (!options.auth) return;
+      const pass = typeof options.auth === 'function' ? options.auth() : options.auth;
+      ws.send(typeof pass === 'string' ? pass : JSON.stringify(pass));
+    });
     ws.addEventListener('message', (event) => {
       let message;
       try {
@@ -103,6 +108,9 @@ export function mountLanDrop(container, options = {}) {
       case 'signal':
         handleSignal(message.from, message.data);
         break;
+      case 'error':
+        hintEl.textContent = message.reason;
+        break;
     }
   }
 
@@ -113,7 +121,7 @@ export function mountLanDrop(container, options = {}) {
   function renderPeers() {
     peersEl.replaceChildren();
     if (peers.size === 0) {
-      hintEl.textContent = 'Никого рядом. Откройте lan-drop на другом устройстве в этой сети.';
+      hintEl.textContent = options.emptyHint ?? 'Никого рядом. Откройте lan-drop на другом устройстве в этой сети.';
       return;
     }
     hintEl.textContent = 'Нажмите на устройство, чтобы отправить файлы.';
