@@ -123,6 +123,26 @@ describe('HTTP-слой', () => {
     rmSync(dataDir, { recursive: true, force: true });
   });
 
+  it('отдаёт страницу с политикой, запрещающей внешние запросы', async () => {
+    const res = await fetch(base);
+    const csp = res.headers.get('content-security-policy') ?? '';
+
+    expect(csp).toContain("default-src 'self'");
+    expect(csp).toContain("frame-ancestors 'none'");
+    expect(csp).toContain("object-src 'none'");
+    expect(res.headers.get('x-content-type-options')).toBe('nosniff');
+    expect(res.headers.get('referrer-policy')).toBe('no-referrer');
+  });
+
+  it('разрешает blob: для картинок — на них держатся вложения', async () => {
+    const csp = (await fetch(base)).headers.get('content-security-policy') ?? '';
+    expect(csp).toMatch(/img-src[^;]*blob:/);
+  });
+
+  it('без TLS не обещает HSTS', async () => {
+    expect((await fetch(base)).headers.get('strict-transport-security')).toBeNull();
+  });
+
   it('не принимает загрузку без токена', async () => {
     const res = await upload(base, null, 'nope');
     expect(res.status).toBe(401);

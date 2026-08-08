@@ -39,7 +39,33 @@ const hub = new Hub(store, blobs, auth);
 
 const dropClientDir = join(dirname(fileURLToPath(import.meta.resolve('lan-drop/client'))));
 
+// Страница вендорит всё локально и наружу не ходит, поэтому политику можно
+// затянуть до предела. blob: нужен картинкам и файлам: вложения скачиваются
+// по токену и показываются из локальных blob-ссылок, а не по адресу сервера.
+const CSP = [
+  "default-src 'self'",
+  "img-src 'self' blob: data:",
+  "media-src 'self' blob:",
+  "connect-src 'self' ws: wss:",
+  "script-src 'self'",
+  "style-src 'self'",
+  "font-src 'self'",
+  "object-src 'none'",
+  "base-uri 'none'",
+  "form-action 'none'",
+  "frame-ancestors 'none'",
+].join('; ');
+
 const app = express();
+app.disable('x-powered-by');
+app.use((_req, res, next) => {
+  res.setHeader('Content-Security-Policy', CSP);
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Referrer-Policy', 'no-referrer');
+  res.setHeader('X-Frame-Options', 'DENY');
+  if (useTls) res.setHeader('Strict-Transport-Security', 'max-age=31536000');
+  next();
+});
 app.use(
   express.static(publicDir, {
     setHeaders: (res) => res.setHeader('Cache-Control', 'no-cache'),
