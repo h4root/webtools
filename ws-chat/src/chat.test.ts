@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { Hub, type Client } from './chat.ts';
+import { Hub, ACTIONS_PER_WINDOW, RATE_WINDOW_MS, type Client } from './chat.ts';
 import { Store, channelKey } from './store.ts';
 import { Auth } from './auth.ts';
 import type { ServerMessage } from './protocol.ts';
@@ -56,9 +56,11 @@ function channelsList(client: TestClient): string[] | undefined {
 
 describe('Hub', () => {
   let hub: Hub;
+  let store: Store;
 
   beforeEach(() => {
-    hub = new Hub();
+    store = new Store();
+    hub = new Hub(store);
   });
 
   it('принимает валидный ник, шлёт welcome и список каналов', () => {
@@ -319,6 +321,80 @@ describe('Hub', () => {
     hub.handle(a, '{not json');
     expect(a.inbox.at(-1)).toEqual({ type: 'error', reason: 'Некорректное сообщение' });
     expect(a.inbox.some((m) => m.type === 'message')).toBe(false);
+  });
+
+  it('обрывает поток сообщений, когда бюджет исчерпан', () => {
+    const a = makeClient('a');
+    hub.join(a, 'alice');
+
+    for (let i = 0; i < ACTIONS_PER_WINDOW; i++) {
+      hub.handle(a, JSON.stringify({ type: 'message', channel: 'general', text: `раз ${i}` }));
+    }
+    expect(store.history(channelKey('general'))).toHaveLength(ACTIONS_PER_WINDOW);
+
+    hub.handle(a, JSON.stringify({ type: 'message', channel: 'general', text: 'лишнее' }));
+    expect(store.history(channelKey('general'))).toHaveLength(ACTIONS_PER_WINDOW);
+    expect(a.inbox.at(-1)).toEqual({ type: 'error', reason: 'Слишком часто' });
+  });
+
+  it('не заваливает нарушителя ошибками на каждое сообщение', () => {
+    const a = makeClient('a');
+    hub.join(a, 'alice');
+    for (let i = 0; i < ACTIONS_PER_WINDOW + 20; i++) {
+      hub.handle(a, JSON.stringify({ type: 'message', channel: 'general', text: 'спам' }));
+    }
+    expect(a.inbox.filter((m) => m.type === 'error' && m.reason === 'Слишком часто')).toHaveLength(1);
+  });
+
+  it('открывает бюджет заново, когда окно прошло', () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const a = makeClient('a');
+      hub.join(a, 'alice');
+      for (let i = 0; i < ACTIONS_PER_WINDOW + 5; i++) {
+        hub.handle(a, JSON.stringify({ type: 'message', channel: 'general', text: 'поток' }));
+      }
+      vi.setSystemTime(Date.now() + RATE_WINDOW_MS + 100);
+      hub.handle(a, JSON.stringify({ type: 'message', channel: 'general', text: 'снова можно' }));
+      expect(lastMessage(a)?.text).toBe('снова можно');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('не режет сигналинг по бюджету обычных действий', () => {
+    const a = makeClient('a');
+    const b = makeClient('b');
+    hub.join(a, 'alice');
+    hub.join(b, 'bob');
+    hub.handle(a, JSON.stringify({ type: 'voice-join', channel: 'general' }));
+    hub.handle(b, JSON.stringify({ type: 'voice-join', channel: 'general' }));
+
+    for (let i = 0; i < ACTIONS_PER_WINDOW * 2; i++) {
+      hub.handle(a, JSON.stringify({ type: 'voice-signal', to: 'bob', data: { kind: 'ice', i } }));
+    }
+    expect(b.inbox.filter((m) => m.type === 'voice-signal').length).toBe(ACTIONS_PER_WINDOW * 2);
+  });
+
+  it('считает бюджет по каждому отдельно', () => {
+    const a = makeClient('a');
+    const b = makeClient('b');
+    hub.join(a, 'alice');
+    hub.join(b, 'bob');
+    for (let i = 0; i < ACTIONS_PER_WINDOW + 5; i++) {
+      hub.handle(a, JSON.stringify({ type: 'message', channel: 'general', text: 'от alice' }));
+    }
+
+    hub.handle(b, JSON.stringify({ type: 'message', channel: 'general', text: 'от bob' }));
+    expect(lastMessage(b)?.text).toBe('от bob');
+  });
+
+  it('не держит счётчики ушедших', () => {
+    const a = makeClient('a');
+    hub.join(a, 'alice');
+    hub.handle(a, JSON.stringify({ type: 'message', channel: 'general', text: 'привет' }));
+    hub.leave(a);
+    expect(hub.rateEntries()).toBe(0);
   });
 
   it('требует входа до отправки сообщений', () => {

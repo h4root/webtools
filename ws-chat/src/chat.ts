@@ -29,6 +29,21 @@ const AUTH_ERRORS: Record<string, string> = {
 const NICK_PATTERN = /^[\p{L}\p{N} _.-]+$/u;
 const NAME_MAX = 255;
 
+export const RATE_WINDOW_MS = 10000;
+export const ACTIONS_PER_WINDOW = 30;
+// Сигналинг живёт по своему счёту: ICE-кандидаты валят пачками по два десятка
+// на соединение, и это законный трафик, а не флуд.
+export const SIGNALS_PER_WINDOW = 400;
+
+const SIGNAL_TYPES = new Set(['voice-signal', 'call-signal', 'call-invite', 'call-accept', 'call-decline', 'call-end']);
+
+interface RateEntry {
+  windowStartedAt: number;
+  actions: number;
+  signals: number;
+  warned: boolean;
+}
+
 function isValidNick(nick: string): boolean {
   return nick.length > 0 && nick.length <= NICK_MAX && NICK_PATTERN.test(nick);
 }
@@ -36,6 +51,7 @@ function isValidNick(nick: string): boolean {
 export class Hub {
   private readonly clients = new Set<Client>();
   private readonly voiceOf = new Map<Client, string>();
+  private readonly rate = new Map<Client, RateEntry>();
 
   constructor(
     private readonly store: Store = new Store(),
@@ -117,7 +133,37 @@ export class Hub {
     if (guest) this.broadcast({ type: 'purged', nick });
   }
 
+  private allow(client: Client, type: string): boolean {
+    const now = Date.now();
+    const entry = this.rate.get(client) ?? { windowStartedAt: now, actions: 0, signals: 0, warned: false };
+    if (now - entry.windowStartedAt >= RATE_WINDOW_MS) {
+      entry.windowStartedAt = now;
+      entry.actions = 0;
+      entry.signals = 0;
+      entry.warned = false;
+    }
+    this.rate.set(client, entry);
+
+    const signal = SIGNAL_TYPES.has(type);
+    if (signal) entry.signals++;
+    else entry.actions++;
+
+    if (signal ? entry.signals <= SIGNALS_PER_WINDOW : entry.actions <= ACTIONS_PER_WINDOW) return true;
+
+    // Ошибка раз за окно: иначе на флуд мы отвечаем таким же флудом.
+    if (!entry.warned) {
+      entry.warned = true;
+      client.send({ type: 'error', reason: 'Слишком часто' });
+    }
+    return false;
+  }
+
+  rateEntries(): number {
+    return this.rate.size;
+  }
+
   leave(client: Client): void {
+    this.rate.delete(client);
     if (!this.clients.delete(client)) return;
     const wasInVoice = this.voiceOf.delete(client);
     const nick = client.nick;
@@ -155,6 +201,8 @@ export class Hub {
       this.logout(client);
       return;
     }
+
+    if (!this.allow(client, message.type)) return;
 
     switch (message.type) {
       case 'channel-create':
