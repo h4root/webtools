@@ -380,7 +380,16 @@ export class Hub {
     target?.send({ type: 'voice-signal', from: client.nick!, data });
   }
 
-  private onlineNicks(): string[] {
+  // Аккаунты, которые уборка сочла ушедшими: стираем их след так же, как при
+  // явном выходе, и говорим клиентам забыть их.
+  purgeAccounts(nicks: string[]): void {
+    for (const nick of nicks) {
+      this.store.purgeUser(nick);
+      this.broadcast({ type: 'purged', nick });
+    }
+  }
+
+  onlineNicks(): string[] {
     return [...this.clients]
       .map((c) => c.nick)
       .filter((nick): nick is string => nick !== null)

@@ -2,18 +2,26 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { mkdtempSync, rmSync, readFileSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { Auth } from './auth.ts';
+import {
+  Auth,
+  GUEST_TTL_MS,
+  SESSION_TTL_MS,
+  SESSIONS_PER_ACCOUNT,
+  FAILURE_TTL_MS,
+} from './auth.ts';
 
 describe('Auth', () => {
   let dir: string;
   let auth: Auth;
 
   beforeEach(() => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
     dir = mkdtempSync(join(tmpdir(), 'ws-chat-auth-'));
     auth = new Auth(dir);
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     vi.restoreAllMocks();
     rmSync(dir, { recursive: true, force: true });
   });
@@ -99,6 +107,94 @@ describe('Auth', () => {
     auth.removeAccount('гость');
     expect(auth.resume(first.token!)).toBeNull();
     expect((await auth.registerGuest('гость')).ok).toBe(true);
+  });
+
+  it('освобождает ник гостя, ушедшего не через кнопку выхода', async () => {
+    const { token } = await auth.registerGuest('гость');
+    expect(auth.find('гость')).toBeDefined();
+
+    vi.setSystemTime(Date.now() + GUEST_TTL_MS + 1000);
+    expect(auth.sweep()).toEqual(['гость']);
+
+    expect(auth.find('гость')).toBeUndefined();
+    expect(auth.resume(token!)).toBeNull();
+    expect((await auth.registerGuest('гость')).ok).toBe(true);
+  });
+
+  it('не трогает гостя, который сейчас в сети', async () => {
+    await auth.registerGuest('гость');
+    vi.setSystemTime(Date.now() + GUEST_TTL_MS + 1000);
+
+    expect(auth.sweep(['ГОСТЬ'])).toEqual([]);
+    expect(auth.find('гость')).toBeDefined();
+  });
+
+  it('не трогает аккаунт с паролем, даже когда сессии протухли', async () => {
+    await auth.register('alice', 'достаточно-длинный');
+    vi.setSystemTime(Date.now() + SESSION_TTL_MS + 1000);
+
+    expect(auth.sweep()).toEqual([]);
+    expect(auth.find('alice')).toBeDefined();
+    expect((await auth.login('alice', 'достаточно-длинный')).ok).toBe(true);
+  });
+
+  it('продлевает сессию, пока ею пользуются', async () => {
+    const { token } = await auth.registerGuest('гость');
+
+    for (let i = 0; i < 4; i++) {
+      vi.setSystemTime(Date.now() + GUEST_TTL_MS * 0.75);
+      expect(auth.resume(token!)).not.toBeNull();
+    }
+
+    vi.setSystemTime(Date.now() + GUEST_TTL_MS * 0.75);
+    expect(auth.sweep()).toEqual([]);
+    expect(auth.find('гость')).toBeDefined();
+  });
+
+  it('не копит сессии без предела на одном аккаунте', async () => {
+    await auth.register('alice', 'достаточно-длинный');
+    const tokens = [];
+    for (let i = 0; i < SESSIONS_PER_ACCOUNT + 5; i++) {
+      tokens.push((await auth.login('alice', 'достаточно-длинный')).token!);
+    }
+
+    const stored = JSON.parse(readFileSync(join(dir, 'sessions.json'), 'utf8'));
+    expect(stored.length).toBeLessThanOrEqual(SESSIONS_PER_ACCOUNT);
+    expect(auth.resume(tokens.at(-1)!)).not.toBeNull();
+    expect(auth.resume(tokens[0])).toBeNull();
+  });
+
+  it('выметает протухшие сессии с диска', async () => {
+    const { token } = await auth.register('alice', 'достаточно-длинный');
+    vi.setSystemTime(Date.now() + SESSION_TTL_MS + 1000);
+
+    auth.sweep();
+    expect(JSON.parse(readFileSync(join(dir, 'sessions.json'), 'utf8'))).toEqual([]);
+    expect(auth.resume(token!)).toBeNull();
+  });
+
+  it('не копит счётчики промахов по чужим никам', async () => {
+    for (let i = 0; i < 4; i++) await auth.login(`неизвестный-${i}`, 'мимо');
+    expect(auth.failureCount()).toBe(4);
+
+    vi.setSystemTime(Date.now() + FAILURE_TTL_MS + 1000);
+    auth.sweep();
+    expect(auth.failureCount()).toBe(0);
+  });
+
+  it('держит счётчики промахов в рамках даже без уборки', async () => {
+    const tight = new Auth(dir, { failuresMax: 5 });
+    for (let i = 0; i < 9; i++) await tight.login(`шум-${i}`, 'мимо');
+    expect(tight.failureCount()).toBeLessThanOrEqual(5);
+  });
+
+  it('блокировку по нику уборка не снимает досрочно', async () => {
+    await auth.register('alice', 'достаточно-длинный');
+    for (let i = 0; i < 6; i++) await auth.login('alice', 'мимо');
+    expect((await auth.login('alice', 'достаточно-длинный')).error).toBe('locked');
+
+    auth.sweep();
+    expect((await auth.login('alice', 'достаточно-длинный')).error).toBe('locked');
   });
 
   it('переживает перезапуск: аккаунты и сессии читаются с диска', async () => {

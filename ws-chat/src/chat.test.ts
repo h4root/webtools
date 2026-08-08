@@ -429,6 +429,20 @@ describe('Hub: вход и выход', () => {
     expect(newcomer.nick).toBe('гость');
   });
 
+  it('уборка ушедшего гостя стирает его след так же, как явный выход', async () => {
+    const guest = makeClient('guest');
+    const watcher = makeClient('watcher');
+    await auth(guest, { mode: 'guest', nick: 'гость' });
+    await auth(watcher, { mode: 'guest', nick: 'наблюдатель' });
+    hub.handle(guest, JSON.stringify({ type: 'message', channel: 'general', text: 'следа не останется' }));
+    hub.leave(guest);
+
+    hub.purgeAccounts(['гость']);
+
+    expect(store.history(channelKey('general'))).toHaveLength(0);
+    expect(watcher.inbox.some((m) => m.type === 'purged' && m.nick === 'гость')).toBe(true);
+  });
+
   it('выход по паролю гасит сессию, но не трогает написанное', async () => {
     const a = makeClient('a');
     await auth(a, { mode: 'register', nick: 'alice', password: 'достаточно-длинный' });

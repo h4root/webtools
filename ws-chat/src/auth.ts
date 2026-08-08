@@ -12,12 +12,20 @@ const SALT_LEN = 16;
 export const PASSWORD_MIN = 8;
 export const PASSWORD_MAX = 200;
 
-const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+export const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+export const GUEST_TTL_MS = 24 * 60 * 60 * 1000;
+export const SESSIONS_PER_ACCOUNT = 10;
+export const FAILURE_TTL_MS = 60 * 60 * 1000;
+export const FAILURES_MAX = 10000;
 const TOKEN_BYTES = 32;
 
 const FAILURES_BEFORE_LOCK = 5;
 const LOCK_BASE_MS = 2000;
 const LOCK_MAX_MS = 15 * 60 * 1000;
+
+export interface AuthLimits {
+  failuresMax?: number;
+}
 
 export interface Account {
   nick: string;
@@ -32,6 +40,7 @@ interface Session {
   nick: string;
   guest: boolean;
   expiresAt: number;
+  issuedAt: number;
 }
 
 export type AuthFailure =
@@ -59,14 +68,19 @@ function sha256(value: string): string {
 export class Auth {
   private accounts = new Map<string, Account>();
   private sessions = new Map<string, Session>();
-  private failures = new Map<string, { count: number; until: number }>();
+  private failures = new Map<string, { count: number; until: number; seenAt: number }>();
   private readonly accountsFile: string;
   private readonly sessionsFile: string;
   private readonly decoySalt = randomBytes(SALT_LEN);
+  private readonly failuresMax: number;
 
-  constructor(private readonly dataDir: string) {
+  constructor(
+    private readonly dataDir: string,
+    limits: AuthLimits = {},
+  ) {
     this.accountsFile = join(dataDir, 'accounts.json');
     this.sessionsFile = join(dataDir, 'sessions.json');
+    this.failuresMax = limits.failuresMax ?? FAILURES_MAX;
     this.load();
   }
 
@@ -117,13 +131,31 @@ export class Auth {
 
   private noteFailure(nick: string): void {
     const key = nick.toLowerCase();
-    const entry = this.failures.get(key) ?? { count: 0, until: 0 };
+    const now = Date.now();
+    const entry = this.failures.get(key) ?? { count: 0, until: 0, seenAt: now };
     entry.count++;
+    entry.seenAt = now;
     if (entry.count > FAILURES_BEFORE_LOCK) {
       const step = entry.count - FAILURES_BEFORE_LOCK;
-      entry.until = Date.now() + Math.min(LOCK_MAX_MS, LOCK_BASE_MS * 2 ** (step - 1));
+      entry.until = now + Math.min(LOCK_MAX_MS, LOCK_BASE_MS * 2 ** (step - 1));
     }
     this.failures.set(key, entry);
+    this.capFailures();
+  }
+
+  private capFailures(): void {
+    if (this.failures.size <= this.failuresMax) return;
+    for (const [key, entry] of this.failures) {
+      if (this.failures.size <= this.failuresMax) break;
+      if (entry.until <= Date.now()) this.failures.delete(key);
+    }
+    while (this.failures.size > this.failuresMax) {
+      this.failures.delete(this.failures.keys().next().value!);
+    }
+  }
+
+  failureCount(): number {
+    return this.failures.size;
   }
 
   private clearFailures(nick: string): void {
@@ -134,16 +166,33 @@ export class Auth {
     return this.accounts.get(nick.toLowerCase());
   }
 
+  private ttlFor(guest: boolean): number {
+    return guest ? GUEST_TTL_MS : SESSION_TTL_MS;
+  }
+
   private issue(account: Account): string {
     const token = randomBytes(TOKEN_BYTES).toString('hex');
+    const now = Date.now();
     this.sessions.set(sha256(token), {
       tokenHash: sha256(token),
       nick: account.nick,
       guest: account.guest,
-      expiresAt: Date.now() + SESSION_TTL_MS,
+      expiresAt: now + this.ttlFor(account.guest),
+      issuedAt: now,
     });
+    this.capSessions(account.nick);
     this.saveSessions();
     return token;
+  }
+
+  private capSessions(nick: string): void {
+    const lower = nick.toLowerCase();
+    const mine = [...this.sessions.values()]
+      .filter((session) => session.nick.toLowerCase() === lower)
+      .sort((a, b) => a.issuedAt - b.issuedAt);
+    for (const session of mine.slice(0, Math.max(0, mine.length - SESSIONS_PER_ACCOUNT))) {
+      this.sessions.delete(session.tokenHash);
+    }
   }
 
   async registerGuest(nick: string): Promise<AuthResult> {
@@ -211,7 +260,47 @@ export class Auth {
       this.saveSessions();
       return null;
     }
+
+    const ttl = this.ttlFor(session.guest);
+    if (session.expiresAt - Date.now() < ttl / 2) {
+      session.expiresAt = Date.now() + ttl;
+      this.saveSessions();
+    }
     return { nick: account.nick, guest: session.guest };
+  }
+
+  // Гостевой аккаунт живёт, пока жива хоть одна его сессия. Вкладку закрывают
+  // куда чаще, чем жмут «Выйти», и без этой уборки ник оставался бы занятым
+  // навсегда, а accounts.json рос бы без предела.
+  sweep(activeNicks: Iterable<string> = []): string[] {
+    const now = Date.now();
+    let changed = false;
+
+    for (const [hash, session] of this.sessions) {
+      if (session.expiresAt <= now) {
+        this.sessions.delete(hash);
+        changed = true;
+      }
+    }
+
+    const alive = new Set<string>();
+    for (const session of this.sessions.values()) alive.add(session.nick.toLowerCase());
+    for (const nick of activeNicks) alive.add(nick.toLowerCase());
+
+    const freed: string[] = [];
+    for (const account of [...this.accounts.values()]) {
+      if (!account.guest || alive.has(account.nick.toLowerCase())) continue;
+      this.accounts.delete(account.nick.toLowerCase());
+      freed.push(account.nick);
+    }
+
+    for (const [key, entry] of this.failures) {
+      if (entry.until <= now && entry.seenAt + FAILURE_TTL_MS <= now) this.failures.delete(key);
+    }
+
+    if (freed.length) this.saveAccounts();
+    if (changed || freed.length) this.saveSessions();
+    return freed;
   }
 
   revoke(token: string): void {

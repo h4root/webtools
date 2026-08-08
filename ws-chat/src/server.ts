@@ -27,6 +27,7 @@ const uploadsDir = join(dataDir, 'uploads');
 
 const HEARTBEAT_MS = 30000;
 const SWEEP_MS = 60000;
+const ACCOUNT_SWEEP_MS = 5 * 60 * 1000;
 const UPLOAD_GRACE_MS = 30 * 60 * 1000;
 const INLINE_MIME = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/avif', 'image/bmp']);
 const UPLOADS_PER_MIN = 30;
@@ -222,6 +223,17 @@ function sweepUploads(): void {
 const sweeper = setInterval(sweepUploads, SWEEP_MS);
 sweeper.unref();
 sweepUploads();
+
+function sweepAccounts(): void {
+  const freed = auth.sweep(hub.onlineNicks());
+  if (!freed.length) return;
+  hub.purgeAccounts(freed);
+  console.log(`аккаунты: освобождены гостевые ники ${freed.join(', ')}`);
+}
+
+const accountSweeper = setInterval(sweepAccounts, ACCOUNT_SWEEP_MS);
+accountSweeper.unref();
+sweepAccounts();
 
 server.listen(PORT, HOST, () => {
   const scheme = useTls ? 'https' : 'http';
