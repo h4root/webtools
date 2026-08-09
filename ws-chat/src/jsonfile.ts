@@ -2,10 +2,14 @@ import { mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from '
 import { dirname } from 'node:path';
 
 export function writeJsonAtomic(file: string, data: unknown, mode?: number): void {
+  writeFileAtomic(file, JSON.stringify(data), mode);
+}
+
+export function writeFileAtomic(file: string, data: string | Buffer, mode?: number): void {
   const tmp = `${file}.tmp`;
   try {
     mkdirSync(dirname(file), { recursive: true });
-    writeFileSync(tmp, JSON.stringify(data), mode === undefined ? undefined : { mode });
+    writeFileSync(tmp, data, mode === undefined ? undefined : { mode });
     renameSync(tmp, file);
   } catch (error) {
     try {

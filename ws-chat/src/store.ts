@@ -1,5 +1,6 @@
 import { readFileSync, renameSync } from 'node:fs';
-import { writeJsonAtomic } from './jsonfile.ts';
+import { writeFileAtomic, writeJsonAtomic } from './jsonfile.ts';
+import { isSealed, openJson, sealJson } from './sealed.ts';
 import type { AttachmentRef, Reactions, ReplyRef, WireMessage } from './protocol.ts';
 
 export const DEFAULT_CHANNELS = ['general', 'random'];
@@ -64,16 +65,19 @@ export class Store {
   private dirty = false;
   private persistBlocked = false;
 
-  constructor(private readonly filePath?: string) {
+  constructor(
+    private readonly filePath?: string,
+    private readonly key?: Buffer,
+  ) {
     this.channels = [...DEFAULT_CHANNELS];
     this.voiceChannels = [...DEFAULT_VOICE_CHANNELS];
     if (filePath) this.load();
   }
 
   private load(): void {
-    let raw: string;
+    let raw: Buffer;
     try {
-      raw = readFileSync(this.filePath!, 'utf8');
+      raw = readFileSync(this.filePath!);
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') return;
       this.persistBlocked = true;
@@ -81,8 +85,27 @@ export class Store {
       return;
     }
 
+    // Запечатанный файл, который не открывается, — это почти всегда не порча, а
+    // не тот ключ. Отодвигать его нельзя: с правильным ключом он ещё живой.
+    if (isSealed(raw)) {
+      if (!this.key) {
+        this.persistBlocked = true;
+        console.error(`store: ${this.filePath} зашифрован, а ключа нет; история не будет сохраняться`);
+        return;
+      }
+      try {
+        this.apply(openJson(this.key, raw));
+      } catch (error) {
+        this.persistBlocked = true;
+        console.error(`store: ${this.filePath} не открывается этим ключом (${(error as Error).message}); проверь UPLOAD_KEY, история не будет сохраняться`);
+      }
+      return;
+    }
+
     try {
-      this.apply(JSON.parse(raw));
+      this.apply(JSON.parse(raw.toString('utf8')));
+      // Файл со старых времён: перезапечатается при первом же сохранении.
+      if (this.key) this.dirty = true;
     } catch (error) {
       const backup = `${this.filePath}.corrupt-${Date.now()}`;
       try {
@@ -118,13 +141,15 @@ export class Store {
 
   private save(): void {
     if (!this.filePath || this.persistBlocked || !this.dirty) return;
+    const snapshot = {
+      channels: this.channels,
+      voiceChannels: this.voiceChannels,
+      messages: this.messages,
+      nextId: this.nextId,
+    };
     try {
-      writeJsonAtomic(this.filePath, {
-        channels: this.channels,
-        voiceChannels: this.voiceChannels,
-        messages: this.messages,
-        nextId: this.nextId,
-      });
+      if (this.key) writeFileAtomic(this.filePath, sealJson(this.key, snapshot), 0o600);
+      else writeJsonAtomic(this.filePath, snapshot);
       this.dirty = false;
     } catch (error) {
       console.error(`store: не сохранить ${this.filePath}: ${(error as Error).message}`);

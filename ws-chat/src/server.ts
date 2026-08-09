@@ -10,6 +10,7 @@ import { Hub, type Client } from './chat.ts';
 import { Store } from './store.ts';
 import { BlobStore, loadKey } from './blobs.ts';
 import { Auth } from './auth.ts';
+import { deriveKey } from './sealed.ts';
 import { attachSignaling } from 'lan-drop';
 import { ATTACH_SIZE_MAX, TEXT_MAX, SIGNAL_MAX } from './protocol.ts';
 
@@ -32,8 +33,12 @@ const UPLOAD_GRACE_MS = 30 * 60 * 1000;
 const INLINE_MIME = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/avif', 'image/bmp']);
 const UPLOADS_PER_MIN = 30;
 
-const store = new Store(join(dataDir, 'store.json'));
-const blobs = new BlobStore(uploadsDir, loadKey(dataDir, process.env.UPLOAD_KEY));
+// Блобы шифруются мастер-ключом напрямую — так сложилось, и менять это нельзя,
+// иначе уже загруженные вложения перестанут открываться. Истории даём отдельный
+// производный ключ: одна утечка не раскрывает второе хранилище.
+const masterKey = loadKey(dataDir, process.env.UPLOAD_KEY);
+const store = new Store(join(dataDir, 'store.json'), deriveKey(masterKey, 'store'));
+const blobs = new BlobStore(uploadsDir, masterKey);
 const auth = new Auth(dataDir);
 const hub = new Hub(store, blobs, auth);
 

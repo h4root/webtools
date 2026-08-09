@@ -208,6 +208,57 @@ describe('Store: персистентность', () => {
     expect(new Store(file).history(channelKey('general')).map((m) => m.text)).toEqual(['новая жизнь']);
   });
 
+  it('с ключом не оставляет переписку читаемой на диске', () => {
+    const key = Buffer.alloc(32, 1);
+    const store = new Store(file, key);
+    store.addDirectMessage('alice', 'bob', 'пароль от сейфа 1234');
+    store.flush();
+
+    const raw = readFileSync(file);
+    expect(raw.includes(Buffer.from('пароль от сейфа'))).toBe(false);
+    expect(raw.includes(Buffer.from('alice'))).toBe(false);
+
+    expect(new Store(file, key).history(dmKey('alice', 'bob')).map((m) => m.text)).toEqual(['пароль от сейфа 1234']);
+  });
+
+  it('подхватывает старый открытый файл и запечатывает его при первом сохранении', () => {
+    writeFileSync(
+      file,
+      JSON.stringify({
+        messages: [{ id: 1, key: channelKey('general'), from: 'alice', channel: 'general', text: 'старое', ts: 1, edited: false }],
+        nextId: 2,
+      }),
+    );
+
+    const key = Buffer.alloc(32, 2);
+    const store = new Store(file, key);
+    expect(store.history(channelKey('general')).map((m) => m.text)).toEqual(['старое']);
+
+    store.addChannelMessage('general', 'bob', 'новое');
+    store.flush();
+
+    expect(readFileSync(file).includes(Buffer.from('старое'))).toBe(false);
+    expect(new Store(file, key).history(channelKey('general')).map((m) => m.text)).toEqual(['старое', 'новое']);
+  });
+
+  it('при неверном ключе не затирает историю, а отказывается сохранять', () => {
+    const key = Buffer.alloc(32, 3);
+    const first = new Store(file, key);
+    first.addChannelMessage('general', 'alice', 'ценное');
+    first.flush();
+    const sealed = readFileSync(file);
+
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const wrong = new Store(file, Buffer.alloc(32, 9));
+    expect(wrong.history(channelKey('general'))).toHaveLength(0);
+
+    wrong.addChannelMessage('general', 'mallory', 'поверх');
+    wrong.flush();
+
+    expect(readFileSync(file).equals(sealed)).toBe(true);
+    expect(new Store(file, key).history(channelKey('general')).map((m) => m.text)).toEqual(['ценное']);
+  });
+
   it('под непрерывным потоком сообщений всё равно сохраняется', async () => {
     const store = new Store(file);
     for (let i = 0; i < 5; i++) {
