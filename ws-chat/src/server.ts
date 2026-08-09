@@ -1,5 +1,5 @@
 import 'dotenv/config';
-import { createServer as createHttpServer } from 'node:http';
+import { createServer as createHttpServer, type IncomingMessage } from 'node:http';
 import { createServer as createHttpsServer } from 'node:https';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -202,7 +202,21 @@ server.on('upgrade', (request, socket, head) => {
 let nextId = 1;
 const alive = new WeakMap<WebSocket, boolean>();
 
-wss.on('connection', (ws) => {
+// За обратным прокси remoteAddress у всех одинаковый, и лимит по нему запер бы
+// всех разом. Но верить X-Forwarded-For по умолчанию нельзя — заголовок ставит
+// кто угодно, и лимит обходится подстановкой случайного адреса.
+const trustProxy = process.env.TRUST_PROXY === '1';
+
+function sourceOf(request: IncomingMessage): string {
+  if (trustProxy) {
+    const forwarded = request.headers['x-forwarded-for'];
+    const first = (Array.isArray(forwarded) ? forwarded[0] : forwarded)?.split(',')[0]?.trim();
+    if (first) return first;
+  }
+  return request.socket.remoteAddress ?? 'неизвестно';
+}
+
+wss.on('connection', (ws, request: IncomingMessage) => {
   alive.set(ws, true);
   ws.on('pong', () => alive.set(ws, true));
 
@@ -210,6 +224,7 @@ wss.on('connection', (ws) => {
     id: String(nextId++),
     nick: null,
     token: '',
+    source: sourceOf(request),
     send(message) {
       if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(message));
     },

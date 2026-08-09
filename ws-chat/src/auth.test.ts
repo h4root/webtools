@@ -8,6 +8,9 @@ import {
   SESSION_TTL_MS,
   SESSIONS_PER_ACCOUNT,
   FAILURE_TTL_MS,
+  AUTH_ATTEMPTS_PER_WINDOW,
+  AUTH_ATTEMPT_WINDOW_MS,
+  MAX_GUEST_ACCOUNTS,
 } from './auth.ts';
 
 describe('Auth', () => {
@@ -195,6 +198,44 @@ describe('Auth', () => {
 
     auth.sweep();
     expect((await auth.login('alice', 'достаточно-длинный')).error).toBe('locked');
+  });
+
+  it('осаживает частые попытки входа с одного адреса', async () => {
+    for (let i = 0; i < AUTH_ATTEMPTS_PER_WINDOW; i++) {
+      expect(auth.allowAttempt('10.0.0.1')).toBe(true);
+    }
+    expect(auth.allowAttempt('10.0.0.1')).toBe(false);
+    expect(auth.allowAttempt('10.0.0.2')).toBe(true);
+
+    vi.setSystemTime(Date.now() + AUTH_ATTEMPT_WINDOW_MS + 100);
+    expect(auth.allowAttempt('10.0.0.1')).toBe(true);
+  });
+
+  it('не даёт наплодить гостей без предела', async () => {
+    for (let i = 0; i < MAX_GUEST_ACCOUNTS; i++) {
+      expect((await auth.registerGuest(`гость-${i}`)).ok).toBe(true);
+    }
+    expect((await auth.registerGuest('лишний')).error).toBe('guests-full');
+
+    await auth.register('alice', 'достаточно-длинный');
+    expect(auth.find('alice')).toBeDefined();
+  });
+
+  it('потолок гостей отпускает после уборки', async () => {
+    for (let i = 0; i < MAX_GUEST_ACCOUNTS; i++) await auth.registerGuest(`гость-${i}`);
+    vi.setSystemTime(Date.now() + GUEST_TTL_MS + 1000);
+    auth.sweep();
+
+    expect((await auth.registerGuest('новичок')).ok).toBe(true);
+  });
+
+  it('не копит записи о попытках', async () => {
+    for (let i = 0; i < 50; i++) auth.allowAttempt(`10.0.1.${i}`);
+    expect(auth.attemptSources()).toBe(50);
+
+    vi.setSystemTime(Date.now() + AUTH_ATTEMPT_WINDOW_MS * 3);
+    auth.sweep();
+    expect(auth.attemptSources()).toBe(0);
   });
 
   it('переживает перезапуск: аккаунты и сессии читаются с диска', async () => {

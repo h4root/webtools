@@ -6,6 +6,7 @@ export interface Client {
   id: string;
   nick: string | null;
   token: string;
+  source?: string;
   guest?: boolean;
   authPending?: boolean;
   send(message: ServerMessage): void;
@@ -24,6 +25,7 @@ const AUTH_ERRORS: Record<string, string> = {
   'weak-password': 'Пароль должен быть не короче 8 символов',
   'locked': 'Слишком много попыток, подожди',
   'guest-has-no-password': 'Этот ник занят гостем',
+  'guests-full': 'Слишком много гостей — заходи с паролем',
 };
 
 const NICK_PATTERN = /^[\p{L}\p{N} _.-]+$/u;
@@ -60,6 +62,12 @@ export class Hub {
   ) {}
 
   private async authenticate(client: Client, message: Extract<ClientMessage, { type: 'auth' }>): Promise<void> {
+    // Вход намеренно стоит до общего флуд-лимита: тот считает уже впущенных.
+    if (!this.auth!.allowAttempt(client.source ?? 'неизвестно')) {
+      client.send({ type: 'auth-error', reason: 'Слишком много попыток, подожди' });
+      return;
+    }
+
     if (message.mode === 'resume') {
       const session = this.auth!.resume(message.token!);
       if (!session) {

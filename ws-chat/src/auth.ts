@@ -17,6 +17,9 @@ export const GUEST_TTL_MS = 24 * 60 * 60 * 1000;
 export const SESSIONS_PER_ACCOUNT = 10;
 export const FAILURE_TTL_MS = 60 * 60 * 1000;
 export const FAILURES_MAX = 10000;
+export const AUTH_ATTEMPTS_PER_WINDOW = 20;
+export const AUTH_ATTEMPT_WINDOW_MS = 60 * 1000;
+export const MAX_GUEST_ACCOUNTS = 200;
 const TOKEN_BYTES = 32;
 
 const FAILURES_BEFORE_LOCK = 5;
@@ -50,7 +53,8 @@ export type AuthFailure =
   | 'bad-password'
   | 'weak-password'
   | 'locked'
-  | 'guest-has-no-password';
+  | 'guest-has-no-password'
+  | 'guests-full';
 
 export interface AuthResult {
   ok: boolean;
@@ -69,6 +73,7 @@ export class Auth {
   private accounts = new Map<string, Account>();
   private sessions = new Map<string, Session>();
   private failures = new Map<string, { count: number; until: number; seenAt: number }>();
+  private attempts = new Map<string, { count: number; windowStartedAt: number }>();
   private readonly accountsFile: string;
   private readonly sessionsFile: string;
   private readonly decoySalt = randomBytes(SALT_LEN);
@@ -195,9 +200,40 @@ export class Auth {
     }
   }
 
+  // Гостевой аккаунт заводится мгновенно и без пароля, так что без потолка
+  // достаточно открыть пачку сокетов, чтобы разобрать все ники разом.
+  private guestCount(): number {
+    let count = 0;
+    for (const account of this.accounts.values()) if (account.guest) count++;
+    return count;
+  }
+
+  allowAttempt(source: string): boolean {
+    const now = Date.now();
+    const entry = this.attempts.get(source);
+    if (!entry || now - entry.windowStartedAt >= AUTH_ATTEMPT_WINDOW_MS) {
+      this.attempts.set(source, { count: 1, windowStartedAt: now });
+      this.capAttempts();
+      return true;
+    }
+    entry.count++;
+    return entry.count <= AUTH_ATTEMPTS_PER_WINDOW;
+  }
+
+  private capAttempts(): void {
+    while (this.attempts.size > this.failuresMax) {
+      this.attempts.delete(this.attempts.keys().next().value!);
+    }
+  }
+
+  attemptSources(): number {
+    return this.attempts.size;
+  }
+
   async registerGuest(nick: string): Promise<AuthResult> {
     const existing = this.find(nick);
     if (existing) return { ok: false, error: existing.guest ? 'nick-taken' : 'nick-registered' };
+    if (this.guestCount() >= MAX_GUEST_ACCOUNTS) return { ok: false, error: 'guests-full' };
 
     const account: Account = { nick, guest: true, createdAt: Date.now() };
     this.accounts.set(nick.toLowerCase(), account);
@@ -296,6 +332,9 @@ export class Auth {
 
     for (const [key, entry] of this.failures) {
       if (entry.until <= now && entry.seenAt + FAILURE_TTL_MS <= now) this.failures.delete(key);
+    }
+    for (const [source, entry] of this.attempts) {
+      if (now - entry.windowStartedAt >= AUTH_ATTEMPT_WINDOW_MS) this.attempts.delete(source);
     }
 
     if (freed.length) this.saveAccounts();
