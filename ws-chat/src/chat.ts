@@ -53,7 +53,7 @@ function isValidNick(nick: string): boolean {
 export class Hub {
   private readonly clients = new Set<Client>();
   private readonly voiceOf = new Map<Client, string>();
-  private readonly rate = new Map<Client, RateEntry>();
+  private readonly rate = new Map<string, RateEntry>();
 
   constructor(
     private readonly store: Store = new Store(),
@@ -108,11 +108,9 @@ export class Hub {
       client.send({ type: 'auth-error', reason: 'Недопустимый ник' });
       return;
     }
-    const previous = this.findByNick(trimmed);
-    if (previous) {
-      this.leave(previous);
-      previous.close?.();
-    }
+    // Ник больше не эксклюзивен: второе устройство не выбивает первое. Сокет,
+    // зависший после обрыва, теперь ничему не мешает и уходит по хартбиту.
+    const firstDevice = !this.findByNick(trimmed);
 
     client.nick = trimmed;
     client.token = token;
@@ -123,7 +121,7 @@ export class Hub {
     client.send({ type: 'dms', list: this.store.dmPartners(trimmed) });
     client.send({ type: 'voice-channels', list: this.store.listVoiceChannels() });
     client.send({ type: 'voice-presence', channels: this.voicePresenceMap() });
-    this.broadcast({ type: 'system', text: `${trimmed} присоединился` });
+    if (firstDevice) this.broadcast({ type: 'system', text: `${trimmed} присоединился` });
     this.broadcastPresence();
   }
 
@@ -133,14 +131,30 @@ export class Hub {
       client.send({ type: 'error', reason: AUTH_ERRORS[result.error!] ?? 'Не удалось сменить пароль' });
       return;
     }
+    // Старый пароль мог утечь — значит и то, что открыто под ним на других
+    // устройствах, доверия больше не заслуживает.
+    this.disconnectOthers(client, 'Пароль изменён, войди заново');
     client.send({ type: 'password-changed' });
+  }
+
+  private disconnectOthers(client: Client, reason: string): void {
+    const lower = client.nick!.toLowerCase();
+    for (const peer of [...this.clients]) {
+      if (peer === client || peer.nick?.toLowerCase() !== lower) continue;
+      peer.send({ type: 'logged-out', reason });
+      this.leave(peer);
+      peer.close?.();
+    }
   }
 
   logout(client: Client, everywhere = false): void {
     const nick = client.nick!;
     const guest = client.guest;
     this.auth?.revoke(client.token);
-    if (everywhere) this.auth?.revokeAllFor(nick);
+    if (everywhere) {
+      this.auth?.revokeAllFor(nick);
+      this.disconnectOthers(client, 'Выход со всех устройств');
+    }
     if (guest) {
       this.auth?.removeAccount(nick);
       this.store.purgeUser(nick);
@@ -151,16 +165,19 @@ export class Hub {
     if (guest) this.broadcast({ type: 'purged', nick });
   }
 
+  // Бюджет общий на аккаунт: иначе пять открытых вкладок дали бы пятикратную
+  // норму, и лимит перестал бы что-либо значить.
   private allow(client: Client, type: string): boolean {
+    const key = client.nick!.toLowerCase();
     const now = Date.now();
-    const entry = this.rate.get(client) ?? { windowStartedAt: now, actions: 0, signals: 0, warned: false };
+    const entry = this.rate.get(key) ?? { windowStartedAt: now, actions: 0, signals: 0, warned: false };
     if (now - entry.windowStartedAt >= RATE_WINDOW_MS) {
       entry.windowStartedAt = now;
       entry.actions = 0;
       entry.signals = 0;
       entry.warned = false;
     }
-    this.rate.set(client, entry);
+    this.rate.set(key, entry);
 
     const signal = SIGNAL_TYPES.has(type);
     if (signal) entry.signals++;
@@ -181,13 +198,17 @@ export class Hub {
   }
 
   leave(client: Client): void {
-    this.rate.delete(client);
     if (!this.clients.delete(client)) return;
     const wasInVoice = this.voiceOf.delete(client);
     const nick = client.nick;
     client.nick = null;
     if (nick) {
-      this.broadcast({ type: 'system', text: `${nick} вышел` });
+      // Закрытая вкладка на ноутбуке не значит, что человек ушёл: телефон может
+      // быть в сети. Прощаемся только с последним устройством.
+      if (!this.findByNick(nick)) {
+        this.rate.delete(nick.toLowerCase());
+        this.broadcast({ type: 'system', text: `${nick} вышел` });
+      }
       this.broadcastPresence();
     }
     if (wasInVoice) this.broadcastVoicePresence();
@@ -465,10 +486,11 @@ export class Hub {
   }
 
   onlineNicks(): string[] {
-    return [...this.clients]
-      .map((c) => c.nick)
-      .filter((nick): nick is string => nick !== null)
-      .sort((a, b) => a.localeCompare(b));
+    const unique = new Map<string, string>();
+    for (const client of this.clients) {
+      if (client.nick && !unique.has(client.nick.toLowerCase())) unique.set(client.nick.toLowerCase(), client.nick);
+    }
+    return [...unique.values()].sort((a, b) => a.localeCompare(b));
   }
 
   private voicePresenceMap(): Record<string, string[]> {

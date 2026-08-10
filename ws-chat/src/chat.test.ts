@@ -71,15 +71,86 @@ describe('Hub', () => {
     expect(channelsList(a)).toContain('general');
   });
 
-  it('вытесняет прошлое соединение того же аккаунта', () => {
-    const a = makeClient('a');
-    const b = makeClient('b');
-    hub.join(a, 'alice');
-    hub.join(b, 'Alice');
+  it('пускает два устройства одного аккаунта одновременно', () => {
+    const laptop = makeClient('laptop');
+    const phone = makeClient('phone');
+    hub.join(laptop, 'alice');
+    hub.join(phone, 'alice');
 
-    expect(b.nick).toBe('Alice');
-    expect(a.closed).toBe(true);
-    expect(lastPresence(b)).toEqual(['Alice']);
+    expect(laptop.closed).toBe(false);
+    expect(phone.nick).toBe('alice');
+
+    hub.handle(phone, JSON.stringify({ type: 'message', channel: 'general', text: 'с телефона' }));
+    expect(lastMessage(laptop)?.text).toBe('с телефона');
+    expect(lastMessage(phone)?.text).toBe('с телефона');
+  });
+
+  it('показывает ник в присутствии один раз, сколько бы устройств ни было', () => {
+    const laptop = makeClient('laptop');
+    const phone = makeClient('phone');
+    const bob = makeClient('bob');
+    hub.join(laptop, 'alice');
+    hub.join(phone, 'Alice');
+    hub.join(bob, 'bob');
+
+    expect(lastPresence(bob)).toEqual(['alice', 'bob']);
+  });
+
+  it('объявляет о приходе только на первом устройстве', () => {
+    const bob = makeClient('bob');
+    hub.join(bob, 'bob');
+    const laptop = makeClient('laptop');
+    hub.join(laptop, 'alice');
+    const before = bob.inbox.filter((m) => m.type === 'system').length;
+
+    hub.join(makeClient('phone'), 'alice');
+    expect(bob.inbox.filter((m) => m.type === 'system')).toHaveLength(before);
+  });
+
+  it('объявляет об уходе только когда ушло последнее устройство', () => {
+    const bob = makeClient('bob');
+    const laptop = makeClient('laptop');
+    const phone = makeClient('phone');
+    hub.join(bob, 'bob');
+    hub.join(laptop, 'alice');
+    hub.join(phone, 'alice');
+
+    hub.leave(laptop);
+    expect(bob.inbox.some((m) => m.type === 'system' && m.text.includes('вышел'))).toBe(false);
+    expect(lastPresence(bob)).toEqual(['alice', 'bob']);
+
+    hub.leave(phone);
+    expect(bob.inbox.some((m) => m.type === 'system' && m.text.includes('вышел'))).toBe(true);
+    expect(lastPresence(bob)).toEqual(['bob']);
+  });
+
+  it('доставляет личное сообщение на все устройства обеих сторон', () => {
+    const laptop = makeClient('laptop');
+    const phone = makeClient('phone');
+    const bob = makeClient('bob');
+    hub.join(laptop, 'alice');
+    hub.join(phone, 'alice');
+    hub.join(bob, 'bob');
+
+    hub.handle(bob, JSON.stringify({ type: 'message', to: 'alice', text: 'только вам двоим' }));
+
+    expect(lastMessage(laptop)?.text).toBe('только вам двоим');
+    expect(lastMessage(phone)?.text).toBe('только вам двоим');
+  });
+
+  it('считает бюджет флуда на аккаунт, а не на сокет', () => {
+    const laptop = makeClient('laptop');
+    const phone = makeClient('phone');
+    hub.join(laptop, 'alice');
+    hub.join(phone, 'alice');
+
+    for (let i = 0; i < ACTIONS_PER_WINDOW; i++) {
+      hub.handle(laptop, JSON.stringify({ type: 'message', channel: 'general', text: `раз ${i}` }));
+    }
+    hub.handle(phone, JSON.stringify({ type: 'message', channel: 'general', text: 'через второе устройство' }));
+
+    expect(store.history(channelKey('general'))).toHaveLength(ACTIONS_PER_WINDOW);
+    expect(phone.inbox.at(-1)).toEqual({ type: 'error', reason: 'Слишком часто' });
   });
 
   it('рассылает сообщение канала всем и присваивает id', () => {
@@ -472,7 +543,10 @@ describe('Hub: вход и выход', () => {
     const again = makeClient('a2');
     await auth(again, { mode: 'resume', token });
     expect(again.nick).toBe('гость');
-    expect(a.closed).toBe(true);
+    // Прошлое соединение живёт своей жизнью: одна сессия может быть открыта
+    // и в двух вкладках, и это больше никого не выбивает.
+    expect(a.closed).toBe(false);
+    expect(a.nick).toBe('гость');
 
     const stranger = makeClient('stranger');
     await auth(stranger, { mode: 'resume', token: 'подобранный' });
@@ -534,6 +608,8 @@ describe('Hub: вход и выход', () => {
     });
 
     expect(phone.nick).toBe('alice');
+    expect(laptop.closed).toBe(true);
+    expect(laptop.inbox.some((m) => m.type === 'logged-out' && m.reason?.includes('Пароль изменён'))).toBe(true);
 
     const returning = makeClient('returning');
     await auth(returning, { mode: 'resume', token: laptopToken });
@@ -572,6 +648,8 @@ describe('Hub: вход и выход', () => {
     hub.handle(phone, JSON.stringify({ type: 'logout', everywhere: true }));
 
     expect(phone.inbox.some((m) => m.type === 'logged-out')).toBe(true);
+    expect(laptop.closed).toBe(true);
+    expect(bob.closed).toBe(false);
     expect(bob.nick).toBe('bob');
 
     // Ни одна сессия этого ника больше не поднимается, чужие не задеты.
