@@ -143,6 +143,25 @@ describe('HTTP-слой', () => {
     expect((await fetch(base)).headers.get('strict-transport-security')).toBeNull();
   });
 
+  it('на слишком большое тело отвечает без внутренностей сервера', async () => {
+    const res = await upload(base, alice.token, new Uint8Array(27 * 1024 * 1024));
+    const body = await res.text();
+
+    expect(res.status).toBe(413);
+    expect(body).not.toMatch(/at .+\.js:\d+/);
+    expect(body).not.toContain('node_modules');
+    expect(body).not.toContain(projectDir);
+  }, 30000);
+
+  it('на неизвестный путь отвечает коротко и без разметки', async () => {
+    const res = await fetch(`${base}/нет-такого`);
+    const body = await res.text();
+
+    expect(res.status).toBe(404);
+    expect(body).not.toContain('<html');
+    expect(body).not.toContain('node_modules');
+  });
+
   it('не принимает загрузку без токена', async () => {
     const res = await upload(base, null, 'nope');
     expect(res.status).toBe(401);

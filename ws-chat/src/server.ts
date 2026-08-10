@@ -4,13 +4,14 @@ import { createServer as createHttpsServer } from 'node:https';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import express, { type Request } from 'express';
+import express, { type NextFunction, type Request, type Response } from 'express';
 import { WebSocketServer, WebSocket } from 'ws';
 import { Hub, type Client } from './chat.ts';
 import { Store } from './store.ts';
 import { BlobStore, loadKey } from './blobs.ts';
 import { Auth } from './auth.ts';
 import { deriveKey } from './sealed.ts';
+import { createClient } from './wsclient.ts';
 import { attachSignaling } from 'lan-drop';
 import { ATTACH_SIZE_MAX, TEXT_MAX, SIGNAL_MAX } from './protocol.ts';
 
@@ -163,6 +164,18 @@ app.get('/uploads/:id', (req, res) => {
   res.send(blob.data);
 });
 
+// Всё, что не нашлось, и всё, что упало, наружу выглядит одинаково скупо:
+// стандартный обработчик express отдавал клиенту стек с путями до файлов.
+app.use((_req, res) => {
+  res.status(404).json({ error: 'not-found' });
+});
+
+app.use((error: Error & { status?: number; statusCode?: number }, _req: Request, res: Response, _next: NextFunction) => {
+  const status = error.status ?? error.statusCode ?? 500;
+  if (status >= 500) console.error('http:', error.message);
+  res.status(status).json({ error: status === 413 ? 'too-large' : 'request-failed' });
+});
+
 function safeName(raw: string): string {
   let decoded = raw;
   try {
@@ -225,20 +238,18 @@ wss.on('connection', (ws, request: IncomingMessage) => {
   alive.set(ws, true);
   ws.on('pong', () => alive.set(ws, true));
 
-  const client: Client = {
-    id: String(nextId++),
-    nick: null,
-    token: '',
-    source: sourceOf(request),
-    send(message) {
-      if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(message));
-    },
-    close() {
-      ws.close();
-    },
-  };
+  const client: Client = createClient(ws, String(nextId++), sourceOf(request), () => {
+    console.error(`сокет ${client.nick ?? 'без имени'}: очередь переполнена, отключаю`);
+    hub.leave(client);
+  });
 
-  ws.on('message', (data) => hub.handle(client, data.toString()));
+  ws.on('message', (data) => {
+    try {
+      hub.handle(client, data.toString());
+    } catch (error) {
+      console.error('обработка сообщения:', (error as Error).message);
+    }
+  });
   ws.on('close', () => {
     uploadRate.delete(client.token);
     hub.leave(client);
@@ -301,4 +312,17 @@ function shutdown(): void {
 
 process.on('SIGINT', shutdown);
 process.on('SIGTERM', shutdown);
+
+// Один необработанный отказ не должен уносить чат у всех. Историю сбрасываем
+// на диск в любом случае: пусть лучше сервер уйдёт, чем останется в состоянии,
+// про которое мы ничего не знаем.
+process.on('unhandledRejection', (reason) => {
+  console.error('необработанный отказ:', reason instanceof Error ? reason.message : reason);
+});
+
+process.on('uncaughtException', (error) => {
+  console.error('необработанное исключение:', error.message);
+  store.flush();
+  process.exit(1);
+});
 process.on('exit', () => store.flush());
