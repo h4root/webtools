@@ -161,7 +161,7 @@ export class Store {
     };
     try {
       if (this.key) writeFileAtomic(this.filePath, sealJson(this.key, snapshot), 0o600);
-      else writeJsonAtomic(this.filePath, snapshot);
+      else writeJsonAtomic(this.filePath, snapshot, 0o600);
       this.dirty = false;
     } catch (error) {
       console.error(`store: не сохранить ${this.filePath}: ${(error as Error).message}`);
