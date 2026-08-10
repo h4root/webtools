@@ -5,7 +5,7 @@ import type { AttachmentRef, Reactions, ReplyRef, WireMessage } from './protocol
 
 export const DEFAULT_CHANNELS = ['general', 'random'];
 export const DEFAULT_VOICE_CHANNELS = ['general', 'games'];
-const HISTORY_LIMIT = 200;
+export const HISTORY_LIMIT = 200;
 export const CHANNEL_LIMIT = 100;
 const SAVE_DEBOUNCE_MS = 400;
 
@@ -59,7 +59,11 @@ function toWire(message: StoredMessage): WireMessage {
 export class Store {
   private channels: string[];
   private voiceChannels: string[];
-  private messages: StoredMessage[] = [];
+  // Разговоры — основная структура: история читается срезом, а не фильтром по
+  // всему. byId и byBlob держат ссылки на те же объекты.
+  private byKey = new Map<string, StoredMessage[]>();
+  private byId = new Map<number, StoredMessage>();
+  private byBlob = new Map<string, Set<number>>();
   private nextId = 1;
   private saveTimer: ReturnType<typeof setTimeout> | null = null;
   private dirty = false;
@@ -123,11 +127,19 @@ export class Store {
     const { channels, voiceChannels, messages, nextId } = data as Record<string, unknown>;
     if (Array.isArray(channels) && channels.length) this.channels = channels;
     if (Array.isArray(voiceChannels) && voiceChannels.length) this.voiceChannels = voiceChannels;
-    if (Array.isArray(messages)) this.messages = messages;
     if (typeof nextId === 'number') this.nextId = nextId;
-    for (const message of this.messages) {
-      if (typeof message?.id === 'number' && message.id >= this.nextId) this.nextId = message.id + 1;
+    if (Array.isArray(messages)) {
+      for (const message of messages as StoredMessage[]) {
+        if (typeof message?.id !== 'number' || typeof message?.key !== 'string') continue;
+        this.conversation(message.key).push(message);
+        this.index(message);
+        if (message.id >= this.nextId) this.nextId = message.id + 1;
+      }
     }
+  }
+
+  private flatten(): StoredMessage[] {
+    return [...this.byId.values()].sort((a, b) => a.id - b.id);
   }
 
   private scheduleSave(): void {
@@ -144,7 +156,7 @@ export class Store {
     const snapshot = {
       channels: this.channels,
       voiceChannels: this.voiceChannels,
-      messages: this.messages,
+      messages: this.flatten(),
       nextId: this.nextId,
     };
     try {
@@ -183,7 +195,8 @@ export class Store {
     if (!this.channels.includes(name) || this.channels.length <= 1) return false;
     this.channels = this.channels.filter((c) => c !== name);
     const key = channelKey(name);
-    this.messages = this.messages.filter((m) => m.key !== key);
+    for (const message of this.byKey.get(key) ?? []) this.unindex(message);
+    this.byKey.delete(key);
     this.scheduleSave();
     return true;
   }
@@ -210,9 +223,43 @@ export class Store {
     return true;
   }
 
+  private conversation(key: string): StoredMessage[] {
+    let messages = this.byKey.get(key);
+    if (!messages) {
+      messages = [];
+      this.byKey.set(key, messages);
+    }
+    return messages;
+  }
+
+  private index(message: StoredMessage): void {
+    this.byId.set(message.id, message);
+    for (const attachment of message.attachments ?? []) {
+      const users = this.byBlob.get(attachment.id) ?? new Set<number>();
+      users.add(message.id);
+      this.byBlob.set(attachment.id, users);
+    }
+  }
+
+  private unindex(message: StoredMessage): void {
+    this.byId.delete(message.id);
+    for (const attachment of message.attachments ?? []) {
+      const users = this.byBlob.get(attachment.id);
+      if (!users) continue;
+      users.delete(message.id);
+      if (users.size === 0) this.byBlob.delete(attachment.id);
+    }
+  }
+
   private append(message: StoredMessage): WireMessage {
-    this.messages.push(message);
-    this.trim(message.key);
+    const messages = this.conversation(message.key);
+    messages.push(message);
+    this.index(message);
+    // Вытесняем только из этого разговора: соседние трогать незачем, а раньше
+    // на каждой вставке просеивалась вся история целиком.
+    if (messages.length > HISTORY_LIMIT) {
+      for (const dropped of messages.splice(0, messages.length - HISTORY_LIMIT)) this.unindex(dropped);
+    }
     this.scheduleSave();
     return toWire(message);
   }
@@ -260,15 +307,8 @@ export class Store {
     });
   }
 
-  private trim(key: string): void {
-    const forKey = this.messages.filter((m) => m.key === key);
-    if (forKey.length <= HISTORY_LIMIT) return;
-    const drop = new Set(forKey.slice(0, forKey.length - HISTORY_LIMIT).map((m) => m.id));
-    this.messages = this.messages.filter((m) => !drop.has(m.id));
-  }
-
   find(id: number): StoredMessage | undefined {
-    return this.messages.find((m) => m.id === id);
+    return this.byId.get(id);
   }
 
   private isAuthor(message: StoredMessage, nick: string): boolean {
@@ -287,9 +327,16 @@ export class Store {
   remove(id: number, from: string): StoredMessage | null {
     const message = this.find(id);
     if (!message || !this.isAuthor(message, from)) return null;
-    this.messages = this.messages.filter((m) => m.id !== id);
+    this.detach(message);
     this.scheduleSave();
     return message;
+  }
+
+  private detach(message: StoredMessage): void {
+    const messages = this.byKey.get(message.key);
+    const at = messages?.indexOf(message) ?? -1;
+    if (messages && at !== -1) messages.splice(at, 1);
+    this.unindex(message);
   }
 
   toggleReaction(id: number, nick: string, emoji: string): StoredMessage | null {
@@ -306,20 +353,25 @@ export class Store {
 
   purgeUser(nick: string): { removed: number } {
     const lower = nick.toLowerCase();
-    const before = this.messages.length;
     const gone = new Set<number>();
 
-    this.messages = this.messages.filter((message) => {
-      const mine = message.from.toLowerCase() === lower;
-      const inMyDm = message.to !== undefined && (mine || message.to.toLowerCase() === lower);
-      if (mine || inMyDm) {
-        gone.add(message.id);
-        return false;
+    for (const [key, messages] of this.byKey) {
+      const kept: StoredMessage[] = [];
+      for (const message of messages) {
+        const mine = message.from.toLowerCase() === lower;
+        const inMyDm = message.to !== undefined && (mine || message.to.toLowerCase() === lower);
+        if (mine || inMyDm) {
+          gone.add(message.id);
+          this.unindex(message);
+        } else {
+          kept.push(message);
+        }
       }
-      return true;
-    });
+      if (kept.length) this.byKey.set(key, kept);
+      else this.byKey.delete(key);
+    }
 
-    for (const message of this.messages) {
+    for (const message of this.byId.values()) {
       if (message.replyTo && gone.has(message.replyTo.id)) delete message.replyTo;
       if (!message.reactions) continue;
       for (const [emoji, users] of Object.entries(message.reactions)) {
@@ -330,47 +382,44 @@ export class Store {
       if (Object.keys(message.reactions).length === 0) delete message.reactions;
     }
 
-    if (before !== this.messages.length) this.scheduleSave();
-    return { removed: before - this.messages.length };
+    if (gone.size) this.scheduleSave();
+    return { removed: gone.size };
   }
 
   dmPartners(nick: string): { nick: string; ts: number }[] {
     const lower = nick.toLowerCase();
     const latest = new Map<string, { nick: string; ts: number }>();
-    for (const message of this.messages) {
-      if (message.to === undefined) continue;
-      const from = message.from.toLowerCase();
-      const to = message.to.toLowerCase();
-      if (from !== lower && to !== lower) continue;
-      const other = from === lower ? message.to : message.from;
-      const key = other.toLowerCase();
-      const seen = latest.get(key);
-      if (!seen || seen.ts < message.ts) latest.set(key, { nick: other, ts: message.ts });
+    for (const [key, messages] of this.byKey) {
+      if (!key.startsWith('dm:') || !messages.length) continue;
+      for (const message of messages) {
+        if (message.to === undefined) continue;
+        const from = message.from.toLowerCase();
+        const to = message.to.toLowerCase();
+        if (from !== lower && to !== lower) continue;
+        const other = from === lower ? message.to : message.from;
+        const seen = latest.get(other.toLowerCase());
+        if (!seen || seen.ts < message.ts) latest.set(other.toLowerCase(), { nick: other, ts: message.ts });
+      }
     }
     return [...latest.values()].sort((a, b) => b.ts - a.ts);
   }
 
   attachmentIds(): Set<string> {
-    const ids = new Set<string>();
-    for (const message of this.messages) {
-      for (const attachment of message.attachments ?? []) ids.add(attachment.id);
-    }
-    return ids;
+    return new Set(this.byBlob.keys());
   }
 
   findAttachment(id: string, nick: string): AttachmentRef | null {
-    for (const message of this.messages) {
+    for (const messageId of this.byBlob.get(id) ?? []) {
+      const message = this.byId.get(messageId);
+      if (!message || !this.canAccess(message, nick)) continue;
       const attachment = message.attachments?.find((a) => a.id === id);
-      if (attachment && this.canAccess(message, nick)) return attachment;
+      if (attachment) return attachment;
     }
     return null;
   }
 
   history(key: string, limit = 100): WireMessage[] {
-    return this.messages
-      .filter((m) => m.key === key)
-      .slice(-limit)
-      .map(toWire);
+    return (this.byKey.get(key) ?? []).slice(-limit).map(toWire);
   }
 }
 

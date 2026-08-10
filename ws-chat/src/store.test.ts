@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { mkdtempSync, rmSync, writeFileSync, existsSync, readdirSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { Store, channelKey, dmKey, recipientsOf, CHANNEL_LIMIT } from './store.ts';
+import { Store, channelKey, dmKey, recipientsOf, CHANNEL_LIMIT, HISTORY_LIMIT } from './store.ts';
 
 describe('Store', () => {
   let store: Store;
@@ -121,6 +121,28 @@ describe('Store', () => {
 
     expect(store.removeChannel('general')).toBe(false);
     expect(store.listChannels()).toEqual(['general']);
+  });
+
+  it('усечение по лимиту не задевает соседние разговоры', () => {
+    for (let i = 0; i < HISTORY_LIMIT + 50; i++) store.addChannelMessage('general', 'alice', `общий ${i}`);
+    store.addChannelMessage('random', 'bob', 'в другом канале');
+    store.addDirectMessage('alice', 'bob', 'в личке');
+
+    const general = store.history(channelKey('general'), HISTORY_LIMIT);
+    expect(general).toHaveLength(HISTORY_LIMIT);
+    expect(general[0].text).toBe('общий 50');
+    expect(general.at(-1)?.text).toBe(`общий ${HISTORY_LIMIT + 49}`);
+    expect(store.history(channelKey('random')).map((m) => m.text)).toEqual(['в другом канале']);
+    expect(store.history(dmKey('alice', 'bob')).map((m) => m.text)).toEqual(['в личке']);
+  });
+
+  it('после усечения id вытесненных больше не находятся', () => {
+    const first = store.addChannelMessage('general', 'alice', 'самое первое');
+    for (let i = 0; i < HISTORY_LIMIT; i++) store.addChannelMessage('general', 'alice', `ещё ${i}`);
+
+    expect(store.find(first.id)).toBeUndefined();
+    expect(store.edit(first.id, 'alice', 'поздно')).toBeNull();
+    expect(store.toggleReaction(first.id, 'bob', '🔥')).toBeNull();
   });
 
   it('purgeUser уносит сообщения, ЛС, реакции и цитаты ушедшего', () => {
