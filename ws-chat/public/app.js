@@ -316,6 +316,10 @@ function handleServer(message) {
     case 'voice-roster':
       voice.handleRoster(message.channel, message.users);
       break;
+    case 'voice-left':
+      voice.reset();
+      systemLine(message.reason);
+      break;
     case 'voice-signal':
       voice.handleSignal(message.from, message.data);
       break;

@@ -454,6 +454,14 @@ export class Hub {
     }
     if (this.voiceOf.get(client) === channel) return;
 
+    // Голос одноустройственный: два микрофона одного человека в канале дают
+    // эхо, а сигналинг адресуется по нику и не смог бы выбрать между ними.
+    for (const [peer] of [...this.voiceOf]) {
+      if (peer === client || peer.nick?.toLowerCase() !== client.nick!.toLowerCase()) continue;
+      this.voiceOf.delete(peer);
+      peer.send({ type: 'voice-left', reason: 'Голос переключился на другое устройство' });
+    }
+
     const present = [...this.voiceOf]
       .filter(([c, ch]) => ch === channel && c !== client && c.nick)
       .map(([c]) => c.nick!)
@@ -496,8 +504,13 @@ export class Hub {
   private voicePresenceMap(): Record<string, string[]> {
     const map: Record<string, string[]> = {};
     for (const name of this.store.listVoiceChannels()) map[name] = [];
+    const seen = new Set<string>();
     for (const [client, channel] of this.voiceOf) {
-      if (client.nick && map[channel]) map[channel].push(client.nick);
+      if (!client.nick || !map[channel]) continue;
+      const key = `${channel}:${client.nick.toLowerCase()}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      map[channel].push(client.nick);
     }
     for (const name of Object.keys(map)) map[name].sort((a, b) => a.localeCompare(b));
     return map;

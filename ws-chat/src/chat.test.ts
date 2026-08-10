@@ -468,6 +468,77 @@ describe('Hub', () => {
     expect(hub.rateEntries()).toBe(0);
   });
 
+  it('вход в голос со второго устройства выводит первое', () => {
+    const laptop = makeClient('laptop');
+    const phone = makeClient('phone');
+    hub.join(laptop, 'alice');
+    hub.join(phone, 'alice');
+
+    hub.handle(laptop, JSON.stringify({ type: 'voice-join', channel: 'general' }));
+    hub.handle(phone, JSON.stringify({ type: 'voice-join', channel: 'general' }));
+
+    expect(laptop.inbox.some((m) => m.type === 'voice-left')).toBe(true);
+    expect(voicePresence(phone)?.general).toEqual(['alice']);
+  });
+
+  it('выводит из голоса и при переходе в другой канал с другого устройства', () => {
+    const laptop = makeClient('laptop');
+    const phone = makeClient('phone');
+    hub.join(laptop, 'alice');
+    hub.join(phone, 'alice');
+
+    hub.handle(laptop, JSON.stringify({ type: 'voice-join', channel: 'general' }));
+    hub.handle(phone, JSON.stringify({ type: 'voice-join', channel: 'games' }));
+
+    expect(laptop.inbox.some((m) => m.type === 'voice-left')).toBe(true);
+    expect(voicePresence(phone)?.general).toEqual([]);
+    expect(voicePresence(phone)?.games).toEqual(['alice']);
+  });
+
+  it('смена канала на том же устройстве не считается переводом', () => {
+    const a = makeClient('a');
+    hub.join(a, 'alice');
+
+    hub.handle(a, JSON.stringify({ type: 'voice-join', channel: 'general' }));
+    hub.handle(a, JSON.stringify({ type: 'voice-join', channel: 'games' }));
+
+    expect(a.inbox.some((m) => m.type === 'voice-left')).toBe(false);
+    expect(voicePresence(a)?.games).toEqual(['alice']);
+  });
+
+  it('сигналинг доходит до того устройства, которое сейчас в канале', () => {
+    const laptop = makeClient('laptop');
+    const phone = makeClient('phone');
+    const bob = makeClient('bob');
+    hub.join(laptop, 'alice');
+    hub.join(phone, 'alice');
+    hub.join(bob, 'bob');
+
+    hub.handle(laptop, JSON.stringify({ type: 'voice-join', channel: 'general' }));
+    hub.handle(phone, JSON.stringify({ type: 'voice-join', channel: 'general' }));
+    hub.handle(bob, JSON.stringify({ type: 'voice-join', channel: 'general' }));
+    hub.handle(bob, JSON.stringify({ type: 'voice-signal', to: 'alice', data: { kind: 'offer' } }));
+
+    expect(phone.inbox.some((m) => m.type === 'voice-signal')).toBe(true);
+    expect(laptop.inbox.some((m) => m.type === 'voice-signal')).toBe(false);
+  });
+
+  it('новичок видит каждого участника один раз', () => {
+    const laptop = makeClient('laptop');
+    const phone = makeClient('phone');
+    const bob = makeClient('bob');
+    hub.join(laptop, 'alice');
+    hub.join(phone, 'alice');
+    hub.join(bob, 'bob');
+
+    hub.handle(laptop, JSON.stringify({ type: 'voice-join', channel: 'general' }));
+    hub.handle(phone, JSON.stringify({ type: 'voice-join', channel: 'general' }));
+    hub.handle(bob, JSON.stringify({ type: 'voice-join', channel: 'general' }));
+
+    const roster = bob.inbox.filter((m) => m.type === 'voice-roster').at(-1);
+    expect(roster?.type === 'voice-roster' && roster.users).toEqual(['alice']);
+  });
+
   it('требует входа до отправки сообщений', () => {
     const a = makeClient('a');
     hub.handle(a, JSON.stringify({ type: 'message', channel: 'general', text: 'hi' }));

@@ -91,6 +91,8 @@ export type ServerMessage =
   | { type: 'error'; reason: string }
   | { type: 'voice-channels'; list: string[] }
   | { type: 'voice-roster'; channel: string; users: string[] }
+  // Голос переехал на другое устройство этого же аккаунта: сверни свой WebRTC.
+  | { type: 'voice-left'; reason: string }
   | { type: 'voice-presence'; channels: Record<string, string[]> }
   | { type: 'voice-signal'; from: string; data: unknown }
   | { type: 'call-invite'; from: string }
