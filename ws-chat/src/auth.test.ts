@@ -238,6 +238,65 @@ describe('Auth', () => {
     expect(auth.attemptSources()).toBe(0);
   });
 
+  it('меняет пароль: старый перестаёт работать, новый пускает', async () => {
+    await auth.register('alice', 'старый-пароль-раз');
+    expect((await auth.changePassword('alice', 'старый-пароль-раз', 'новый-пароль-два')).ok).toBe(true);
+
+    expect((await auth.login('alice', 'старый-пароль-раз')).error).toBe('bad-password');
+    expect((await auth.login('alice', 'новый-пароль-два')).ok).toBe(true);
+  });
+
+  it('при смене пароля берёт новую соль', async () => {
+    await auth.register('alice', 'один-и-тот-же-пароль');
+    const before = JSON.parse(readFileSync(join(dir, 'accounts.json'), 'utf8'))[0];
+
+    await auth.changePassword('alice', 'один-и-тот-же-пароль', 'один-и-тот-же-пароль');
+    const after = JSON.parse(readFileSync(join(dir, 'accounts.json'), 'utf8'))[0];
+
+    expect(after.salt).not.toBe(before.salt);
+    expect(after.hash).not.toBe(before.hash);
+  });
+
+  it('не меняет пароль без верного текущего и считает это промахом', async () => {
+    await auth.register('alice', 'настоящий-пароль');
+    expect((await auth.changePassword('alice', 'не-тот', 'новый-пароль-два')).error).toBe('bad-password');
+    expect((await auth.login('alice', 'настоящий-пароль')).ok).toBe(true);
+  });
+
+  it('не принимает слишком короткий новый пароль', async () => {
+    await auth.register('alice', 'настоящий-пароль');
+    expect((await auth.changePassword('alice', 'настоящий-пароль', 'корот')).error).toBe('weak-password');
+    expect((await auth.login('alice', 'настоящий-пароль')).ok).toBe(true);
+  });
+
+  it('гостю менять нечего', async () => {
+    await auth.registerGuest('гость');
+    expect((await auth.changePassword('гость', 'что-угодно', 'новый-пароль-два')).error).toBe('guest-has-no-password');
+  });
+
+  it('смена пароля гасит остальные сессии, но не текущую', async () => {
+    const first = await auth.register('alice', 'старый-пароль-раз');
+    const second = await auth.login('alice', 'старый-пароль-раз');
+    const third = await auth.login('alice', 'старый-пароль-раз');
+
+    await auth.changePassword('alice', 'старый-пароль-раз', 'новый-пароль-два', third.token);
+
+    expect(auth.resume(third.token!)).not.toBeNull();
+    expect(auth.resume(first.token!)).toBeNull();
+    expect(auth.resume(second.token!)).toBeNull();
+  });
+
+  it('выход отовсюду гасит все сессии ника и возвращает их', async () => {
+    const first = await auth.register('alice', 'достаточно-длинный');
+    const second = await auth.login('alice', 'достаточно-длинный');
+    const other = await auth.register('bob', 'достаточно-длинный');
+
+    expect(auth.revokeAllFor('ALICE')).toBe(2);
+    expect(auth.resume(first.token!)).toBeNull();
+    expect(auth.resume(second.token!)).toBeNull();
+    expect(auth.resume(other.token!)).not.toBeNull();
+  });
+
   it('переживает перезапуск: аккаунты и сессии читаются с диска', async () => {
     const { token } = await auth.register('alice', 'правильный-пароль');
     const restarted = new Auth(dir);

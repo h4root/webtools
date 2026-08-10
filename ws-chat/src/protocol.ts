@@ -51,7 +51,8 @@ export type AuthMode = 'guest' | 'register' | 'login' | 'resume';
 
 export type ClientMessage =
   | { type: 'auth'; mode: AuthMode; nick?: string; password?: string; token?: string }
-  | { type: 'logout' }
+  | { type: 'logout'; everywhere?: boolean }
+  | { type: 'change-password'; current: string; next: string }
   | { type: 'channel-create'; name: string }
   | { type: 'channel-delete'; name: string }
   | { type: 'voice-channel-delete'; name: string }
@@ -74,7 +75,8 @@ export type ClientMessage =
 export type ServerMessage =
   | { type: 'welcome'; nick: string; token: string; guest: boolean }
   | { type: 'auth-error'; reason: string; retryAfterMs?: number }
-  | { type: 'logged-out' }
+  | { type: 'logged-out'; reason?: string }
+  | { type: 'password-changed' }
   | { type: 'purged'; nick: string }
   | { type: 'channels'; list: string[] }
   | { type: 'presence'; users: string[] }
@@ -155,7 +157,12 @@ export function parseClientMessage(raw: string): ClientMessage | null {
       return { type: 'auth', mode, nick: data.nick.trim(), password: data.password };
     }
     case 'logout':
-      return { type: 'logout' };
+      return { type: 'logout', everywhere: data.everywhere === true };
+    case 'change-password': {
+      if (typeof data.current !== 'string' || data.current.length > PASSWORD_LIMIT) return null;
+      if (typeof data.next !== 'string' || data.next.length > PASSWORD_LIMIT) return null;
+      return { type: 'change-password', current: data.current, next: data.next };
+    }
     case 'channel-create':
       return isValidChannelName(data.name) ? { type: 'channel-create', name: data.name } : null;
     case 'channel-delete':

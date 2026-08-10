@@ -84,6 +84,7 @@ let authToken = '';
 let isGuest = false;
 let authMode = 'guest';
 let pendingAuth = null;
+let passwordNote = null;
 let joined = false;
 let channels = [];
 let online = [];
@@ -295,7 +296,11 @@ function handleServer(message) {
       handleAuthError(message);
       break;
     case 'logged-out':
-      finishLogout();
+      finishLogout(message.reason);
+      break;
+    case 'password-changed':
+      passwordNote?.('Пароль изменён. Остальные устройства придётся авторизовать заново.');
+      passwordNote = null;
       break;
     case 'purged':
       forgetUser(message.nick);
@@ -330,7 +335,7 @@ function handleServer(message) {
   }
 }
 
-function finishLogout() {
+function finishLogout(reason) {
   forgetToken();
   pendingAuth = null;
   outbox = [];
@@ -339,7 +344,7 @@ function finishLogout() {
     ws = null;
     socket.close();
   }
-  returnToGate(isGuest ? 'Гостевая личность стёрта' : 'Вы вышли');
+  returnToGate(reason ?? (isGuest ? 'Гостевая личность стёрта' : 'Вы вышли'));
 }
 
 function returnToGate(reason) {
@@ -1482,7 +1487,14 @@ function initUI() {
   menuBtn.appendChild(icon('menu', 20));
   membersBtn.appendChild(icon('users', 18));
   dropBtn.appendChild(icon('paperclip', 18));
-  const { toggle } = mountSettings(settingsEl);
+  const { toggle } = mountSettings(settingsEl, {
+    canChangePassword: () => joined && !isGuest,
+    onChangePassword: (current, next, done) => {
+      passwordNote = done;
+      wsSend({ type: 'change-password', current, next });
+    },
+    onLogoutEverywhere: () => wsSend({ type: 'logout', everywhere: true }),
+  });
   setButton(toggle, 'gear');
   makeDraggable(callPanel, callGrip);
   settings.onMotionChange(applyMotionState);

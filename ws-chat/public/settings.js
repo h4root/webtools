@@ -104,7 +104,7 @@ async function listDevices() {
   }
 }
 
-export function mountSettings(root) {
+export function mountSettings(root, account = {}) {
   settings.applyFont();
   settings.applyMotion();
 
@@ -141,6 +141,56 @@ export function mountSettings(root) {
     );
     popup.append(section('Шрифт', fontSelect()));
     popup.append(section('Анимации', motionSelect()));
+    if (account.canChangePassword?.()) popup.append(section('Пароль', passwordForm()));
+    if (account.onLogoutEverywhere) popup.append(section('Сессии', logoutEverywhere()));
+  }
+
+  function passwordForm() {
+    const form = document.createElement('form');
+    form.className = 'settings-password';
+
+    const current = document.createElement('input');
+    current.type = 'password';
+    current.placeholder = 'текущий пароль';
+    current.autocomplete = 'current-password';
+    const next = document.createElement('input');
+    next.type = 'password';
+    next.placeholder = 'новый пароль';
+    next.autocomplete = 'new-password';
+    const submit = document.createElement('button');
+    submit.type = 'submit';
+    submit.textContent = 'сменить';
+    const note = document.createElement('p');
+    note.className = 'settings-note';
+
+    form.append(current, next, submit, note);
+    form.addEventListener('submit', (event) => {
+      event.preventDefault();
+      if (next.value.length < 8) {
+        note.textContent = 'Новый пароль от 8 символов';
+        return;
+      }
+      note.textContent = 'Меняем…';
+      account.onChangePassword(current.value, next.value, (message) => {
+        note.textContent = message;
+        current.value = '';
+        next.value = '';
+      });
+    });
+    return form;
+  }
+
+  function logoutEverywhere() {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'settings-danger';
+    button.textContent = 'выйти со всех устройств';
+    button.addEventListener('click', () => {
+      if (confirm('Выйти со всех устройств? Войти заново придётся везде, включая это.')) {
+        account.onLogoutEverywhere();
+      }
+    });
+    return button;
   }
 
   function motionSelect() {

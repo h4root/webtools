@@ -282,6 +282,52 @@ export class Auth {
     return { ok: true, nick: account.nick, guest: false, token: this.issue(account) };
   }
 
+  // Смена пароля обесценивает всё, что было выдано под старым: если его увели,
+  // чужие сессии переживут смену и толку от неё не будет. Текущую оставляем,
+  // иначе меняющий выбьет сам себя.
+  async changePassword(nick: string, current: string, next: string, keepToken?: string): Promise<AuthResult> {
+    const locked = this.lockState(nick);
+    if (locked) return { ok: false, error: 'locked', retryAfterMs: locked };
+
+    const account = this.find(nick);
+    if (!account || account.guest || !account.salt || !account.hash) {
+      await this.derive(current, this.decoySalt);
+      return { ok: false, error: account?.guest ? 'guest-has-no-password' : 'no-account' };
+    }
+
+    const expected = Buffer.from(account.hash, 'hex');
+    const actual = await this.derive(current, Buffer.from(account.salt, 'hex'));
+    if (expected.length !== actual.length || !timingSafeEqual(expected, actual)) {
+      this.noteFailure(nick);
+      return { ok: false, error: 'bad-password' };
+    }
+
+    if (next.length < PASSWORD_MIN || next.length > PASSWORD_MAX) return { ok: false, error: 'weak-password' };
+
+    const salt = randomBytes(SALT_LEN);
+    account.salt = salt.toString('hex');
+    account.hash = (await this.derive(next, salt)).toString('hex');
+    this.clearFailures(nick);
+    this.saveAccounts();
+    this.revokeAllFor(nick, keepToken);
+
+    return { ok: true, nick: account.nick, guest: false };
+  }
+
+  revokeAllFor(nick: string, keepToken?: string): number {
+    const lower = nick.toLowerCase();
+    const keepHash = keepToken ? sha256(keepToken) : null;
+    let revoked = 0;
+
+    for (const [hash, session] of this.sessions) {
+      if (session.nick.toLowerCase() !== lower || hash === keepHash) continue;
+      this.sessions.delete(hash);
+      revoked++;
+    }
+    if (revoked) this.saveSessions();
+    return revoked;
+  }
+
   resume(token: string): { nick: string; guest: boolean } | null {
     const session = this.sessions.get(sha256(token));
     if (!session) return null;

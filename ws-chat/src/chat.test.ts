@@ -519,6 +519,73 @@ describe('Hub: вход и выход', () => {
     expect(watcher.inbox.some((m) => m.type === 'purged' && m.nick === 'гость')).toBe(true);
   });
 
+  it('смена пароля выбивает другие устройства, но не то, с которого меняли', async () => {
+    const laptop = makeClient('laptop');
+    await auth(laptop, { mode: 'register', nick: 'alice', password: 'старый-пароль-раз' });
+    const laptopToken = welcomeOf(laptop)!.token;
+
+    const phone = makeClient('phone');
+    await auth(phone, { mode: 'login', nick: 'alice', password: 'старый-пароль-раз' });
+    const phoneToken = welcomeOf(phone)!.token;
+
+    hub.handle(phone, JSON.stringify({ type: 'change-password', current: 'старый-пароль-раз', next: 'новый-пароль-два' }));
+    await vi.waitFor(() => {
+      expect(phone.inbox.some((m) => m.type === 'password-changed')).toBe(true);
+    });
+
+    expect(phone.nick).toBe('alice');
+
+    const returning = makeClient('returning');
+    await auth(returning, { mode: 'resume', token: laptopToken });
+    expect(returning.nick).toBeNull();
+
+    const stillHere = makeClient('still');
+    await auth(stillHere, { mode: 'resume', token: phoneToken });
+    expect(stillHere.nick).toBe('alice');
+  });
+
+  it('не меняет пароль по неверному текущему', async () => {
+    const a = makeClient('a');
+    await auth(a, { mode: 'register', nick: 'alice', password: 'настоящий-пароль' });
+
+    hub.handle(a, JSON.stringify({ type: 'change-password', current: 'не-тот', next: 'новый-пароль-два' }));
+    await vi.waitFor(() => {
+      expect(a.inbox.some((m) => m.type === 'error')).toBe(true);
+    });
+
+    expect(a.inbox.some((m) => m.type === 'password-changed')).toBe(false);
+    const back = makeClient('back');
+    await auth(back, { mode: 'login', nick: 'alice', password: 'настоящий-пароль' });
+    expect(back.nick).toBe('alice');
+  });
+
+  it('выход отовсюду закрывает все устройства этого ника', async () => {
+    const laptop = makeClient('laptop');
+    await auth(laptop, { mode: 'register', nick: 'alice', password: 'достаточно-длинный' });
+    const phone = makeClient('phone');
+    await auth(phone, { mode: 'login', nick: 'alice', password: 'достаточно-длинный' });
+    const phoneToken = welcomeOf(phone)!.token;
+
+    const bob = makeClient('bob');
+    await auth(bob, { mode: 'guest', nick: 'bob' });
+
+    hub.handle(phone, JSON.stringify({ type: 'logout', everywhere: true }));
+
+    expect(phone.inbox.some((m) => m.type === 'logged-out')).toBe(true);
+    expect(bob.nick).toBe('bob');
+
+    // Ни одна сессия этого ника больше не поднимается, чужие не задеты.
+    for (const token of [phoneToken, welcomeOf(laptop)!.token]) {
+      const returning = makeClient(`r-${token.slice(0, 4)}`);
+      await auth(returning, { mode: 'resume', token });
+      expect(returning.nick).toBeNull();
+    }
+
+    const bobAgain = makeClient('bob-again');
+    await auth(bobAgain, { mode: 'resume', token: welcomeOf(bob)!.token });
+    expect(bobAgain.nick).toBe('bob');
+  });
+
   it('выход по паролю гасит сессию, но не трогает написанное', async () => {
     const a = makeClient('a');
     await auth(a, { mode: 'register', nick: 'alice', password: 'достаточно-длинный' });

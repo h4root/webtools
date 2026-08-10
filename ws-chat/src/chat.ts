@@ -127,10 +127,20 @@ export class Hub {
     this.broadcastPresence();
   }
 
-  logout(client: Client): void {
+  private async changePassword(client: Client, message: Extract<ClientMessage, { type: 'change-password' }>): Promise<void> {
+    const result = await this.auth!.changePassword(client.nick!, message.current, message.next, client.token);
+    if (!result.ok) {
+      client.send({ type: 'error', reason: AUTH_ERRORS[result.error!] ?? 'Не удалось сменить пароль' });
+      return;
+    }
+    client.send({ type: 'password-changed' });
+  }
+
+  logout(client: Client, everywhere = false): void {
     const nick = client.nick!;
     const guest = client.guest;
     this.auth?.revoke(client.token);
+    if (everywhere) this.auth?.revokeAllFor(nick);
     if (guest) {
       this.auth?.removeAccount(nick);
       this.store.purgeUser(nick);
@@ -206,7 +216,16 @@ export class Hub {
     }
 
     if (message.type === 'logout') {
-      this.logout(client);
+      this.logout(client, message.everywhere);
+      return;
+    }
+
+    if (message.type === 'change-password') {
+      if (client.authPending) return;
+      client.authPending = true;
+      void this.changePassword(client, message).finally(() => {
+        client.authPending = false;
+      });
       return;
     }
 
