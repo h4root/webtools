@@ -12,6 +12,7 @@ import { BlobStore, loadKey } from './blobs.ts';
 import { Auth } from './auth.ts';
 import { deriveKey } from './sealed.ts';
 import { createClient } from './wsclient.ts';
+import { describeUpload, planDownload, UploadQuota } from './attachments.ts';
 import { attachSignaling } from 'lan-drop';
 import { ATTACH_SIZE_MAX, TEXT_MAX, SIGNAL_MAX } from './protocol.ts';
 
@@ -31,7 +32,6 @@ const HEARTBEAT_MS = 30000;
 const SWEEP_MS = 60000;
 const ACCOUNT_SWEEP_MS = 5 * 60 * 1000;
 const UPLOAD_GRACE_MS = 30 * 60 * 1000;
-const INLINE_MIME = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/avif', 'image/bmp']);
 const UPLOADS_PER_MIN = 30;
 
 // Блобы шифруются мастер-ключом напрямую — так сложилось, и менять это нельзя,
@@ -92,18 +92,7 @@ function authorize(req: Request): { nick: string; token: string } | null {
   return session ? { nick: session.nick, token } : null;
 }
 
-const uploadRate = new Map<string, { count: number; until: number }>();
-
-function rateLimited(token: string): boolean {
-  const now = Date.now();
-  const entry = uploadRate.get(token);
-  if (!entry || entry.until < now) {
-    uploadRate.set(token, { count: 1, until: now + 60000 });
-    return false;
-  }
-  entry.count++;
-  return entry.count > UPLOADS_PER_MIN;
-}
+const uploadQuota = new UploadQuota(UPLOADS_PER_MIN, 60000);
 
 app.post('/upload', express.raw({ type: () => true, limit: ATTACH_SIZE_MAX }), (req, res) => {
   const client = authorize(req);
@@ -111,7 +100,7 @@ app.post('/upload', express.raw({ type: () => true, limit: ATTACH_SIZE_MAX }), (
     res.status(401).json({ error: 'unauthorized' });
     return;
   }
-  if (rateLimited(client.token)) {
+  if (!uploadQuota.allow(client.token)) {
     res.status(429).json({ error: 'too-many-uploads' });
     return;
   }
@@ -122,12 +111,10 @@ app.post('/upload', express.raw({ type: () => true, limit: ATTACH_SIZE_MAX }), (
     return;
   }
 
-  const rawName = typeof req.headers['x-filename'] === 'string' ? safeName(req.headers['x-filename']) : 'file';
-  const mime = typeof req.headers['content-type'] === 'string' ? req.headers['content-type'].slice(0, 128) : 'application/octet-stream';
-
+  const { name, mime } = describeUpload(req.headers);
   try {
     const meta = blobs.put(body, mime);
-    res.json({ id: meta.id, name: rawName, size: meta.size, mime: meta.mime });
+    res.json({ id: meta.id, name, size: meta.size, mime: meta.mime });
   } catch (error) {
     console.error('upload:', (error as Error).message);
     res.status(500).json({ error: 'write' });
@@ -142,26 +129,19 @@ app.get('/uploads/:id', (req, res) => {
   }
 
   const attachment = store.findAttachment(req.params.id, client.nick);
-  if (!attachment) {
-    res.status(404).json({ error: 'not-found' });
+  const blob = attachment ? blobs.open(attachment.id) : null;
+  const plan = planDownload(attachment, blob && { mime: blob.meta.mime });
+
+  if (plan.status !== 200) {
+    res.status(plan.status).json({ error: plan.error });
     return;
   }
 
-  const blob = blobs.open(attachment.id);
-  if (!blob) {
-    res.status(410).json({ error: 'gone' });
-    return;
-  }
-
-  const inline = INLINE_MIME.has(blob.meta.mime);
-  res.setHeader('Content-Type', inline ? blob.meta.mime : 'application/octet-stream');
+  res.setHeader('Content-Type', plan.contentType);
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('Cache-Control', 'private, no-store');
-  res.setHeader(
-    'Content-Disposition',
-    `${inline ? 'inline' : 'attachment'}; filename*=UTF-8''${encodeURIComponent(attachment.name)}`,
-  );
-  res.send(blob.data);
+  res.setHeader('Content-Disposition', plan.disposition);
+  res.send(blob!.data);
 });
 
 // Всё, что не нашлось, и всё, что упало, наружу выглядит одинаково скупо:
@@ -175,14 +155,6 @@ app.use((error: Error & { status?: number; statusCode?: number }, _req: Request,
   if (status >= 500) console.error('http:', error.message);
   res.status(status).json({ error: status === 413 ? 'too-large' : 'request-failed' });
 });
-
-function safeName(raw: string): string {
-  let decoded = raw;
-  try {
-    decoded = decodeURIComponent(raw);
-  } catch {}
-  return decoded.replace(/[/\\\r\n]/g, '_').slice(0, 255) || 'file';
-}
 
 const tlsKey = process.env.TLS_KEY;
 const tlsCert = process.env.TLS_CERT;
@@ -251,7 +223,7 @@ wss.on('connection', (ws, request: IncomingMessage) => {
     }
   });
   ws.on('close', () => {
-    uploadRate.delete(client.token);
+    uploadQuota.forget(client.token);
     hub.leave(client);
   });
   ws.on('error', () => {
