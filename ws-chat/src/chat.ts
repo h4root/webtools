@@ -54,6 +54,9 @@ export class Hub {
   private readonly clients = new Set<Client>();
   private readonly voiceOf = new Map<Client, string>();
   private readonly rate = new Map<string, RateEntry>();
+  private readonly ringing = new Map<Client, Set<Client>>();
+  private readonly invitedBy = new Map<Client, Client>();
+  private readonly talking = new Map<Client, Client>();
 
   constructor(
     private readonly store: Store = new Store(),
@@ -199,6 +202,7 @@ export class Hub {
 
   leave(client: Client): void {
     if (!this.clients.delete(client)) return;
+    this.callEnd(client);
     const wasInVoice = this.voiceOf.delete(client);
     const nick = client.nick;
     client.nick = null;
@@ -292,23 +296,20 @@ export class Hub {
       case 'voice-signal':
         this.voiceSignal(client, message.to, message.data);
         break;
-      case 'call-invite': {
-        const target = this.findByNick(message.to);
-        if (target) target.send({ type: 'call-invite', from: client.nick! });
-        else client.send({ type: 'call-end', from: message.to, reason: 'offline' });
+      case 'call-invite':
+        this.callInvite(client, message.to);
         break;
-      }
       case 'call-accept':
-        this.findByNick(message.to)?.send({ type: 'call-accept', from: client.nick! });
+        this.callAccept(client);
         break;
       case 'call-decline':
-        this.findByNick(message.to)?.send({ type: 'call-decline', from: client.nick!, reason: message.reason });
+        this.callDecline(client, message.reason);
         break;
       case 'call-end':
-        this.findByNick(message.to)?.send({ type: 'call-end', from: client.nick! });
+        this.callEnd(client);
         break;
       case 'call-signal':
-        this.findByNick(message.to)?.send({ type: 'call-signal', from: client.nick!, data: message.data });
+        this.talking.get(client)?.send({ type: 'call-signal', from: client.nick!, data: message.data });
         break;
     }
   }
@@ -436,6 +437,80 @@ export class Hub {
   private findByNick(nick: string): Client | undefined {
     const lower = nick.toLowerCase();
     return [...this.clients].find((c) => c.nick?.toLowerCase() === lower);
+  }
+
+  // Звонок принадлежит соединениям, а не никам: у человека может быть открыто
+  // несколько устройств, звонить надо на все, а говорить — с тем, кто взял.
+  private callInvite(client: Client, to: string): void {
+    const lower = to.toLowerCase();
+    if (lower === client.nick!.toLowerCase()) {
+      client.send({ type: 'call-end', from: to, reason: 'offline' });
+      return;
+    }
+
+    const devices = [...this.clients].filter((peer) => peer.nick?.toLowerCase() === lower);
+    if (devices.length === 0) {
+      client.send({ type: 'call-end', from: to, reason: 'offline' });
+      return;
+    }
+
+    this.dropCall(client);
+    this.ringing.set(client, new Set(devices));
+    for (const device of devices) {
+      this.invitedBy.set(device, client);
+      device.send({ type: 'call-invite', from: client.nick! });
+    }
+  }
+
+  private callAccept(client: Client): void {
+    const caller = this.invitedBy.get(client);
+    if (!caller) return;
+
+    // Остальные устройства перестают звонить: трубку уже взяли.
+    for (const device of this.ringing.get(caller) ?? []) {
+      this.invitedBy.delete(device);
+      if (device !== client) device.send({ type: 'call-end', from: caller.nick!, reason: 'answered-elsewhere' });
+    }
+    this.ringing.delete(caller);
+
+    this.talking.set(caller, client);
+    this.talking.set(client, caller);
+    caller.send({ type: 'call-accept', from: client.nick! });
+  }
+
+  private callDecline(client: Client, reason?: string): void {
+    const caller = this.invitedBy.get(client);
+    if (!caller) return;
+
+    // Отказ на одном устройстве — отказ целиком: человек решил не брать.
+    for (const device of this.ringing.get(caller) ?? []) {
+      this.invitedBy.delete(device);
+      if (device !== client) device.send({ type: 'call-end', from: caller.nick!, reason: 'answered-elsewhere' });
+    }
+    this.ringing.delete(caller);
+    caller.send({ type: 'call-decline', from: client.nick!, reason });
+  }
+
+  private callEnd(client: Client): void {
+    const peer = this.talking.get(client);
+    if (peer) peer.send({ type: 'call-end', from: client.nick! });
+    this.dropCall(client);
+  }
+
+  private dropCall(client: Client): void {
+    const peer = this.talking.get(client);
+    if (peer) {
+      this.talking.delete(peer);
+      this.talking.delete(client);
+    }
+    for (const device of this.ringing.get(client) ?? []) this.invitedBy.delete(device);
+    this.ringing.delete(client);
+
+    const caller = this.invitedBy.get(client);
+    if (caller) {
+      this.invitedBy.delete(client);
+      this.ringing.get(caller)?.delete(client);
+    }
   }
 
   private voiceChannelCreate(client: Client, name: string): void {

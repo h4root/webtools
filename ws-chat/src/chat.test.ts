@@ -539,6 +539,118 @@ describe('Hub', () => {
     expect(roster?.type === 'voice-roster' && roster.users).toEqual(['alice']);
   });
 
+  it('звонит на все устройства адресата', () => {
+    const caller = makeClient('caller');
+    const laptop = makeClient('laptop');
+    const phone = makeClient('phone');
+    hub.join(caller, 'bob');
+    hub.join(laptop, 'alice');
+    hub.join(phone, 'alice');
+
+    hub.handle(caller, JSON.stringify({ type: 'call-invite', to: 'alice' }));
+
+    expect(laptop.inbox.some((m) => m.type === 'call-invite' && m.from === 'bob')).toBe(true);
+    expect(phone.inbox.some((m) => m.type === 'call-invite' && m.from === 'bob')).toBe(true);
+  });
+
+  it('первое принявшее устройство забирает звонок, остальным отбой', () => {
+    const caller = makeClient('caller');
+    const laptop = makeClient('laptop');
+    const phone = makeClient('phone');
+    hub.join(caller, 'bob');
+    hub.join(laptop, 'alice');
+    hub.join(phone, 'alice');
+
+    hub.handle(caller, JSON.stringify({ type: 'call-invite', to: 'alice' }));
+    hub.handle(phone, JSON.stringify({ type: 'call-accept', to: 'bob' }));
+
+    expect(caller.inbox.some((m) => m.type === 'call-accept' && m.from === 'alice')).toBe(true);
+    expect(laptop.inbox.some((m) => m.type === 'call-end' && m.reason === 'answered-elsewhere')).toBe(true);
+    expect(phone.inbox.some((m) => m.type === 'call-end')).toBe(false);
+  });
+
+  it('ответ приходит на то устройство, с которого звонили', () => {
+    const callerLaptop = makeClient('caller-laptop');
+    const callerPhone = makeClient('caller-phone');
+    const alice = makeClient('alice');
+    hub.join(callerLaptop, 'bob');
+    hub.join(callerPhone, 'bob');
+    hub.join(alice, 'alice');
+
+    hub.handle(callerPhone, JSON.stringify({ type: 'call-invite', to: 'alice' }));
+    hub.handle(alice, JSON.stringify({ type: 'call-accept', to: 'bob' }));
+
+    expect(callerPhone.inbox.some((m) => m.type === 'call-accept')).toBe(true);
+    expect(callerLaptop.inbox.some((m) => m.type === 'call-accept')).toBe(false);
+  });
+
+  it('сигналинг идёт в соединение собеседника, а не по нику', () => {
+    const caller = makeClient('caller');
+    const laptop = makeClient('laptop');
+    const phone = makeClient('phone');
+    hub.join(caller, 'bob');
+    hub.join(laptop, 'alice');
+    hub.join(phone, 'alice');
+
+    hub.handle(caller, JSON.stringify({ type: 'call-invite', to: 'alice' }));
+    hub.handle(phone, JSON.stringify({ type: 'call-accept', to: 'bob' }));
+    hub.handle(caller, JSON.stringify({ type: 'call-signal', to: 'alice', data: { kind: 'offer' } }));
+
+    expect(phone.inbox.some((m) => m.type === 'call-signal')).toBe(true);
+    expect(laptop.inbox.some((m) => m.type === 'call-signal')).toBe(false);
+  });
+
+  it('отказ на одном устройстве отменяет звонок целиком', () => {
+    const caller = makeClient('caller');
+    const laptop = makeClient('laptop');
+    const phone = makeClient('phone');
+    hub.join(caller, 'bob');
+    hub.join(laptop, 'alice');
+    hub.join(phone, 'alice');
+
+    hub.handle(caller, JSON.stringify({ type: 'call-invite', to: 'alice' }));
+    hub.handle(laptop, JSON.stringify({ type: 'call-decline', to: 'bob' }));
+
+    expect(caller.inbox.some((m) => m.type === 'call-decline' && m.from === 'alice')).toBe(true);
+    expect(phone.inbox.some((m) => m.type === 'call-end' && m.reason === 'answered-elsewhere')).toBe(true);
+  });
+
+  it('звонок офлайн-адресату сразу возвращает отбой', () => {
+    const caller = makeClient('caller');
+    hub.join(caller, 'bob');
+
+    hub.handle(caller, JSON.stringify({ type: 'call-invite', to: 'призрак' }));
+    expect(caller.inbox.at(-1)).toEqual({ type: 'call-end', from: 'призрак', reason: 'offline' });
+  });
+
+  it('уход собеседника завершает разговор у второго', () => {
+    const caller = makeClient('caller');
+    const alice = makeClient('alice');
+    hub.join(caller, 'bob');
+    hub.join(alice, 'alice');
+
+    hub.handle(caller, JSON.stringify({ type: 'call-invite', to: 'alice' }));
+    hub.handle(alice, JSON.stringify({ type: 'call-accept', to: 'bob' }));
+    hub.leave(alice);
+
+    expect(caller.inbox.some((m) => m.type === 'call-end' && m.from === 'alice')).toBe(true);
+  });
+
+  it('после завершения сигналинг больше никуда не идёт', () => {
+    const caller = makeClient('caller');
+    const alice = makeClient('alice');
+    hub.join(caller, 'bob');
+    hub.join(alice, 'alice');
+
+    hub.handle(caller, JSON.stringify({ type: 'call-invite', to: 'alice' }));
+    hub.handle(alice, JSON.stringify({ type: 'call-accept', to: 'bob' }));
+    hub.handle(caller, JSON.stringify({ type: 'call-end', to: 'alice' }));
+
+    const before = alice.inbox.length;
+    hub.handle(caller, JSON.stringify({ type: 'call-signal', to: 'alice', data: { kind: 'ice' } }));
+    expect(alice.inbox).toHaveLength(before);
+  });
+
   it('требует входа до отправки сообщений', () => {
     const a = makeClient('a');
     hub.handle(a, JSON.stringify({ type: 'message', channel: 'general', text: 'hi' }));
@@ -880,6 +992,7 @@ describe('Hub private call', () => {
     const b = makeClient('b');
     hub.join(a, 'alice');
     hub.join(b, 'bob');
+    hub.handle(a, JSON.stringify({ type: 'call-invite', to: 'bob' }));
     hub.handle(b, JSON.stringify({ type: 'call-accept', to: 'alice' }));
     expect(a.inbox.at(-1)).toEqual({ type: 'call-accept', from: 'bob' });
     hub.handle(a, JSON.stringify({ type: 'call-signal', to: 'bob', data: { kind: 'offer' } }));
@@ -888,11 +1001,24 @@ describe('Hub private call', () => {
     expect(a.inbox.at(-1)).toEqual({ type: 'call-end', from: 'bob' });
   });
 
+  it('не пересылает accept и signal без приглашения', () => {
+    const a = makeClient('a');
+    const b = makeClient('b');
+    hub.join(a, 'alice');
+    hub.join(b, 'bob');
+
+    const before = a.inbox.length;
+    hub.handle(b, JSON.stringify({ type: 'call-accept', to: 'alice' }));
+    hub.handle(b, JSON.stringify({ type: 'call-signal', to: 'alice', data: { kind: 'offer' } }));
+    expect(a.inbox).toHaveLength(before);
+  });
+
   it('передаёт причину отклонения', () => {
     const a = makeClient('a');
     const b = makeClient('b');
     hub.join(a, 'alice');
     hub.join(b, 'bob');
+    hub.handle(a, JSON.stringify({ type: 'call-invite', to: 'bob' }));
     hub.handle(b, JSON.stringify({ type: 'call-decline', to: 'alice', reason: 'busy' }));
     expect(a.inbox.at(-1)).toEqual({ type: 'call-decline', from: 'bob', reason: 'busy' });
   });
