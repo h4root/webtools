@@ -89,10 +89,10 @@ export class Hub {
 
     const result =
       message.mode === 'guest'
-        ? await this.auth!.registerGuest(nick)
+        ? await this.auth!.registerGuest(nick, message.device)
         : message.mode === 'register'
-          ? await this.auth!.register(nick, message.password!)
-          : await this.auth!.login(nick, message.password!);
+          ? await this.auth!.register(nick, message.password!, message.device)
+          : await this.auth!.login(nick, message.password!, message.device);
 
     if (!result.ok) {
       client.send({
@@ -138,6 +138,25 @@ export class Hub {
     // устройствах, доверия больше не заслуживает.
     this.disconnectOthers(client, 'Пароль изменён, войди заново');
     client.send({ type: 'password-changed' });
+  }
+
+  private sendSessions(client: Client): void {
+    if (!this.auth) return;
+    client.send({ type: 'sessions', list: this.auth.listSessions(client.nick!, client.token) });
+  }
+
+  private revokeSession(client: Client, id: string): void {
+    // Ник передаём внутрь: иначе подобранный id гасил бы чужую сессию.
+    if (!this.auth?.revokeSession(client.nick!, id)) return;
+
+    for (const peer of [...this.clients]) {
+      if (peer === client || peer.nick?.toLowerCase() !== client.nick!.toLowerCase()) continue;
+      if (this.auth.sessionIdFor(peer.token)) continue;
+      peer.send({ type: 'logged-out', reason: 'Сессия отозвана' });
+      this.leave(peer);
+      peer.close?.();
+    }
+    this.sendSessions(client);
   }
 
   private disconnectOthers(client: Client, reason: string): void {
@@ -242,6 +261,16 @@ export class Hub {
 
     if (message.type === 'logout') {
       this.logout(client, message.everywhere);
+      return;
+    }
+
+    if (message.type === 'sessions') {
+      this.sendSessions(client);
+      return;
+    }
+
+    if (message.type === 'session-revoke') {
+      this.revokeSession(client, message.id);
       return;
     }
 

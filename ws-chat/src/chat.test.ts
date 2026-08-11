@@ -847,6 +847,64 @@ describe('Hub: вход и выход', () => {
     expect(bobAgain.nick).toBe('bob');
   });
 
+  it('показывает свои сессии с пометкой текущей и метками устройств', async () => {
+    const laptop = makeClient('laptop');
+    await auth(laptop, { mode: 'register', nick: 'alice', password: 'достаточно-длинный', device: 'Mac' });
+    const phone = makeClient('phone');
+    await auth(phone, { mode: 'login', nick: 'alice', password: 'достаточно-длинный', device: 'iPhone' });
+
+    hub.handle(phone, JSON.stringify({ type: 'sessions' }));
+    const list = phone.inbox.filter((m) => m.type === 'sessions').at(-1);
+    const sessions = list?.type === 'sessions' ? list.list : [];
+
+    expect(sessions).toHaveLength(2);
+    expect(sessions.map((s) => s.device).sort()).toEqual(['Mac', 'iPhone']);
+    expect(sessions.find((s) => s.current)?.device).toBe('iPhone');
+  });
+
+  it('отзыв сессии обрывает то соединение, которое ею пользовалось', async () => {
+    const laptop = makeClient('laptop');
+    await auth(laptop, { mode: 'register', nick: 'alice', password: 'достаточно-длинный', device: 'Mac' });
+    const laptopToken = welcomeOf(laptop)!.token;
+    const phone = makeClient('phone');
+    await auth(phone, { mode: 'login', nick: 'alice', password: 'достаточно-длинный', device: 'iPhone' });
+
+    hub.handle(phone, JSON.stringify({ type: 'sessions' }));
+    const list = phone.inbox.filter((m) => m.type === 'sessions').at(-1);
+    const target = list?.type === 'sessions' ? list.list.find((s) => !s.current)! : null;
+    hub.handle(phone, JSON.stringify({ type: 'session-revoke', id: target!.id }));
+
+    expect(laptop.closed).toBe(true);
+    expect(laptop.inbox.some((m) => m.type === 'logged-out')).toBe(true);
+
+    const returning = makeClient('returning');
+    await auth(returning, { mode: 'resume', token: laptopToken });
+    expect(returning.nick).toBeNull();
+
+    const after = phone.inbox.filter((m) => m.type === 'sessions').at(-1);
+    expect(after?.type === 'sessions' && after.list).toHaveLength(1);
+  });
+
+  it('не даёт отозвать чужую сессию', async () => {
+    const alice = makeClient('alice');
+    await auth(alice, { mode: 'register', nick: 'alice', password: 'достаточно-длинный', device: 'Mac' });
+    const aliceToken = welcomeOf(alice)!.token;
+
+    const mallory = makeClient('mallory');
+    await auth(mallory, { mode: 'guest', nick: 'mallory' });
+
+    hub.handle(alice, JSON.stringify({ type: 'sessions' }));
+    const list = alice.inbox.filter((m) => m.type === 'sessions').at(-1);
+    const victim = list?.type === 'sessions' ? list.list[0] : null;
+
+    hub.handle(mallory, JSON.stringify({ type: 'session-revoke', id: victim!.id }));
+
+    expect(alice.closed).toBe(false);
+    const still = makeClient('still');
+    await auth(still, { mode: 'resume', token: aliceToken });
+    expect(still.nick).toBe('alice');
+  });
+
   it('выход по паролю гасит сессию, но не трогает написанное', async () => {
     const a = makeClient('a');
     await auth(a, { mode: 'register', nick: 'alice', password: 'достаточно-длинный' });

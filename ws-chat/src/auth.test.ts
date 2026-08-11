@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { mkdtempSync, rmSync, readFileSync, statSync } from 'node:fs';
+import { mkdtempSync, rmSync, readFileSync, writeFileSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
@@ -295,6 +295,76 @@ describe('Auth', () => {
     expect(auth.resume(first.token!)).toBeNull();
     expect(auth.resume(second.token!)).toBeNull();
     expect(auth.resume(other.token!)).not.toBeNull();
+  });
+
+  it('перечисляет свои сессии и помечает текущую', async () => {
+    const first = await auth.register('alice', 'достаточно-длинный', 'Mac');
+    vi.setSystemTime(Date.now() + 60_000);
+    const second = await auth.login('alice', 'достаточно-длинный', 'iPhone');
+
+    const list = auth.listSessions('alice', second.token);
+    expect(list).toHaveLength(2);
+    expect(list.map((s) => s.device).sort()).toEqual(['Mac', 'iPhone']);
+    expect(list.filter((s) => s.current)).toHaveLength(1);
+    expect(list.find((s) => s.current)?.device).toBe('iPhone');
+    expect(list.every((s) => typeof s.id === 'string' && s.id.length > 0)).toBe(true);
+    expect(first.token).not.toBe(second.token);
+  });
+
+  it('не показывает чужие сессии', async () => {
+    await auth.register('alice', 'достаточно-длинный', 'Mac');
+    const bob = await auth.register('bob', 'достаточно-длинный', 'Windows');
+
+    const list = auth.listSessions('alice', undefined);
+    expect(list.map((s) => s.device)).toEqual(['Mac']);
+    expect(auth.listSessions('bob', bob.token).map((s) => s.device)).toEqual(['Windows']);
+  });
+
+  it('отзывает одну сессию, не трогая остальные', async () => {
+    const laptop = await auth.register('alice', 'достаточно-длинный', 'Mac');
+    const phone = await auth.login('alice', 'достаточно-длинный', 'iPhone');
+
+    const target = auth.listSessions('alice', phone.token).find((s) => !s.current)!;
+    expect(auth.revokeSession('alice', target.id)).toBe(true);
+
+    expect(auth.resume(laptop.token!)).toBeNull();
+    expect(auth.resume(phone.token!)).not.toBeNull();
+  });
+
+  it('не даёт отозвать чужую сессию по её идентификатору', async () => {
+    const alice = await auth.register('alice', 'достаточно-длинный', 'Mac');
+    await auth.register('bob', 'достаточно-длинный', 'Windows');
+
+    const aliceSession = auth.listSessions('alice', alice.token)[0];
+    expect(auth.revokeSession('bob', aliceSession.id)).toBe(false);
+    expect(auth.resume(alice.token!)).not.toBeNull();
+  });
+
+  it('запоминает, когда сессией пользовались в последний раз', async () => {
+    const { token } = await auth.register('alice', 'достаточно-длинный', 'Mac');
+    const created = auth.listSessions('alice', token)[0].lastSeenAt;
+
+    vi.setSystemTime(Date.now() + 3 * 60 * 60 * 1000);
+    auth.resume(token!);
+
+    expect(auth.listSessions('alice', token)[0].lastSeenAt).toBeGreaterThan(created);
+  });
+
+  it('поднимает старые сессии без метки и идентификатора', async () => {
+    const { token } = await auth.register('alice', 'достаточно-длинный', 'Mac');
+    const raw = JSON.parse(readFileSync(join(dir, 'sessions.json'), 'utf8'));
+    for (const session of raw) {
+      delete session.id;
+      delete session.device;
+      delete session.lastSeenAt;
+    }
+    writeFileSync(join(dir, 'sessions.json'), JSON.stringify(raw));
+
+    const restarted = new Auth(dir);
+    expect(restarted.resume(token!)).not.toBeNull();
+    const list = restarted.listSessions('alice', token);
+    expect(list).toHaveLength(1);
+    expect(list[0].id).toBeTruthy();
   });
 
   it('переживает перезапуск: аккаунты и сессии читаются с диска', async () => {

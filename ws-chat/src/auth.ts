@@ -17,6 +17,7 @@ export const GUEST_TTL_MS = 24 * 60 * 60 * 1000;
 export const SESSIONS_PER_ACCOUNT = 10;
 export const FAILURE_TTL_MS = 60 * 60 * 1000;
 export const FAILURES_MAX = 10000;
+const LAST_SEEN_STEP_MS = 60 * 60 * 1000;
 export const AUTH_ATTEMPTS_PER_WINDOW = 20;
 export const AUTH_ATTEMPT_WINDOW_MS = 60 * 1000;
 export const MAX_GUEST_ACCOUNTS = 200;
@@ -39,11 +40,31 @@ export interface Account {
 }
 
 interface Session {
+  // Публичный идентификатор: по нему сессию отзывают из интерфейса. Хэш токена
+  // наружу не отдаём — он хоть и необратим, но клиенту знать о нём незачем.
+  id: string;
   tokenHash: string;
   nick: string;
   guest: boolean;
+  device: string;
   expiresAt: number;
   issuedAt: number;
+  lastSeenAt: number;
+}
+
+export interface SessionInfo {
+  id: string;
+  device: string;
+  issuedAt: number;
+  lastSeenAt: number;
+  current: boolean;
+}
+
+const DEVICE_MAX = 32;
+
+export function safeDevice(raw: unknown): string {
+  if (typeof raw !== 'string') return '';
+  return raw.replace(/[^\p{L}\p{N} .-]/gu, '').slice(0, DEVICE_MAX).trim();
 }
 
 export type AuthFailure =
@@ -100,7 +121,12 @@ export class Auth {
     try {
       const now = Date.now();
       for (const session of readJson<Session[]>(this.sessionsFile) ?? []) {
-        if (session.expiresAt > now) this.sessions.set(session.tokenHash, session);
+        if (session.expiresAt <= now) continue;
+        // Сессии, выданные до появления списка устройств: доживают как есть.
+        session.id ??= randomBytes(8).toString('hex');
+        session.device ??= '';
+        session.lastSeenAt ??= session.issuedAt ?? now;
+        this.sessions.set(session.tokenHash, session);
       }
     } catch (error) {
       console.error(`auth: не читается ${this.sessionsFile}: ${(error as Error).message}`);
@@ -175,15 +201,18 @@ export class Auth {
     return guest ? GUEST_TTL_MS : SESSION_TTL_MS;
   }
 
-  private issue(account: Account): string {
+  private issue(account: Account, device = ''): string {
     const token = randomBytes(TOKEN_BYTES).toString('hex');
     const now = Date.now();
     this.sessions.set(sha256(token), {
+      id: randomBytes(8).toString('hex'),
       tokenHash: sha256(token),
       nick: account.nick,
       guest: account.guest,
+      device: safeDevice(device),
       expiresAt: now + this.ttlFor(account.guest),
       issuedAt: now,
+      lastSeenAt: now,
     });
     this.capSessions(account.nick);
     this.saveSessions();
@@ -230,7 +259,7 @@ export class Auth {
     return this.attempts.size;
   }
 
-  async registerGuest(nick: string): Promise<AuthResult> {
+  async registerGuest(nick: string, device = ''): Promise<AuthResult> {
     const existing = this.find(nick);
     if (existing) return { ok: false, error: existing.guest ? 'nick-taken' : 'nick-registered' };
     if (this.guestCount() >= MAX_GUEST_ACCOUNTS) return { ok: false, error: 'guests-full' };
@@ -238,10 +267,10 @@ export class Auth {
     const account: Account = { nick, guest: true, createdAt: Date.now() };
     this.accounts.set(nick.toLowerCase(), account);
     this.saveAccounts();
-    return { ok: true, nick, guest: true, token: this.issue(account) };
+    return { ok: true, nick, guest: true, token: this.issue(account, device) };
   }
 
-  async register(nick: string, password: string): Promise<AuthResult> {
+  async register(nick: string, password: string, device = ''): Promise<AuthResult> {
     if (password.length < PASSWORD_MIN || password.length > PASSWORD_MAX) return { ok: false, error: 'weak-password' };
     const existing = this.find(nick);
     if (existing) return { ok: false, error: existing.guest ? 'nick-taken' : 'nick-registered' };
@@ -257,10 +286,10 @@ export class Auth {
     };
     this.accounts.set(nick.toLowerCase(), account);
     this.saveAccounts();
-    return { ok: true, nick, guest: false, token: this.issue(account) };
+    return { ok: true, nick, guest: false, token: this.issue(account, device) };
   }
 
-  async login(nick: string, password: string): Promise<AuthResult> {
+  async login(nick: string, password: string, device = ''): Promise<AuthResult> {
     const locked = this.lockState(nick);
     if (locked) return { ok: false, error: 'locked', retryAfterMs: locked };
 
@@ -279,7 +308,7 @@ export class Auth {
     }
 
     this.clearFailures(nick);
-    return { ok: true, nick: account.nick, guest: false, token: this.issue(account) };
+    return { ok: true, nick: account.nick, guest: false, token: this.issue(account, device) };
   }
 
   // Смена пароля обесценивает всё, что было выдано под старым: если его увели,
@@ -314,6 +343,37 @@ export class Auth {
     return { ok: true, nick: account.nick, guest: false };
   }
 
+  listSessions(nick: string, currentToken?: string): SessionInfo[] {
+    const lower = nick.toLowerCase();
+    const currentHash = currentToken ? sha256(currentToken) : null;
+    return [...this.sessions.values()]
+      .filter((session) => session.nick.toLowerCase() === lower)
+      .sort((a, b) => b.lastSeenAt - a.lastSeenAt)
+      .map((session) => ({
+        id: session.id,
+        device: session.device,
+        issuedAt: session.issuedAt,
+        lastSeenAt: session.lastSeenAt,
+        current: session.tokenHash === currentHash,
+      }));
+  }
+
+  // Ник обязателен: без него чужую сессию можно было бы погасить, подобрав id.
+  revokeSession(nick: string, id: string): boolean {
+    const lower = nick.toLowerCase();
+    for (const [hash, session] of this.sessions) {
+      if (session.id !== id || session.nick.toLowerCase() !== lower) continue;
+      this.sessions.delete(hash);
+      this.saveSessions();
+      return true;
+    }
+    return false;
+  }
+
+  sessionIdFor(token: string): string | null {
+    return this.sessions.get(sha256(token))?.id ?? null;
+  }
+
   revokeAllFor(nick: string, keepToken?: string): number {
     const lower = nick.toLowerCase();
     const keepHash = keepToken ? sha256(keepToken) : null;
@@ -344,8 +404,12 @@ export class Auth {
     }
 
     const ttl = this.ttlFor(session.guest);
-    if (session.expiresAt - Date.now() < ttl / 2) {
-      session.expiresAt = Date.now() + ttl;
+    const now = Date.now();
+    // Пишем на диск не на каждое использование, а когда есть что заметить:
+    // иначе каждое переподключение стоило бы записи файла.
+    if (session.expiresAt - now < ttl / 2 || now - session.lastSeenAt > LAST_SEEN_STEP_MS) {
+      session.expiresAt = now + ttl;
+      session.lastSeenAt = now;
       this.saveSessions();
     }
     return { nick: account.nick, guest: session.guest };

@@ -85,6 +85,7 @@ let isGuest = false;
 let authMode = 'guest';
 let pendingAuth = null;
 let passwordNote = null;
+let sessionsNote = null;
 let joined = false;
 let channels = [];
 let online = [];
@@ -297,6 +298,9 @@ function handleServer(message) {
       break;
     case 'logged-out':
       finishLogout(message.reason);
+      break;
+    case 'sessions':
+      sessionsNote?.(message.list);
       break;
     case 'password-changed':
       passwordNote?.('Пароль изменён. Остальные устройства придётся авторизовать заново.');
@@ -1286,7 +1290,10 @@ nickForm.addEventListener('submit', (event) => {
     return;
   }
 
-  pendingAuth = authMode === 'guest' ? { mode: 'guest', nick } : { mode: authMode, nick, password };
+  pendingAuth =
+    authMode === 'guest'
+      ? { mode: 'guest', nick, device: deviceLabel() }
+      : { mode: authMode, nick, password, device: deviceLabel() };
   gateError.textContent = '';
   setGateBusy(true);
   if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'auth', ...pendingAuth }));
@@ -1493,6 +1500,11 @@ function initUI() {
   dropBtn.appendChild(icon('paperclip', 18));
   const { toggle } = mountSettings(settingsEl, {
     canChangePassword: () => joined && !isGuest,
+    onSessions: (render) => {
+      sessionsNote = render;
+      wsSend({ type: 'sessions' });
+    },
+    onRevokeSession: (id) => wsSend({ type: 'session-revoke', id }),
     onChangePassword: (current, next, done) => {
       passwordNote = done;
       wsSend({ type: 'change-password', current, next });

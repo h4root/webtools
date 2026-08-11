@@ -49,10 +49,20 @@ export interface WireMessage {
 
 export type AuthMode = 'guest' | 'register' | 'login' | 'resume';
 
+export interface SessionInfo {
+  id: string;
+  device: string;
+  issuedAt: number;
+  lastSeenAt: number;
+  current: boolean;
+}
+
 export type ClientMessage =
-  | { type: 'auth'; mode: AuthMode; nick?: string; password?: string; token?: string }
+  | { type: 'auth'; mode: AuthMode; nick?: string; password?: string; token?: string; device?: string }
   | { type: 'logout'; everywhere?: boolean }
   | { type: 'change-password'; current: string; next: string }
+  | { type: 'sessions' }
+  | { type: 'session-revoke'; id: string }
   | { type: 'channel-create'; name: string }
   | { type: 'channel-delete'; name: string }
   | { type: 'voice-channel-delete'; name: string }
@@ -77,6 +87,7 @@ export type ServerMessage =
   | { type: 'auth-error'; reason: string; retryAfterMs?: number }
   | { type: 'logged-out'; reason?: string }
   | { type: 'password-changed' }
+  | { type: 'sessions'; list: SessionInfo[] }
   | { type: 'purged'; nick: string }
   | { type: 'channels'; list: string[] }
   | { type: 'presence'; users: string[] }
@@ -154,12 +165,17 @@ export function parseClientMessage(raw: string): ClientMessage | null {
         return typeof data.token === 'string' && data.token.length <= 128 ? { type: 'auth', mode, token: data.token } : null;
       }
       if (!isBoundedString(data.nick, NICK_MAX)) return null;
-      if (mode === 'guest') return { type: 'auth', mode, nick: data.nick.trim() };
+      const device = typeof data.device === 'string' ? data.device.slice(0, 64) : undefined;
+      if (mode === 'guest') return { type: 'auth', mode, nick: data.nick.trim(), device };
       if (typeof data.password !== 'string' || data.password.length > PASSWORD_LIMIT) return null;
-      return { type: 'auth', mode, nick: data.nick.trim(), password: data.password };
+      return { type: 'auth', mode, nick: data.nick.trim(), password: data.password, device };
     }
     case 'logout':
       return { type: 'logout', everywhere: data.everywhere === true };
+    case 'sessions':
+      return { type: 'sessions' };
+    case 'session-revoke':
+      return typeof data.id === 'string' && data.id.length <= 64 ? { type: 'session-revoke', id: data.id } : null;
     case 'change-password': {
       if (typeof data.current !== 'string' || data.current.length > PASSWORD_LIMIT) return null;
       if (typeof data.next !== 'string' || data.next.length > PASSWORD_LIMIT) return null;

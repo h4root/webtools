@@ -142,6 +142,7 @@ export function mountSettings(root, account = {}) {
     popup.append(section('Шрифт', fontSelect()));
     popup.append(section('Анимации', motionSelect()));
     if (account.canChangePassword?.()) popup.append(section('Пароль', passwordForm()));
+    if (account.onSessions) popup.append(section('Устройства', deviceList()));
     if (account.onLogoutEverywhere) popup.append(section('Сессии', logoutEverywhere()));
   }
 
@@ -178,6 +179,43 @@ export function mountSettings(root, account = {}) {
       });
     });
     return form;
+  }
+
+  function deviceList() {
+    const wrap = document.createElement('div');
+    wrap.className = 'settings-devices';
+    wrap.textContent = 'Загружаю…';
+    account.onSessions((list) => renderDevices(wrap, list));
+    return wrap;
+  }
+
+  function renderDevices(wrap, list) {
+    wrap.replaceChildren();
+    if (!list.length) {
+      wrap.textContent = 'Активных сессий нет';
+      return;
+    }
+    for (const session of list) {
+      const row = document.createElement('div');
+      row.className = session.current ? 'device current' : 'device';
+
+      const label = document.createElement('span');
+      label.className = 'device-name';
+      label.textContent = session.device || 'неизвестное устройство';
+      const when = document.createElement('span');
+      when.className = 'device-when';
+      when.textContent = session.current ? 'это устройство' : `был(а) ${relativeTime(session.lastSeenAt)}`;
+      row.append(label, when);
+
+      if (!session.current) {
+        const kill = document.createElement('button');
+        kill.type = 'button';
+        kill.textContent = 'отозвать';
+        kill.addEventListener('click', () => account.onRevokeSession(session.id));
+        row.append(kill);
+      }
+      wrap.append(row);
+    }
   }
 
   function logoutEverywhere() {
@@ -249,6 +287,15 @@ export function mountSettings(root, account = {}) {
   });
 
   return { toggle };
+}
+
+function relativeTime(ts) {
+  const minutes = Math.round((Date.now() - ts) / 60000);
+  if (minutes < 2) return 'только что';
+  if (minutes < 60) return `${minutes} мин назад`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours} ч назад`;
+  return `${Math.round(hours / 24)} дн назад`;
 }
 
 function section(title, ...nodes) {
