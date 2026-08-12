@@ -343,6 +343,14 @@ export class Auth {
     return { ok: true, nick: account.nick, guest: false };
   }
 
+  // Выдать сессию уже подтверждённому аккаунту: пароль здесь заново не
+  // спрашивают, доверие подтвердило другое устройство.
+  issueFor(nick: string, device = ''): string | null {
+    const account = this.find(nick);
+    if (!account || account.guest) return null;
+    return this.issue(account, device);
+  }
+
   listSessions(nick: string, currentToken?: string): SessionInfo[] {
     const lower = nick.toLowerCase();
     const currentHash = currentToken ? sha256(currentToken) : null;

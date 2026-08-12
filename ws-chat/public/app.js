@@ -68,6 +68,10 @@ const dropPanel = document.getElementById('drop-panel');
 const dropMount = document.getElementById('drop-mount');
 const dropCloseBtn = document.getElementById('drop-close');
 const sidebarCloseBtn = document.getElementById('sidebar-close');
+const modeLinkBtn = document.getElementById('mode-link');
+const linkBox = document.getElementById('link-box');
+const linkCodeEl = document.getElementById('link-code');
+const linkExpiryEl = document.getElementById('link-expiry');
 
 const RECONNECT_MS = 2000;
 const RECONNECT_MAX_MS = 15000;
@@ -86,6 +90,7 @@ let authMode = 'guest';
 let pendingAuth = null;
 let passwordNote = null;
 let sessionsNote = null;
+let linkNote = null;
 let joined = false;
 let channels = [];
 let online = [];
@@ -176,6 +181,7 @@ function wsUrl() {
 function sendHello() {
   if (!ws || ws.readyState !== WebSocket.OPEN) return;
   if (authToken) ws.send(JSON.stringify({ type: 'auth', mode: 'resume', token: authToken }));
+  else if (authMode === 'link') ws.send(JSON.stringify({ type: 'link-request', device: deviceLabel() }));
   else if (pendingAuth) ws.send(JSON.stringify({ type: 'auth', ...pendingAuth }));
 }
 
@@ -302,6 +308,13 @@ function handleServer(message) {
     case 'sessions':
       sessionsNote?.(message.list);
       break;
+    case 'link-code':
+      showLinkCode(message.code, message.expiresAt);
+      break;
+    case 'link-approved':
+      linkNote?.(`Подключено: ${message.device}`);
+      linkNote = null;
+      break;
     case 'password-changed':
       passwordNote?.('Пароль изменён. Остальные устройства придётся авторизовать заново.');
       passwordNote = null;
@@ -311,7 +324,10 @@ function handleServer(message) {
       break;
     case 'error':
       if (!joined) gateError.textContent = message.reason;
-      else systemLine(message.reason);
+      else if (linkNote) {
+        linkNote(message.reason);
+        linkNote = null;
+      } else systemLine(message.reason);
       break;
     case 'voice-channels':
       voiceChannels = message.list;
@@ -1250,18 +1266,52 @@ const GATE_MODES = {
   guest: { label: 'войти гостем', hint: 'Личность живёт до выхода: нажмёшь «Выйти» — ник освободится, а всё написанное будет стёрто.' },
   login: { label: 'войти', hint: '' },
   register: { label: 'зарегистрироваться', hint: 'Пароль от 8 символов. Ник закрепится за тобой, история останется после выхода.' },
+  link: { label: 'войти с другого устройства', hint: '' },
 };
+
+let linkTimer = null;
+
+function showLinkCode(code, expiresAt) {
+  linkCodeEl.textContent = `${code.slice(0, 3)}-${code.slice(3)}`;
+  clearInterval(linkTimer);
+  linkTimer = setInterval(() => {
+    const left = Math.round((expiresAt - Date.now()) / 1000);
+    if (left > 0) {
+      linkExpiryEl.textContent = `Код действует ещё ${left} с`;
+      return;
+    }
+    clearInterval(linkTimer);
+    linkExpiryEl.textContent = 'Код истёк — нажми «войти с другого устройства» ещё раз';
+    linkCodeEl.textContent = '';
+  }, 1000);
+  linkExpiryEl.textContent = `Код действует ещё ${Math.round((expiresAt - Date.now()) / 1000)} с`;
+}
+
+function requestLinkCode() {
+  linkCodeEl.textContent = '…';
+  linkExpiryEl.textContent = '';
+  if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'link-request', device: deviceLabel() }));
+  else connect();
+}
 
 function setGateMode(mode) {
   authMode = mode;
   gateError.textContent = '';
   gateSubmit.textContent = GATE_MODES[mode].label;
   gateHint.textContent = GATE_MODES[mode].hint;
-  passwordRow.hidden = mode === 'guest';
+  passwordRow.hidden = mode !== 'login' && mode !== 'register';
+  nickInput.hidden = mode === 'link';
+  gateSubmit.hidden = mode === 'link';
+  linkBox.hidden = mode !== 'link';
+  if (mode !== 'link') {
+    clearInterval(linkTimer);
+    linkTimer = null;
+  }
   passwordInput.autocomplete = mode === 'register' ? 'new-password' : 'current-password';
   modeGuestBtn.hidden = mode === 'guest';
   modeLoginBtn.hidden = mode === 'login';
   modeRegisterBtn.hidden = mode === 'register';
+  modeLinkBtn.hidden = mode === 'link';
   if (mode !== 'guest') passwordInput.focus();
 }
 
@@ -1304,6 +1354,10 @@ nickForm.addEventListener('submit', (event) => {
 modeGuestBtn.addEventListener('click', () => setGateMode('guest'));
 modeLoginBtn.addEventListener('click', () => setGateMode('login'));
 modeRegisterBtn.addEventListener('click', () => setGateMode('register'));
+modeLinkBtn.addEventListener('click', () => {
+  setGateMode('link');
+  requestLinkCode();
+});
 
 logoutBtn.addEventListener('click', () => {
   const question = isGuest
@@ -1505,6 +1559,10 @@ function initUI() {
       wsSend({ type: 'sessions' });
     },
     onRevokeSession: (id) => wsSend({ type: 'session-revoke', id }),
+    onApproveLink: (code, done) => {
+      linkNote = done;
+      wsSend({ type: 'link-approve', code });
+    },
     onChangePassword: (current, next, done) => {
       passwordNote = done;
       wsSend({ type: 'change-password', current, next });

@@ -905,6 +905,91 @@ describe('Hub: вход и выход', () => {
     expect(still.nick).toBe('alice');
   });
 
+  async function linkCode(client: TestClient, device = 'iPhone'): Promise<string> {
+    hub.handle(client, JSON.stringify({ type: 'link-request', device }));
+    await vi.waitFor(() => {
+      expect(client.inbox.some((m) => m.type === 'link-code')).toBe(true);
+    });
+    const message = client.inbox.filter((m) => m.type === 'link-code').at(-1);
+    return message?.type === 'link-code' ? message.code : '';
+  }
+
+  it('пускает новое устройство по коду, подтверждённому с уже вошедшего', async () => {
+    const laptop = makeClient('laptop');
+    await auth(laptop, { mode: 'register', nick: 'alice', password: 'достаточно-длинный', device: 'Mac' });
+
+    const phone = makeClient('phone');
+    const code = await linkCode(phone);
+    expect(code).toMatch(/^[A-HJ-NP-Z2-9]{6}$/);
+
+    hub.handle(laptop, JSON.stringify({ type: 'link-approve', code }));
+
+    expect(phone.nick).toBe('alice');
+    expect(welcomeOf(phone)?.guest).toBe(false);
+    expect(laptop.inbox.some((m) => m.type === 'link-approved')).toBe(true);
+    expect(laptop.closed).toBe(false);
+  });
+
+  it('код одноразовый', async () => {
+    const laptop = makeClient('laptop');
+    await auth(laptop, { mode: 'register', nick: 'alice', password: 'достаточно-длинный' });
+
+    const phone = makeClient('phone');
+    const code = await linkCode(phone);
+    hub.handle(laptop, JSON.stringify({ type: 'link-approve', code }));
+
+    const second = makeClient('second');
+    hub.handle(laptop, JSON.stringify({ type: 'link-approve', code }));
+    expect(second.nick).toBeNull();
+    expect(laptop.inbox.filter((m) => m.type === 'link-approved')).toHaveLength(1);
+  });
+
+  it('новое устройство появляется в списке сессий со своей меткой', async () => {
+    const laptop = makeClient('laptop');
+    await auth(laptop, { mode: 'register', nick: 'alice', password: 'достаточно-длинный', device: 'Mac' });
+
+    const phone = makeClient('phone');
+    hub.handle(laptop, JSON.stringify({ type: 'link-approve', code: await linkCode(phone, 'iPhone') }));
+    hub.handle(laptop, JSON.stringify({ type: 'sessions' }));
+
+    const list = laptop.inbox.filter((m) => m.type === 'sessions').at(-1);
+    const devices = list?.type === 'sessions' ? list.list.map((s) => s.device).sort() : [];
+    expect(devices).toEqual(['Mac', 'iPhone']);
+  });
+
+  it('гость подтверждать не может', async () => {
+    const guest = makeClient('guest');
+    await auth(guest, { mode: 'guest', nick: 'гость' });
+
+    const phone = makeClient('phone');
+    const code = await linkCode(phone);
+    hub.handle(guest, JSON.stringify({ type: 'link-approve', code }));
+
+    expect(phone.nick).toBeNull();
+    expect(guest.inbox.some((m) => m.type === 'error')).toBe(true);
+  });
+
+  it('неверный код ничего не открывает', async () => {
+    const laptop = makeClient('laptop');
+    await auth(laptop, { mode: 'register', nick: 'alice', password: 'достаточно-длинный' });
+
+    hub.handle(laptop, JSON.stringify({ type: 'link-approve', code: 'ZZZZZZ' }));
+    expect(laptop.inbox.some((m) => m.type === 'error')).toBe(true);
+    expect(laptop.inbox.some((m) => m.type === 'link-approved')).toBe(false);
+  });
+
+  it('код умирает вместе с устройством, которое его просило', async () => {
+    const laptop = makeClient('laptop');
+    await auth(laptop, { mode: 'register', nick: 'alice', password: 'достаточно-длинный' });
+
+    const phone = makeClient('phone');
+    const code = await linkCode(phone);
+    hub.leave(phone);
+
+    hub.handle(laptop, JSON.stringify({ type: 'link-approve', code }));
+    expect(laptop.inbox.some((m) => m.type === 'error')).toBe(true);
+  });
+
   it('выход по паролю гасит сессию, но не трогает написанное', async () => {
     const a = makeClient('a');
     await auth(a, { mode: 'register', nick: 'alice', password: 'достаточно-длинный' });

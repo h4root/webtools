@@ -1,6 +1,7 @@
 import { NICK_MAX, parseClientMessage, type AttachmentRef, type ClientMessage, type ServerMessage } from './protocol.ts';
 import { Store, channelKey, dmKey, recipientsOf } from './store.ts';
-import type { Auth } from './auth.ts';
+import { safeDevice, type Auth } from './auth.ts';
+import { LinkCodes } from './linkcodes.ts';
 
 export interface Client {
   id: string;
@@ -57,6 +58,8 @@ export class Hub {
   private readonly ringing = new Map<Client, Set<Client>>();
   private readonly invitedBy = new Map<Client, Client>();
   private readonly talking = new Map<Client, Client>();
+  private readonly links = new LinkCodes<Client>();
+  private readonly linkDevice = new Map<Client, string>();
 
   constructor(
     private readonly store: Store = new Store(),
@@ -140,6 +143,34 @@ export class Hub {
     client.send({ type: 'password-changed' });
   }
 
+  // Код отдаёт не чужой аккаунт, а свой собственный чужому устройству, поэтому
+  // подтверждать может только владелец пароля: гостю нечего передавать, а
+  // спутать «подтверди код» с чем-то безобидным слишком легко.
+  private approveLink(client: Client, code: string): void {
+    if (client.guest) {
+      client.send({ type: 'error', reason: 'Гость не может подключать устройства' });
+      return;
+    }
+
+    const waiting = this.links.claim(code);
+    if (!waiting || !this.auth) {
+      client.send({ type: 'error', reason: 'Код неверный или истёк' });
+      return;
+    }
+
+    const device = this.linkDevice.get(waiting) ?? '';
+    this.linkDevice.delete(waiting);
+
+    const token = this.auth.issueFor(client.nick!, device);
+    if (!token) {
+      client.send({ type: 'error', reason: 'Код неверный или истёк' });
+      return;
+    }
+
+    this.join(waiting, client.nick!, token, false);
+    client.send({ type: 'link-approved', device: device || 'новое устройство' });
+  }
+
   private sendSessions(client: Client): void {
     if (!this.auth) return;
     client.send({ type: 'sessions', list: this.auth.listSessions(client.nick!, client.token) });
@@ -220,6 +251,9 @@ export class Hub {
   }
 
   leave(client: Client): void {
+    // Код живёт ровно столько, сколько ждущее устройство: ушло — код мёртв.
+    this.links.release(client);
+    this.linkDevice.delete(client);
     if (!this.clients.delete(client)) return;
     this.callEnd(client);
     const wasInVoice = this.voiceOf.delete(client);
@@ -254,8 +288,28 @@ export class Hub {
       return;
     }
 
+    // Просить код может только не вошедший: это заявка на вход, а не действие
+    // внутри чата.
+    if (message.type === 'link-request') {
+      if (client.nick || !this.auth) return;
+      if (!this.auth.allowAttempt(client.source ?? 'неизвестно')) {
+        client.send({ type: 'auth-error', reason: 'Слишком много попыток, подожди' });
+        return;
+      }
+      const device = safeDevice(message.device);
+      const { code, expiresAt } = this.links.create(client);
+      this.linkDevice.set(client, device);
+      client.send({ type: 'link-code', code, expiresAt });
+      return;
+    }
+
     if (!client.nick || !this.clients.has(client)) {
       client.send({ type: 'error', reason: 'Сначала войди' });
+      return;
+    }
+
+    if (message.type === 'link-approve') {
+      this.approveLink(client, message.code);
       return;
     }
 

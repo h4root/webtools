@@ -142,7 +142,7 @@ export function mountSettings(root, account = {}) {
     popup.append(section('Шрифт', fontSelect()));
     popup.append(section('Анимации', motionSelect()));
     if (account.canChangePassword?.()) popup.append(section('Пароль', passwordForm()));
-    if (account.onSessions) popup.append(section('Устройства', deviceList()));
+    if (account.onSessions) popup.append(section('Устройства', linkForm(), deviceList()));
     if (account.onLogoutEverywhere) popup.append(section('Сессии', logoutEverywhere()));
   }
 
@@ -176,6 +176,35 @@ export function mountSettings(root, account = {}) {
         note.textContent = message;
         current.value = '';
         next.value = '';
+      });
+    });
+    return form;
+  }
+
+  function linkForm() {
+    const form = document.createElement('form');
+    form.className = 'settings-password';
+
+    const input = document.createElement('input');
+    input.placeholder = 'код с нового устройства';
+    input.maxLength = 16;
+    input.autocomplete = 'off';
+    const submit = document.createElement('button');
+    submit.type = 'submit';
+    submit.textContent = 'подключить';
+    const note = document.createElement('p');
+    note.className = 'settings-note';
+
+    form.append(input, submit, note);
+    form.addEventListener('submit', (event) => {
+      event.preventDefault();
+      const code = input.value.trim();
+      if (!code) return;
+      if (!confirm('Подключить устройство? Оно получит полный доступ к твоему аккаунту. Вводи код, только если сам его видишь на своём устройстве.')) return;
+      note.textContent = 'Подключаю…';
+      account.onApproveLink(code, (message) => {
+        note.textContent = message;
+        input.value = '';
       });
     });
     return form;

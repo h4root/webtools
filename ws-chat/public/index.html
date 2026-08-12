@@ -21,6 +21,12 @@
         <button type="button" class="gate-link" id="mode-guest" hidden>войти гостем</button>
         <button type="button" class="gate-link" id="mode-login">войти с паролем</button>
         <button type="button" class="gate-link" id="mode-register">зарегистрироваться</button>
+        <button type="button" class="gate-link" id="mode-link">войти с другого устройства</button>
+      </div>
+      <div id="link-box" class="link-box" hidden>
+        <p class="link-hint">Открой чат на устройстве, где уже вошёл, и введи там этот код в настройках, раздел «Устройства».</p>
+        <div id="link-code" class="link-code"></div>
+        <p id="link-expiry" class="settings-note"></p>
       </div>
       <p id="gate-error" class="gate-error"></p>
     </form>

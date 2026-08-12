@@ -61,6 +61,8 @@ export type ClientMessage =
   | { type: 'auth'; mode: AuthMode; nick?: string; password?: string; token?: string; device?: string }
   | { type: 'logout'; everywhere?: boolean }
   | { type: 'change-password'; current: string; next: string }
+  | { type: 'link-request'; device?: string }
+  | { type: 'link-approve'; code: string }
   | { type: 'sessions' }
   | { type: 'session-revoke'; id: string }
   | { type: 'channel-create'; name: string }
@@ -88,6 +90,8 @@ export type ServerMessage =
   | { type: 'logged-out'; reason?: string }
   | { type: 'password-changed' }
   | { type: 'sessions'; list: SessionInfo[] }
+  | { type: 'link-code'; code: string; expiresAt: number }
+  | { type: 'link-approved'; device: string }
   | { type: 'purged'; nick: string }
   | { type: 'channels'; list: string[] }
   | { type: 'presence'; users: string[] }
@@ -172,6 +176,10 @@ export function parseClientMessage(raw: string): ClientMessage | null {
     }
     case 'logout':
       return { type: 'logout', everywhere: data.everywhere === true };
+    case 'link-request':
+      return { type: 'link-request', device: typeof data.device === 'string' ? data.device.slice(0, 64) : undefined };
+    case 'link-approve':
+      return typeof data.code === 'string' && data.code.length <= 32 ? { type: 'link-approve', code: data.code } : null;
     case 'sessions':
       return { type: 'sessions' };
     case 'session-revoke':
