@@ -8,27 +8,39 @@
 </head>
 <body>
   <div id="gate" class="gate">
-    <form id="nick-form" class="nick-form">
-      <h1>ws-chat</h1>
+    <form id="nick-form" class="gate-card">
+      <h1 class="gate-title">ws-chat</h1>
+      <p class="gate-sub">Чат в локальной сети: текст, голос и файлы напрямую между устройствами.</p>
       <p id="gate-insecure" class="gate-insecure" hidden></p>
-      <input id="nick-input" placeholder="никнейм" maxlength="24" autocomplete="username" autofocus>
-      <div id="password-row" hidden>
-        <input id="password-input" type="password" placeholder="пароль" maxlength="200" autocomplete="current-password">
+
+      <div class="gate-main" id="gate-main">
+        <div class="gate-tabs" id="gate-tabs">
+          <button type="button" id="mode-guest">Гость</button>
+          <button type="button" id="mode-login">Вход</button>
+          <button type="button" id="mode-register">Регистрация</button>
+        </div>
+
+        <div class="gate-fields">
+          <input id="nick-input" placeholder="никнейм" maxlength="24" autocomplete="username" autofocus>
+          <input id="password-input" type="password" placeholder="пароль" maxlength="200" autocomplete="current-password" hidden>
+        </div>
+
+        <button type="submit" id="gate-submit">Продолжить</button>
+        <p id="gate-hint" class="gate-hint"></p>
       </div>
-      <button type="submit" id="gate-submit">войти гостем</button>
-      <p id="gate-hint" class="gate-hint"></p>
-      <div class="gate-modes">
-        <button type="button" class="gate-link" id="mode-guest" hidden>войти гостем</button>
-        <button type="button" class="gate-link" id="mode-login">войти с паролем</button>
-        <button type="button" class="gate-link" id="mode-register">зарегистрироваться</button>
-        <button type="button" class="gate-link" id="mode-link">войти с другого устройства</button>
-      </div>
+
       <div id="link-box" class="link-box" hidden>
-        <p class="link-hint">Открой чат на устройстве, где уже вошёл, и введи там этот код в настройках, раздел «Устройства».</p>
+        <p class="link-hint">Открой чат там, где уже вошёл, и введи этот код в настройках, раздел «Устройства».</p>
         <div id="link-code" class="link-code"></div>
-        <p id="link-expiry" class="settings-note"></p>
+        <p id="link-expiry" class="link-expiry"></p>
       </div>
+
       <p id="gate-error" class="gate-error"></p>
+
+      <div class="gate-foot">
+        <button type="button" class="gate-link" id="mode-link">Войти с другого устройства</button>
+        <button type="button" class="gate-link" id="link-back" hidden>Назад ко входу</button>
+      </div>
     </form>
   </div>
 

@@ -12,7 +12,9 @@ const gateError = document.getElementById('gate-error');
 const gateHint = document.getElementById('gate-hint');
 const gateInsecure = document.getElementById('gate-insecure');
 const gateSubmit = document.getElementById('gate-submit');
-const passwordRow = document.getElementById('password-row');
+const gateMain = document.getElementById('gate-main');
+const gateTabs = document.getElementById('gate-tabs');
+const linkBackBtn = document.getElementById('link-back');
 const passwordInput = document.getElementById('password-input');
 const modeGuestBtn = document.getElementById('mode-guest');
 const modeLoginBtn = document.getElementById('mode-login');
@@ -1263,10 +1265,19 @@ function renderAttachTray() {
 }
 
 const GATE_MODES = {
-  guest: { label: 'войти гостем', hint: 'Личность живёт до выхода: нажмёшь «Выйти» — ник освободится, а всё написанное будет стёрто.' },
-  login: { label: 'войти', hint: '' },
-  register: { label: 'зарегистрироваться', hint: 'Пароль от 8 символов. Ник закрепится за тобой, история останется после выхода.' },
-  link: { label: 'войти с другого устройства', hint: '' },
+  guest: {
+    label: 'Продолжить как гость',
+    hint: 'Ник занимается на время: нажмёшь «Выйти» — он освободится, а всё написанное будет стёрто. Личность живёт сутки без захода.',
+  },
+  login: {
+    label: 'Войти',
+    hint: 'Ник закреплён за паролем, история и вложения останутся на месте.',
+  },
+  register: {
+    label: 'Создать аккаунт',
+    hint: 'Пароль от 8 символов. Ник закрепится за тобой навсегда, история переживёт выход.',
+  },
+  link: { label: '', hint: '' },
 };
 
 let linkTimer = null;
@@ -1297,37 +1308,45 @@ function requestLinkCode() {
 function setGateMode(mode) {
   authMode = mode;
   gateError.textContent = '';
-  gateSubmit.textContent = GATE_MODES[mode].label;
-  gateHint.textContent = GATE_MODES[mode].hint;
-  passwordRow.hidden = mode !== 'login' && mode !== 'register';
-  nickInput.hidden = mode === 'link';
-  gateSubmit.hidden = mode === 'link';
-  linkBox.hidden = mode !== 'link';
-  if (mode !== 'link') {
+
+  const linking = mode === 'link';
+  gateMain.hidden = linking;
+  linkBox.hidden = !linking;
+  modeLinkBtn.hidden = linking;
+  linkBackBtn.hidden = !linking;
+
+  if (linking) {
     clearInterval(linkTimer);
     linkTimer = null;
+    return;
   }
+
+  const needsPassword = mode === 'login' || mode === 'register';
+  gateSubmit.textContent = GATE_MODES[mode].label;
+  gateHint.textContent = GATE_MODES[mode].hint;
+  passwordInput.hidden = !needsPassword;
   passwordInput.autocomplete = mode === 'register' ? 'new-password' : 'current-password';
-  modeGuestBtn.hidden = mode === 'guest';
-  modeLoginBtn.hidden = mode === 'login';
-  modeRegisterBtn.hidden = mode === 'register';
-  modeLinkBtn.hidden = mode === 'link';
-  if (mode !== 'guest') passwordInput.focus();
+  for (const tab of gateTabs.children) tab.classList.toggle('active', tab.id === `mode-${mode}`);
+
+  (needsPassword && nickInput.value ? passwordInput : nickInput).focus();
 }
 
 function setGateBusy(busy) {
   gateSubmit.disabled = busy;
   nickInput.disabled = busy;
   passwordInput.disabled = busy;
+  for (const tab of gateTabs.children) tab.disabled = busy;
 }
 
+function secureContext() {
+  return location.protocol === 'https:' || ['localhost', '127.0.0.1', '::1'].includes(location.hostname);
+}
+
+// Плашка уровня страницы, а не поля: иначе она то появлялась бы, то исчезала
+// при переключении вкладок и дёргала высоту формы.
 function warnIfInsecure() {
-  const secure = location.protocol === 'https:' || ['localhost', '127.0.0.1', '::1'].includes(location.hostname);
-  gateInsecure.hidden = secure;
-  if (!secure) {
-    gateInsecure.textContent =
-      'Соединение не шифруется (http). Пароль уйдёт открытым текстом и его увидит любой, кто слушает эту сеть. Для входа с паролем подними сервер по HTTPS — гостевой вход этим не затронут.';
-  }
+  gateInsecure.hidden = secureContext();
+  gateInsecure.textContent = 'Соединение не шифруется: в этой сети видно всё, включая пароль при входе.';
 }
 
 nickForm.addEventListener('submit', (event) => {
@@ -1358,6 +1377,7 @@ modeLinkBtn.addEventListener('click', () => {
   setGateMode('link');
   requestLinkCode();
 });
+linkBackBtn.addEventListener('click', () => setGateMode('guest'));
 
 logoutBtn.addEventListener('click', () => {
   const question = isGuest
