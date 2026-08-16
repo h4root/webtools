@@ -1805,6 +1805,35 @@ html.motion-off *::after {
   color: var(--dim);
 }
 
+.transfer-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.transfer-cancel {
+  flex: none;
+  padding: 2px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--dim);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.transfer-cancel:hover {
+  border-color: #e5533c;
+  color: #e5533c;
+}
+
+.transfer-cancel:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
 .transfer .bar {
   height: 4px;
   border-radius: 2px;
@@ -1883,6 +1912,22 @@ html.motion-off *::after {
 
 .hbtn.active {
   color: var(--accent);
+}
+
+.hbtn.pending {
+  position: relative;
+  color: var(--accent);
+}
+
+.hbtn.pending::after {
+  content: '';
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
 }
 
 .members {

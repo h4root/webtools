@@ -116,6 +116,7 @@ const conversations = new Map();
 const loaded = new Set();
 const unread = new Map();
 const typing = new Map();
+let dropPending = 0;
 
 function keyOf(kind, id) {
   return kind === 'channel' ? `ch:${id}` : `dm:${id.toLowerCase()}`;
@@ -389,6 +390,7 @@ function returnToGate(reason) {
   online = [];
   releaseBlobUrls();
   logEl.replaceChildren();
+  stopDrop();
   setDropPanel(false);
   closeSidebar();
   appEl.hidden = true;
@@ -435,6 +437,7 @@ function enterApp() {
   meEl.replaceChildren(avatar, name);
   renderChannels();
   updateTitle();
+  startDrop();
   textInput.focus();
 }
 
@@ -518,7 +521,7 @@ function updateCallButton() {
 
 // Сообщение в фоновой вкладке иначе никак не заметить: сам чат не на виду.
 function renderDocumentTitle() {
-  let total = 0;
+  let total = dropPending;
   for (const count of unread.values()) total += count;
   document.title = total > 0 ? `(${total}) ${BASE_TITLE}` : BASE_TITLE;
 }
@@ -1501,26 +1504,40 @@ function deviceLabel() {
   return '';
 }
 
-function openDrop() {
+// Соединение живёт всё время, пока ты в чате. Иначе файл можно прислать
+// только в ту минуту, когда панель открыта, — то есть практически никогда.
+function startDrop() {
   if (drop) return;
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
   drop = mountLanDrop(dropMount, {
     url: `${proto}://${location.host}/drop`,
     auth: () => ({ token: authToken, device: deviceLabel() }),
     emptyHint: 'Никого рядом. Откройте эту панель на другом устройстве — увидите его здесь.',
+    onPending: setDropPending,
   });
 }
 
-function closeDrop() {
+function stopDrop() {
   drop?.destroy();
   drop = null;
+  dropPending = 0;
+  renderDropBadge();
+}
+
+function setDropPending(count) {
+  dropPending = count;
+  renderDropBadge();
+  renderDocumentTitle();
+}
+
+function renderDropBadge() {
+  dropBtn.classList.toggle('pending', dropPending > 0);
+  dropBtn.title = dropPending > 0 ? `Входящие файлы: ${dropPending}` : 'Передача файлов';
 }
 
 function setDropPanel(open) {
   dropPanel.hidden = !open;
   dropBtn.classList.toggle('active', open);
-  if (open) openDrop();
-  else closeDrop();
 }
 
 dropBtn.addEventListener('click', () => {
