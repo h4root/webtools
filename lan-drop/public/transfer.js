@@ -2,6 +2,7 @@ export function createReceiver({ openSink, onFileStart, onProgress, onFileDone, 
   let sink = null;
   let current = null;
   let received = 0;
+  let cancelled = false;
 
   async function finish() {
     if (!sink) return;
@@ -45,10 +46,12 @@ export function createReceiver({ openSink, onFileStart, onProgress, onFileDone, 
 
   return {
     async handle(chunk) {
+      if (cancelled) return;
       if (typeof chunk === 'string') await handleControl(chunk);
       else await handleChunk(chunk);
     },
     async abort() {
+      cancelled = true;
       const target = sink;
       sink = null;
       current = null;

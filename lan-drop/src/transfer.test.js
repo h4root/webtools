@@ -122,4 +122,40 @@ describe('createReceiver', () => {
     expect(sinks.files[0].aborted).toBe(true);
     expect(sinks.files[0].closed).toBe(false);
   });
+
+  it('после abort не дописывает байты в отменённый файл', async () => {
+    const sinks = collectingSinks();
+    const receiver = createReceiver(sinks);
+
+    await receiver.handle(meta('big.bin', 10));
+    await receiver.handle(bytes(1, 2));
+    await receiver.abort();
+    await receiver.handle(bytes(3, 4));
+
+    expect(received(sinks.files[0])).toBe(2);
+  });
+
+  it('после abort не открывает следующий файл', async () => {
+    const sinks = collectingSinks();
+    const receiver = createReceiver(sinks);
+
+    await receiver.handle(meta('a.bin', 10));
+    await receiver.abort();
+    await receiver.handle(meta('b.bin', 2));
+    await receiver.handle(bytes(1, 2));
+
+    expect(sinks.files.map((f) => f.meta.name)).toEqual(['a.bin']);
+  });
+
+  it('после abort не сообщает об успешном завершении', async () => {
+    const sinks = collectingSinks();
+    let finished = false;
+    const receiver = createReceiver({ ...sinks, onDone: () => (finished = true) });
+
+    await receiver.handle(meta('a.bin', 10));
+    await receiver.abort();
+    await receiver.handle(JSON.stringify({ t: 'done' }));
+
+    expect(finished).toBe(false);
+  });
 });

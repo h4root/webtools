@@ -176,8 +176,37 @@ body {
   gap: 6px;
 }
 
+.transfer-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
 .transfer-label {
   color: var(--dim);
+}
+
+.transfer-cancel {
+  flex: none;
+  padding: 2px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--dim);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.transfer-cancel:hover {
+  border-color: var(--err);
+  color: var(--err);
+}
+
+.transfer-cancel:disabled {
+  opacity: 0.5;
+  cursor: default;
 }
 
 .transfer.ok .transfer-label {

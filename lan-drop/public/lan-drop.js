@@ -45,6 +45,7 @@ export function mountLanDrop(container, options = {}) {
 
   const peers = new Map();
   const sessions = new Map();
+  const asks = new Map();
   let myId = '';
   let ws = null;
   let reconnectTimer = null;
@@ -118,6 +119,14 @@ export function mountLanDrop(container, options = {}) {
     return peers.get(id)?.name ?? id;
   }
 
+  function dropAsk(sid) {
+    const ask = asks.get(sid);
+    if (!ask) return;
+    ask.node.remove();
+    asks.delete(sid);
+    options.onPending?.(asks.size);
+  }
+
   function renderPeers() {
     peersEl.replaceChildren();
     if (peers.size === 0) {
@@ -147,9 +156,11 @@ export function mountLanDrop(container, options = {}) {
   function askPeer(peerId, files) {
     const sid = crypto.randomUUID();
     const total = files.reduce((sum, f) => sum + f.size, 0);
-    const view = createTransferView(`→ ${peerName(peerId)}`, `ждём ответа · ${files.length} шт · ${formatSize(total)}`);
+    const view = createTransferView(`→ ${peerName(peerId)}`, `ждём ответа · ${files.length} шт · ${formatSize(total)}`, () =>
+      abortTransfer(sid, 'отменено вами', true),
+    );
 
-    sessions.set(sid, { role: 'send', peerId, files, total, view, pc: null, channel: null, dropTimer: null });
+    sessions.set(sid, { role: 'send', peerId, files, total, view, pc: null, channel: null, dropTimer: null, cancelled: false });
     signal(peerId, {
       kind: 'ask',
       sid,
@@ -180,8 +191,9 @@ export function mountLanDrop(container, options = {}) {
         session.view.status('передаём…');
         for (const file of session.files) {
           channel.send(JSON.stringify({ t: 'file', name: file.name, size: file.size, mime: file.type }));
-          sent = await sendFileBody(channel, file, sent, session.total, session.view);
+          sent = await sendFileBody(session, channel, file, sent);
         }
+        if (session.cancelled) return;
         channel.send(JSON.stringify({ t: 'done' }));
         session.view.done('отправлено');
         setTimeout(() => closeSession(sid), 1500);
@@ -195,10 +207,11 @@ export function mountLanDrop(container, options = {}) {
     signal(session.peerId, { kind: 'offer', sid, sdp: pc.localDescription });
   }
 
-  async function sendFileBody(channel, file, sentBefore, total, view) {
+  async function sendFileBody(session, channel, file, sentBefore) {
     let offset = 0;
     let sent = sentBefore;
     while (offset < file.size) {
+      if (session.cancelled) return sent;
       if (channel.readyState !== 'open') throw new Error('канал закрыт');
       if (channel.bufferedAmount > BUFFER_LIMIT) await waitForDrain(channel);
       const slice = file.slice(offset, offset + CHUNK_SIZE);
@@ -206,7 +219,7 @@ export function mountLanDrop(container, options = {}) {
       channel.send(buffer);
       offset += buffer.byteLength;
       sent += buffer.byteLength;
-      view.progress(sent / total);
+      session.view.progress(sent / session.total);
     }
     return sent;
   }
@@ -214,7 +227,13 @@ export function mountLanDrop(container, options = {}) {
   function waitForDrain(channel) {
     return new Promise((resolve) => {
       channel.bufferedAmountLowThreshold = BUFFER_LIMIT / 2;
-      channel.addEventListener('bufferedamountlow', () => resolve(), { once: true });
+      const settle = () => {
+        channel.removeEventListener('bufferedamountlow', settle);
+        channel.removeEventListener('close', settle);
+        resolve();
+      };
+      channel.addEventListener('bufferedamountlow', settle);
+      channel.addEventListener('close', settle);
     });
   }
 
@@ -260,6 +279,11 @@ export function mountLanDrop(container, options = {}) {
       }
       return;
     }
+    if (kind === 'cancel') {
+      dropAsk(sid);
+      abortTransfer(sid, 'отменено на той стороне', false);
+      return;
+    }
     if (kind === 'offer') {
       await acceptOffer(from, sid, data.sdp);
       return;
@@ -297,9 +321,11 @@ export function mountLanDrop(container, options = {}) {
     actions.append(accept, decline);
     li.append(actions);
     asksEl.append(li);
+    asks.set(sid, { node: li, from });
+    options.onPending?.(asks.size);
 
     decline.addEventListener('click', () => {
-      li.remove();
+      dropAsk(sid);
       signal(from, { kind: 'decline', sid });
     });
 
@@ -310,11 +336,14 @@ export function mountLanDrop(container, options = {}) {
       try {
         openSink = await chooseSink(files);
       } catch {
-        li.remove();
+        dropAsk(sid);
         signal(from, { kind: 'decline', sid });
         return;
       }
-      li.remove();
+      // Пока шёл выбор папки, отправитель мог передумать: сессии уже нет,
+      // и принимать нечего.
+      if (!asks.has(sid)) return;
+      dropAsk(sid);
       prepareReceive(from, sid, total, openSink);
       signal(from, { kind: 'accept', sid });
     });
@@ -377,7 +406,7 @@ export function mountLanDrop(container, options = {}) {
   }
 
   function prepareReceive(from, sid, total, openSink) {
-    const view = createTransferView(`← ${peerName(from)}`, 'соединяемся…');
+    const view = createTransferView(`← ${peerName(from)}`, 'соединяемся…', () => abortTransfer(sid, 'отменено вами', true));
     let done = 0;
 
     const receiver = createReceiver({
@@ -394,7 +423,7 @@ export function mountLanDrop(container, options = {}) {
       },
     });
 
-    sessions.set(sid, { role: 'receive', peerId: from, view, receiver, pc: null, dropTimer: null });
+    sessions.set(sid, { role: 'receive', peerId: from, view, receiver, pc: null, dropTimer: null, cancelled: false });
   }
 
   async function acceptOffer(from, sid, sdp) {
@@ -428,6 +457,9 @@ export function mountLanDrop(container, options = {}) {
     for (const [sid, session] of sessions) {
       if (session.peerId === peerId) failTransfer(sid, 'устройство отключилось');
     }
+    for (const [sid, ask] of asks) {
+      if (ask.from === peerId) dropAsk(sid);
+    }
   }
 
   function closeSession(sid) {
@@ -440,10 +472,14 @@ export function mountLanDrop(container, options = {}) {
     sessions.delete(sid);
   }
 
-  function failTransfer(sid, reason) {
+  function abortTransfer(sid, reason, tellPeer) {
     const session = sessions.get(sid);
     if (!session) return;
+    session.cancelled = true;
     clearTimeout(session.dropTimer);
+    // Сигналинг, а не канал данных: канал может быть забит очередью чанков
+    // или уже мёртв, а отмену надо доставить именно сейчас.
+    if (tellPeer) signal(session.peerId, { kind: 'cancel', sid });
     session.view.fail(reason);
     session.receiver?.abort();
     session.channel?.close();
@@ -451,14 +487,27 @@ export function mountLanDrop(container, options = {}) {
     sessions.delete(sid);
   }
 
-  function createTransferView(label, initial) {
+  function failTransfer(sid, reason) {
+    abortTransfer(sid, reason, false);
+  }
+
+  function createTransferView(label, initial, onCancel) {
     const li = el('li', 'transfer');
     const title = el('span', 'transfer-label', label);
     const state = el('span', 'transfer-status', initial ?? '');
+    const cancel = el('button', 'transfer-cancel', 'Отменить');
     const bar = el('div', 'bar');
     const fill = el('div', 'fill');
+    cancel.type = 'button';
+    cancel.title = 'Прервать передачу';
+    cancel.addEventListener('click', () => {
+      cancel.disabled = true;
+      onCancel?.();
+    });
+    const head = el('div', 'transfer-head');
+    head.append(title, cancel);
     bar.append(fill);
-    li.append(title, state, bar);
+    li.append(head, state, bar);
     transfersEl.append(li);
 
     return {
@@ -472,10 +521,12 @@ export function mountLanDrop(container, options = {}) {
         fill.style.width = '100%';
         li.classList.add('ok');
         state.textContent = text;
+        cancel.remove();
       },
       fail(text) {
         li.classList.add('err');
         state.textContent = text;
+        cancel.remove();
       },
       remove() {
         li.remove();
@@ -494,6 +545,8 @@ export function mountLanDrop(container, options = {}) {
         ws.close();
       }
       for (const sid of [...sessions.keys()]) closeSession(sid);
+      asks.clear();
+      options.onPending?.(0);
       container.replaceChildren();
     },
   };
