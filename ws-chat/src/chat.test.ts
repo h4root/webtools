@@ -656,6 +656,41 @@ describe('Hub', () => {
     hub.handle(a, JSON.stringify({ type: 'message', channel: 'general', text: 'hi' }));
     expect(a.inbox.at(-1)).toEqual({ type: 'error', reason: 'Сначала войди' });
   });
+
+  it('ищет по каналам и по своим ЛС, но не по чужим', () => {
+    const alice = makeClient('alice');
+    const bob = makeClient('bob');
+    hub.join(alice, 'alice');
+    hub.join(bob, 'bob');
+
+    store.addChannelMessage('general', 'bob', 'релиз в пятницу');
+    store.addDirectMessage('bob', 'alice', 'пятница подтверждена');
+    store.addDirectMessage('bob', 'carol', 'пятница отменяется');
+
+    hub.handle(alice, JSON.stringify({ type: 'search', query: 'пятниц' }));
+    const found = alice.inbox.at(-1);
+    expect(found?.type).toBe('search');
+    expect(found?.type === 'search' && found.messages.map((m) => m.text)).toEqual([
+      'пятница подтверждена',
+      'релиз в пятницу',
+    ]);
+  });
+
+  it('на поиск без входа отвечает отказом', () => {
+    const a = makeClient('a');
+    hub.handle(a, JSON.stringify({ type: 'search', query: 'что угодно' }));
+    expect(a.inbox.at(-1)).toEqual({ type: 'error', reason: 'Сначала войди' });
+  });
+
+  it('возвращает запрос вместе с находками, чтобы клиент не показал их не к тому полю', () => {
+    const alice = makeClient('alice');
+    hub.join(alice, 'alice');
+    store.addChannelMessage('general', 'alice', 'заметка про отчёт');
+
+    hub.handle(alice, JSON.stringify({ type: 'search', query: 'отчёт' }));
+    const found = alice.inbox.at(-1);
+    expect(found?.type === 'search' && found.query).toBe('отчёт');
+  });
 });
 
 describe('Hub: вход и выход', () => {

@@ -182,6 +182,53 @@ describe('Store', () => {
   });
 });
 
+describe('Store: поиск', () => {
+  let store: Store;
+
+  beforeEach(() => {
+    store = new Store();
+  });
+
+  it('находит сообщение канала по куску текста', () => {
+    store.addChannelMessage('general', 'alice', 'встречаемся в среду');
+    store.addChannelMessage('general', 'bob', 'ок');
+    expect(store.search('carol', 'сред').map((m) => m.text)).toEqual(['встречаемся в среду']);
+  });
+
+  it('не находит чужую переписку', () => {
+    store.addDirectMessage('bob', 'carol', 'секрет про среду');
+    expect(store.search('alice', 'среду')).toEqual([]);
+  });
+
+  it('находит мою переписку с обеих сторон', () => {
+    store.addDirectMessage('alice', 'bob', 'мой вопрос');
+    store.addDirectMessage('bob', 'alice', 'мой ответ');
+    expect(store.search('ALICE', 'мой').map((m) => m.text)).toEqual(['мой ответ', 'мой вопрос']);
+  });
+
+  it('не различает регистр', () => {
+    store.addChannelMessage('general', 'alice', 'Привет, МИР');
+    expect(store.search('bob', 'привет, мир')).toHaveLength(1);
+  });
+
+  it('на пустой запрос ничего не отдаёт', () => {
+    store.addChannelMessage('general', 'alice', 'что-нибудь');
+    expect(store.search('alice', '   ')).toEqual([]);
+  });
+
+  it('отдаёт свежие первыми и не больше лимита', () => {
+    for (let i = 0; i < 5; i++) store.addChannelMessage('general', 'alice', `отчёт ${i}`);
+    expect(store.search('bob', 'отчёт', 3).map((m) => m.text)).toEqual(['отчёт 4', 'отчёт 3', 'отчёт 2']);
+  });
+
+  it('не отдаёт сообщения удалённого канала', () => {
+    store.createChannel('dev');
+    store.addChannelMessage('dev', 'alice', 'черновик');
+    store.removeChannel('dev');
+    expect(store.search('alice', 'черновик')).toEqual([]);
+  });
+});
+
 describe('Store: персистентность', () => {
   let dir: string;
   let file: string;

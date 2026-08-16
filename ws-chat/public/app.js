@@ -65,6 +65,12 @@ const sendBtn = document.getElementById('send-btn');
 const settingsEl = document.getElementById('settings');
 const connBanner = document.getElementById('conn-banner');
 const jumpNewBtn = document.getElementById('jump-new');
+const searchBtn = document.getElementById('search-btn');
+const searchPanel = document.getElementById('search-panel');
+const searchInput = document.getElementById('search-input');
+const searchCloseBtn = document.getElementById('search-close');
+const searchNote = document.getElementById('search-note');
+const searchResults = document.getElementById('search-results');
 const dropBtn = document.getElementById('drop-btn');
 const dropPanel = document.getElementById('drop-panel');
 const dropMount = document.getElementById('drop-mount');
@@ -114,9 +120,14 @@ let missedBelow = 0;
 
 const conversations = new Map();
 const loaded = new Set();
+const historyReady = new Set();
 const unread = new Map();
 const typing = new Map();
 let dropPending = 0;
+let searchQuery = '';
+let searchTimer = null;
+let pendingJump = null;
+const SEARCH_HINT = 'Ищем только там, куда у тебя есть доступ: каналы и твои личные переписки.';
 
 function keyOf(kind, id) {
   return kind === 'channel' ? `ch:${id}` : `dm:${id.toLowerCase()}`;
@@ -208,6 +219,7 @@ function connect() {
     voice.reset();
     call.hangup();
     loaded.clear();
+    historyReady.clear();
     renderConnState();
     scheduleReconnect();
   });
@@ -282,9 +294,13 @@ function handleServer(message) {
       const key = message.channel ? `ch:${message.channel}` : `dm:${message.to.toLowerCase()}`;
       conversations.set(key, message.messages);
       loaded.add(key);
+      historyReady.add(key);
       if (key === activeKey()) renderLog();
       break;
     }
+    case 'search':
+      renderSearchResults(message.query, message.messages);
+      break;
     case 'message':
       receiveMessage(message.msg);
       break;
@@ -383,6 +399,7 @@ function returnToGate(reason) {
   reconnectTimer = null;
   conversations.clear();
   loaded.clear();
+  historyReady.clear();
   unread.clear();
   typing.clear();
   renderDocumentTitle();
@@ -390,6 +407,13 @@ function returnToGate(reason) {
   online = [];
   releaseBlobUrls();
   logEl.replaceChildren();
+  clearTimeout(searchTimer);
+  searchQuery = '';
+  pendingJump = null;
+  searchInput.value = '';
+  searchResults.replaceChildren();
+  searchNote.textContent = SEARCH_HINT;
+  setSearchPanel(false);
   stopDrop();
   setDropPanel(false);
   closeSidebar();
@@ -501,6 +525,88 @@ function openConversation(kind, id) {
   updateCallButton();
   closeSidebar();
   textInput.focus();
+}
+
+function setSearchPanel(open) {
+  searchPanel.hidden = !open;
+  searchBtn.classList.toggle('active', open);
+  if (open) searchInput.focus();
+}
+
+function runSearch() {
+  const query = searchInput.value.trim();
+  searchQuery = query;
+  if (!query) {
+    searchResults.replaceChildren();
+    searchNote.textContent = SEARCH_HINT;
+    return;
+  }
+  searchNote.textContent = 'Ищем…';
+  wsSend({ type: 'search', query });
+}
+
+// Ответы могут прийти не в том порядке, в каком набирали: показываем только
+// тот, что отвечает нынешнему запросу.
+function renderSearchResults(query, messages) {
+  if (query !== searchQuery) return;
+  searchResults.replaceChildren();
+
+  if (messages.length === 0) {
+    searchNote.textContent = 'Ничего не нашлось.';
+    return;
+  }
+  searchNote.textContent = `Нашлось: ${messages.length}`;
+
+  for (const msg of messages) {
+    const target = targetOf(msg);
+    const li = document.createElement('li');
+    li.className = 'search-hit';
+
+    const head = document.createElement('div');
+    head.className = 'search-hit-head';
+    const where = document.createElement('span');
+    where.className = 'search-hit-where';
+    where.textContent = target.kind === 'channel' ? `# ${target.id}` : `@ ${target.id}`;
+    const when = document.createElement('span');
+    when.className = 'search-hit-when';
+    when.textContent = timeLabel(msg.ts);
+    head.append(where, when);
+
+    const body = document.createElement('div');
+    body.className = 'search-hit-body';
+    body.textContent = `${msg.from}: ${msg.text}`;
+
+    li.append(head, body);
+    li.addEventListener('click', () => {
+      pendingJump = { key: keyOf(target.kind, target.id), id: msg.id };
+      openConversation(target.kind, target.id);
+      if (isNarrow()) setSearchPanel(false);
+    });
+    searchResults.append(li);
+  }
+}
+
+function targetOf(msg) {
+  if (msg.channel) return { kind: 'channel', id: msg.channel };
+  const other = msg.from.toLowerCase() === myNick.toLowerCase() ? msg.to : msg.from;
+  return { kind: 'dm', id: other };
+}
+
+// Найденное может оказаться старше загруженного куска истории — тогда честнее
+// сказать об этом, чем молча открыть разговор и ничего не подсветить.
+function flushJump() {
+  if (!pendingJump || pendingJump.key !== activeKey()) return;
+  if (logEl.querySelector(`[data-id="${pendingJump.id}"]`)) {
+    scrollToMessage(pendingJump.id);
+    pendingJump = null;
+    return;
+  }
+  // loaded означает «история запрошена», а не «пришла»: сдаваться можно только
+  // после ответа сервера, иначе отказ вынесен до того, как смотреть было куда.
+  if (historyReady.has(pendingJump.key)) {
+    pendingJump = null;
+    searchNote.textContent = 'Разговор открыт, но сообщение старше загруженной истории.';
+  }
 }
 
 function requestHistory(target) {
@@ -935,6 +1041,7 @@ function renderLog() {
   missedBelow = 0;
   scrollToBottom();
   applyMotionState();
+  flushJump();
 }
 
 function receiveTyping(message) {
@@ -1550,12 +1657,30 @@ dropBtn.addEventListener('click', () => {
   setDropPanel(open);
 });
 
+searchBtn.addEventListener('click', () => {
+  const open = searchPanel.hidden;
+  if (open && isNarrow()) {
+    closeSidebar();
+    setDropPanel(false);
+    membersPanel.hidden = true;
+    membersBtn.classList.remove('active');
+  }
+  setSearchPanel(open);
+});
+
+searchInput.addEventListener('input', () => {
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(runSearch, 250);
+});
+
+searchCloseBtn.addEventListener('click', () => setSearchPanel(false));
 dropCloseBtn.addEventListener('click', () => setDropPanel(false));
 sidebarCloseBtn.addEventListener('click', closeSidebar);
 
 document.addEventListener('keydown', (event) => {
   if (event.key !== 'Escape') return;
   if (sidebar.classList.contains('open')) closeSidebar();
+  else if (!searchPanel.hidden) setSearchPanel(false);
   else if (!dropPanel.hidden) setDropPanel(false);
 });
 
@@ -1613,6 +1738,9 @@ function initUI() {
   logoutBtn.appendChild(icon('sign-out', 16));
   sidebarCloseBtn.appendChild(icon('cross', 18));
   dropCloseBtn.appendChild(icon('cross', 16));
+  searchBtn.appendChild(icon('search', 18));
+  searchCloseBtn.appendChild(icon('cross', 16));
+  searchNote.textContent = SEARCH_HINT;
   setButton(voiceLeaveBtn, 'cross');
   setButton(callBtn, 'phone', 'Позвонить');
   setButton(callAccept, 'phone', 'Принять');

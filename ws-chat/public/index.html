@@ -84,6 +84,7 @@
         <span id="chat-title"># general</span>
         <div class="chat-actions">
           <button type="button" class="call-btn" id="call-btn" hidden></button>
+          <button type="button" class="hbtn" id="search-btn" title="Поиск по истории"></button>
           <button type="button" class="hbtn" id="drop-btn" title="Передача файлов"></button>
           <button type="button" class="hbtn" id="members-btn" title="Участники"></button>
         </div>
@@ -104,6 +105,15 @@
 
     <aside class="members" id="members" hidden>
       <div class="members-list" id="members-list"></div>
+    </aside>
+
+    <aside class="search-panel" id="search-panel" hidden>
+      <div class="search-head">
+        <input id="search-input" placeholder="искать в сообщениях…" maxlength="100" autocomplete="off">
+        <button type="button" class="hbtn" id="search-close" title="Закрыть"></button>
+      </div>
+      <p class="search-note" id="search-note">Ищем только там, куда у тебя есть доступ: каналы и твои личные переписки.</p>
+      <ul class="search-results" id="search-results"></ul>
     </aside>
 
     <aside class="drop-panel" id="drop-panel" hidden>

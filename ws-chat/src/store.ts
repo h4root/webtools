@@ -7,6 +7,7 @@ export const DEFAULT_CHANNELS = ['general', 'random'];
 export const DEFAULT_VOICE_CHANNELS = ['general', 'games'];
 export const HISTORY_LIMIT = 200;
 export const CHANNEL_LIMIT = 100;
+export const SEARCH_LIMIT = 50;
 const SAVE_DEBOUNCE_MS = 400;
 
 interface StoredMessage {
@@ -416,6 +417,26 @@ export class Store {
       if (attachment) return attachment;
     }
     return null;
+  }
+
+  // Доступ проверяется здесь, а не в интерфейсе: иначе поиск стал бы способом
+  // читать чужие личные сообщения в обход всех остальных проверок.
+  search(nick: string, query: string, limit = SEARCH_LIMIT): WireMessage[] {
+    const needle = query.trim().toLowerCase();
+    if (!needle) return [];
+
+    const found: StoredMessage[] = [];
+    for (const messages of this.byKey.values()) {
+      for (const message of messages) {
+        if (!message.text.toLowerCase().includes(needle)) continue;
+        if (!this.canAccess(message, nick)) continue;
+        found.push(message);
+      }
+    }
+    return found
+      .sort((a, b) => b.id - a.id)
+      .slice(0, Math.max(0, Math.min(limit, SEARCH_LIMIT)))
+      .map(toWire);
   }
 
   history(key: string, limit = 100): WireMessage[] {

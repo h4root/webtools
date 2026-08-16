@@ -355,6 +355,9 @@ export class Hub {
       case 'history':
         this.sendHistory(client, message);
         break;
+      case 'search':
+        client.send({ type: 'search', query: message.query, messages: this.store.search(client.nick!, message.query) });
+        break;
       case 'edit':
         this.editMessage(client, message.id, message.text);
         break;

@@ -5,6 +5,7 @@ export const CHANNEL_MAX = 24;
 export const ATTACH_MAX = 10;
 export const ATTACH_SIZE_MAX = 26_214_400;
 export const PASSWORD_LIMIT = 200;
+export const SEARCH_QUERY_MAX = 100;
 
 const ATTACH_ID = /^[a-f0-9]{32}$/;
 
@@ -70,6 +71,7 @@ export type ClientMessage =
   | { type: 'voice-channel-delete'; name: string }
   | { type: 'message'; channel?: string; to?: string; text: string; replyTo?: number; attachments?: AttachmentRef[] }
   | { type: 'history'; channel?: string; to?: string }
+  | { type: 'search'; query: string }
   | { type: 'edit'; id: number; text: string }
   | { type: 'delete'; id: number }
   | { type: 'react'; id: number; emoji: string }
@@ -98,6 +100,7 @@ export type ServerMessage =
   | { type: 'dms'; list: { nick: string; ts: number }[] }
   | { type: 'message'; msg: WireMessage }
   | { type: 'history'; channel?: string; to?: string; messages: WireMessage[] }
+  | { type: 'search'; query: string; messages: WireMessage[] }
   | { type: 'edited'; id: number; text: string }
   | { type: 'deleted'; id: number }
   | { type: 'reaction'; id: number; reactions: Reactions }
@@ -217,6 +220,8 @@ export function parseClientMessage(raw: string): ClientMessage | null {
       const target = parseTarget(data);
       return target ? { type: 'history', ...target } : null;
     }
+    case 'search':
+      return isBoundedString(data.query, SEARCH_QUERY_MAX) ? { type: 'search', query: data.query.trim() } : null;
     case 'typing': {
       const target = parseTarget(data);
       return target ? { type: 'typing', ...target } : null;
