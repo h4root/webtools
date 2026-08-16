@@ -493,6 +493,13 @@ button {
   color: var(--accent);
   text-align: center;
   user-select: all;
+  cursor: pointer;
+  border-radius: 6px;
+  padding: 4px 0;
+}
+
+.link-code:hover {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
 }
 
 .settings-devices {

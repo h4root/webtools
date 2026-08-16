@@ -84,6 +84,7 @@ const REACTIONS = ['👍', '❤️', '😂', '🔥', '🎉', '😮', '😢', '�
 let activePicker = null;
 
 const TOKEN_KEY = 'ws-chat-token';
+const BASE_TITLE = document.title;
 
 let myNick = '';
 let authToken = '';
@@ -383,6 +384,7 @@ function returnToGate(reason) {
   loaded.clear();
   unread.clear();
   typing.clear();
+  renderDocumentTitle();
   dmPartners = [];
   online = [];
   releaseBlobUrls();
@@ -514,7 +516,15 @@ function updateCallButton() {
   callBtn.hidden = !canCall;
 }
 
+// Сообщение в фоновой вкладке иначе никак не заметить: сам чат не на виду.
+function renderDocumentTitle() {
+  let total = 0;
+  for (const count of unread.values()) total += count;
+  document.title = total > 0 ? `(${total}) ${BASE_TITLE}` : BASE_TITLE;
+}
+
 function renderChannels() {
+  renderDocumentTitle();
   channelListEl.replaceChildren();
   for (const name of channels) {
     channelListEl.appendChild(navItem('channel', name, `# ${name}`));
@@ -1281,11 +1291,14 @@ const GATE_MODES = {
 };
 
 let linkTimer = null;
+let linkFlashUntil = 0;
 
 function showLinkCode(code, expiresAt) {
   linkCodeEl.textContent = `${code.slice(0, 3)}-${code.slice(3)}`;
+  linkCodeEl.title = 'Нажми, чтобы скопировать';
   clearInterval(linkTimer);
   linkTimer = setInterval(() => {
+    if (Date.now() < linkFlashUntil) return;
     const left = Math.round((expiresAt - Date.now()) / 1000);
     if (left > 0) {
       linkExpiryEl.textContent = `Код действует ещё ${left} с`;
@@ -1299,6 +1312,7 @@ function showLinkCode(code, expiresAt) {
 }
 
 function requestLinkCode() {
+  linkFlashUntil = 0;
   linkCodeEl.textContent = '…';
   linkExpiryEl.textContent = '';
   if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'link-request', device: deviceLabel() }));
@@ -1377,6 +1391,28 @@ modeLinkBtn.addEventListener('click', () => {
   setGateMode('link');
   requestLinkCode();
 });
+
+// Буфер обмена доступен только в защищённом контексте, а код чаще всего
+// смотрят с телефона по http — поэтому есть запасной путь через выделение.
+linkCodeEl.addEventListener('click', async () => {
+  const code = linkCodeEl.textContent.trim();
+  if (!code || code === '…') return;
+
+  try {
+    await navigator.clipboard.writeText(code);
+    flashLinkNote('Код скопирован');
+  } catch {
+    getSelection()?.selectAllChildren(linkCodeEl);
+    flashLinkNote('Код выделен — скопируй вручную');
+  }
+});
+
+// Отсчёт живёт в той же строке и переписывает её каждую секунду, поэтому
+// сообщение не восстанавливаем по таймеру, а просто просим отсчёт помолчать.
+function flashLinkNote(text) {
+  linkFlashUntil = Date.now() + 1800;
+  linkExpiryEl.textContent = text;
+}
 linkBackBtn.addEventListener('click', () => setGateMode('guest'));
 
 logoutBtn.addEventListener('click', () => {
