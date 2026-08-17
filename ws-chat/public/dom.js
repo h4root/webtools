@@ -1,4 +1,4 @@
-export const gate = document.getElementById('gate');
+export const gateScreen = document.getElementById('gate');
 export const nickForm = document.getElementById('nick-form');
 export const nickInput = document.getElementById('nick-input');
 export const gateError = document.getElementById('gate-error');

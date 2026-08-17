@@ -6,20 +6,8 @@ import { mountLanDrop } from '/drop-client/lan-drop.js';
 import autoAnimate from './vendor/auto-animate.mjs';
 
 import {
-  gate,
-  nickForm,
+  gateScreen,
   nickInput,
-  gateError,
-  gateHint,
-  gateInsecure,
-  gateSubmit,
-  gateMain,
-  gateTabs,
-  linkBackBtn,
-  passwordInput,
-  modeGuestBtn,
-  modeLoginBtn,
-  modeRegisterBtn,
   logoutBtn,
   appEl,
   meEl,
@@ -32,7 +20,6 @@ import {
   composer,
   textInput,
   replyBar,
-  attachTray,
   attachBtn,
   fileInput,
   menuBtn,
@@ -67,23 +54,18 @@ import {
   connBanner,
   jumpNewBtn,
   searchBtn,
-  searchPanel,
   searchInput,
   searchCloseBtn,
   searchNote,
-  searchResults,
   dropBtn,
   dropPanel,
   dropMount,
   dropCloseBtn,
   sidebarCloseBtn,
-  modeLinkBtn,
-  linkBox,
-  linkCodeEl,
-  linkExpiryEl,
 } from './dom.js';
 import { createAttachments } from './attachments.js';
 import { createSearch } from './search.js';
+import { createGate } from './gate.js';
 import { isNarrow, timeLabel, formatSize, formatStats, deviceLabel, secureContext } from './format.js';
 
 const RECONNECT_MS = 2000;
@@ -100,8 +82,6 @@ const BASE_TITLE = document.title;
 let myNick = '';
 let authToken = '';
 let isGuest = false;
-let authMode = 'guest';
-let pendingAuth = null;
 let passwordNote = null;
 let sessionsNote = null;
 let linkNote = null;
@@ -193,6 +173,15 @@ const attachments = createAttachments({
   onError: (reason) => systemLine(reason),
 });
 
+// Форма входа шлёт либо в живой сокет, либо поднимает его: sendHello
+// повторит запрос сама, как только соединение откроется.
+function request(message) {
+  if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(message));
+  else connect();
+}
+
+const gate = createGate({ request });
+
 const search = createSearch({
   send: wsSend,
   getNick: () => myNick,
@@ -212,8 +201,8 @@ function wsUrl() {
 function sendHello() {
   if (!ws || ws.readyState !== WebSocket.OPEN) return;
   if (authToken) ws.send(JSON.stringify({ type: 'auth', mode: 'resume', token: authToken }));
-  else if (authMode === 'link') ws.send(JSON.stringify({ type: 'link-request', device: deviceLabel() }));
-  else if (pendingAuth) ws.send(JSON.stringify({ type: 'auth', ...pendingAuth }));
+  else if (gate.mode() === 'link') ws.send(JSON.stringify({ type: 'link-request', device: deviceLabel() }));
+  else if (gate.pending()) ws.send(JSON.stringify({ type: 'auth', ...gate.pending() }));
 }
 
 function connect() {
@@ -259,13 +248,13 @@ function handleAuthError(message) {
     if (joined) {
       returnToGate(message.reason + wait);
     } else {
-      gateError.textContent = message.reason + wait;
-      setGateBusy(false);
+      gate.showError(message.reason + wait);
+      gate.setBusy(false);
     }
     return;
   }
-  gateError.textContent = message.reason + wait;
-  setGateBusy(false);
+  gate.showError(message.reason + wait);
+  gate.setBusy(false);
 }
 
 function forgetToken() {
@@ -281,7 +270,7 @@ function handleServer(message) {
       myNick = message.nick;
       authToken = message.token;
       isGuest = message.guest;
-      pendingAuth = null;
+      gate.clearPending();
       try {
         localStorage.setItem(TOKEN_KEY, authToken);
       } catch {}
@@ -345,7 +334,7 @@ function handleServer(message) {
       sessionsNote?.(message.list);
       break;
     case 'link-code':
-      showLinkCode(message.code, message.expiresAt);
+      gate.showLinkCode(message.code, message.expiresAt);
       break;
     case 'link-approved':
       linkNote?.(`Подключено: ${message.device}`);
@@ -359,7 +348,7 @@ function handleServer(message) {
       forgetUser(message.nick);
       break;
     case 'error':
-      if (!joined) gateError.textContent = message.reason;
+      if (!joined) gate.showError(message.reason);
       else if (linkNote) {
         linkNote(message.reason);
         linkNote = null;
@@ -397,7 +386,7 @@ function handleServer(message) {
 
 function finishLogout(reason) {
   forgetToken();
-  pendingAuth = null;
+  gate.clearPending();
   outbox = [];
   if (ws) {
     const socket = ws;
@@ -428,11 +417,11 @@ function returnToGate(reason) {
   setDropPanel(false);
   closeSidebar();
   appEl.hidden = true;
-  gate.hidden = false;
+  gateScreen.hidden = false;
   connBanner.hidden = true;
-  setGateBusy(false);
-  setGateMode(isGuest ? 'guest' : 'login');
-  gateError.textContent = reason ?? '';
+  gate.setBusy(false);
+  gate.setMode(isGuest ? 'guest' : 'login');
+  gate.showError(reason ?? '');
   nickInput.value = myNick;
   nickInput.focus();
 }
@@ -460,7 +449,7 @@ function forgetUser(nick) {
 
 function enterApp() {
   joined = true;
-  gate.hidden = true;
+  gateScreen.hidden = true;
   appEl.hidden = false;
   const avatar = document.createElement('span');
   avatar.className = 'avatar';
@@ -1159,143 +1148,6 @@ function renderReplyBar() {
 }
 
 
-const GATE_MODES = {
-  guest: {
-    label: 'Продолжить как гость',
-    hint: 'Ник занимается на время: нажмёшь «Выйти» — он освободится, а всё написанное будет стёрто. Личность живёт сутки без захода.',
-  },
-  login: {
-    label: 'Войти',
-    hint: 'Ник закреплён за паролем, история и вложения останутся на месте.',
-  },
-  register: {
-    label: 'Создать аккаунт',
-    hint: 'Пароль от 8 символов. Ник закрепится за тобой навсегда, история переживёт выход.',
-  },
-  link: { label: '', hint: '' },
-};
-
-let linkTimer = null;
-let linkFlashUntil = 0;
-
-function showLinkCode(code, expiresAt) {
-  linkCodeEl.textContent = `${code.slice(0, 3)}-${code.slice(3)}`;
-  linkCodeEl.title = 'Нажми, чтобы скопировать';
-  clearInterval(linkTimer);
-  linkTimer = setInterval(() => {
-    if (Date.now() < linkFlashUntil) return;
-    const left = Math.round((expiresAt - Date.now()) / 1000);
-    if (left > 0) {
-      linkExpiryEl.textContent = `Код действует ещё ${left} с`;
-      return;
-    }
-    clearInterval(linkTimer);
-    linkExpiryEl.textContent = 'Код истёк — нажми «войти с другого устройства» ещё раз';
-    linkCodeEl.textContent = '';
-  }, 1000);
-  linkExpiryEl.textContent = `Код действует ещё ${Math.round((expiresAt - Date.now()) / 1000)} с`;
-}
-
-function requestLinkCode() {
-  linkFlashUntil = 0;
-  linkCodeEl.textContent = '…';
-  linkExpiryEl.textContent = '';
-  if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'link-request', device: deviceLabel() }));
-  else connect();
-}
-
-function setGateMode(mode) {
-  authMode = mode;
-  gateError.textContent = '';
-
-  const linking = mode === 'link';
-  gateMain.hidden = linking;
-  linkBox.hidden = !linking;
-  modeLinkBtn.hidden = linking;
-  linkBackBtn.hidden = !linking;
-
-  if (linking) {
-    clearInterval(linkTimer);
-    linkTimer = null;
-    return;
-  }
-
-  const needsPassword = mode === 'login' || mode === 'register';
-  gateSubmit.textContent = GATE_MODES[mode].label;
-  gateHint.textContent = GATE_MODES[mode].hint;
-  passwordInput.hidden = !needsPassword;
-  passwordInput.autocomplete = mode === 'register' ? 'new-password' : 'current-password';
-  for (const tab of gateTabs.children) tab.classList.toggle('active', tab.id === `mode-${mode}`);
-
-  (needsPassword && nickInput.value ? passwordInput : nickInput).focus();
-}
-
-function setGateBusy(busy) {
-  gateSubmit.disabled = busy;
-  nickInput.disabled = busy;
-  passwordInput.disabled = busy;
-  for (const tab of gateTabs.children) tab.disabled = busy;
-}
-
-// Плашка уровня страницы, а не поля: иначе она то появлялась бы, то исчезала
-// при переключении вкладок и дёргала высоту формы.
-function warnIfInsecure() {
-  gateInsecure.hidden = secureContext();
-  gateInsecure.textContent = 'Соединение не шифруется: в этой сети видно всё, включая пароль при входе.';
-}
-
-nickForm.addEventListener('submit', (event) => {
-  event.preventDefault();
-  const nick = nickInput.value.trim();
-  if (!nick) return;
-  const password = passwordInput.value;
-  if (authMode !== 'guest' && !password) {
-    gateError.textContent = 'Введи пароль';
-    return;
-  }
-
-  pendingAuth =
-    authMode === 'guest'
-      ? { mode: 'guest', nick, device: deviceLabel() }
-      : { mode: authMode, nick, password, device: deviceLabel() };
-  gateError.textContent = '';
-  setGateBusy(true);
-  if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'auth', ...pendingAuth }));
-  else connect();
-  passwordInput.value = '';
-});
-
-modeGuestBtn.addEventListener('click', () => setGateMode('guest'));
-modeLoginBtn.addEventListener('click', () => setGateMode('login'));
-modeRegisterBtn.addEventListener('click', () => setGateMode('register'));
-modeLinkBtn.addEventListener('click', () => {
-  setGateMode('link');
-  requestLinkCode();
-});
-
-// Буфер обмена доступен только в защищённом контексте, а код чаще всего
-// смотрят с телефона по http — поэтому есть запасной путь через выделение.
-linkCodeEl.addEventListener('click', async () => {
-  const code = linkCodeEl.textContent.trim();
-  if (!code || code === '…') return;
-
-  try {
-    await navigator.clipboard.writeText(code);
-    flashLinkNote('Код скопирован');
-  } catch {
-    getSelection()?.selectAllChildren(linkCodeEl);
-    flashLinkNote('Код выделен — скопируй вручную');
-  }
-});
-
-// Отсчёт живёт в той же строке и переписывает её каждую секунду, поэтому
-// сообщение не восстанавливаем по таймеру, а просто просим отсчёт помолчать.
-function flashLinkNote(text) {
-  linkFlashUntil = Date.now() + 1800;
-  linkExpiryEl.textContent = text;
-}
-linkBackBtn.addEventListener('click', () => setGateMode('guest'));
-
 logoutBtn.addEventListener('click', () => {
   const question = isGuest
     ? 'Выйти? Гостевая личность стирается: ник освободится, а все твои сообщения и вложения будут удалены безвозвратно.'
@@ -1490,8 +1342,8 @@ function makeDraggable(panel, handle) {
 }
 
 function initUI() {
-  warnIfInsecure();
-  setGateMode('guest');
+  gate.warnIfInsecure();
+  gate.setMode('guest');
   logoutBtn.appendChild(icon('sign-out', 16));
   sidebarCloseBtn.appendChild(icon('cross', 18));
   dropCloseBtn.appendChild(icon('cross', 16));
@@ -1540,7 +1392,7 @@ function initUI() {
     authToken = '';
   }
   if (authToken) {
-    setGateBusy(true);
+    gate.setBusy(true);
     connect();
   }
 }
