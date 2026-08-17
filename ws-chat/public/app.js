@@ -2,7 +2,6 @@ import { createVoice } from './voice.js';
 import { createCall } from './call.js';
 import { icon, setButton } from './icons.js';
 import { mountSettings, settings } from './settings.js';
-import { mountLanDrop } from '/drop-client/lan-drop.js';
 import autoAnimate from './vendor/auto-animate.mjs';
 
 import {
@@ -58,14 +57,13 @@ import {
   searchCloseBtn,
   searchNote,
   dropBtn,
-  dropPanel,
-  dropMount,
   dropCloseBtn,
   sidebarCloseBtn,
 } from './dom.js';
 import { createAttachments } from './attachments.js';
 import { createSearch } from './search.js';
 import { createGate } from './gate.js';
+import { createDrop } from './drop.js';
 import { isNarrow, timeLabel, formatSize, formatStats, deviceLabel, secureContext } from './format.js';
 
 const RECONNECT_MS = 2000;
@@ -107,7 +105,6 @@ const loaded = new Set();
 const historyReady = new Set();
 const unread = new Map();
 const typing = new Map();
-let dropPending = 0;
 
 function keyOf(kind, id) {
   return kind === 'channel' ? `ch:${id}` : `dm:${id.toLowerCase()}`;
@@ -181,6 +178,11 @@ function request(message) {
 }
 
 const gate = createGate({ request });
+
+const drop = createDrop({
+  getToken: () => authToken,
+  onPendingChange: () => renderDocumentTitle(),
+});
 
 const search = createSearch({
   send: wsSend,
@@ -413,8 +415,8 @@ function returnToGate(reason) {
   attachments.releaseUrls();
   logEl.replaceChildren();
   search.reset();
-  stopDrop();
-  setDropPanel(false);
+  drop.stop();
+  drop.setPanel(false);
   closeSidebar();
   appEl.hidden = true;
   gateScreen.hidden = false;
@@ -460,7 +462,7 @@ function enterApp() {
   meEl.replaceChildren(avatar, name);
   renderChannels();
   updateTitle();
-  startDrop();
+  drop.start();
   textInput.focus();
 }
 
@@ -544,7 +546,7 @@ function updateCallButton() {
 
 // Сообщение в фоновой вкладке иначе никак не заметить: сам чат не на виду.
 function renderDocumentTitle() {
-  let total = dropPending;
+  let total = drop.pending();
   for (const count of unread.values()) total += count;
   document.title = total > 0 ? `(${total}) ${BASE_TITLE}` : BASE_TITLE;
 }
@@ -1102,7 +1104,7 @@ function closeSidebar() {
 }
 
 function closeRightPanels() {
-  setDropPanel(false);
+  drop.setPanel(false);
   membersPanel.hidden = true;
   membersBtn.classList.remove('active');
 }
@@ -1215,65 +1217,27 @@ membersBtn.addEventListener('click', () => {
   const open = membersPanel.hidden;
   if (open && isNarrow()) {
     closeSidebar();
-    setDropPanel(false);
+    drop.setPanel(false);
   }
   membersPanel.hidden = !open;
   membersBtn.classList.toggle('active', open);
 });
 
-let drop = null;
-
-// Соединение живёт всё время, пока ты в чате. Иначе файл можно прислать
-// только в ту минуту, когда панель открыта, — то есть практически никогда.
-function startDrop() {
-  if (drop) return;
-  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-  drop = mountLanDrop(dropMount, {
-    url: `${proto}://${location.host}/drop`,
-    auth: () => ({ token: authToken, device: deviceLabel() }),
-    emptyHint: 'Никого рядом. Откройте эту панель на другом устройстве — увидите его здесь.',
-    onPending: setDropPending,
-  });
-}
-
-function stopDrop() {
-  drop?.destroy();
-  drop = null;
-  dropPending = 0;
-  renderDropBadge();
-}
-
-function setDropPending(count) {
-  dropPending = count;
-  renderDropBadge();
-  renderDocumentTitle();
-}
-
-function renderDropBadge() {
-  dropBtn.classList.toggle('pending', dropPending > 0);
-  dropBtn.title = dropPending > 0 ? `Входящие файлы: ${dropPending}` : 'Передача файлов';
-}
-
-function setDropPanel(open) {
-  dropPanel.hidden = !open;
-  dropBtn.classList.toggle('active', open);
-}
-
 dropBtn.addEventListener('click', () => {
-  const open = dropPanel.hidden;
+  const open = !drop.isOpen();
   if (open && isNarrow()) {
     closeSidebar();
     membersPanel.hidden = true;
     membersBtn.classList.remove('active');
   }
-  setDropPanel(open);
+  drop.setPanel(open);
 });
 
 searchBtn.addEventListener('click', () => {
   const open = !search.isOpen();
   if (open && isNarrow()) {
     closeSidebar();
-    setDropPanel(false);
+    drop.setPanel(false);
     membersPanel.hidden = true;
     membersBtn.classList.remove('active');
   }
@@ -1283,14 +1247,14 @@ searchBtn.addEventListener('click', () => {
 searchInput.addEventListener('input', () => search.schedule());
 
 searchCloseBtn.addEventListener('click', () => search.setPanel(false));
-dropCloseBtn.addEventListener('click', () => setDropPanel(false));
+dropCloseBtn.addEventListener('click', () => drop.setPanel(false));
 sidebarCloseBtn.addEventListener('click', closeSidebar);
 
 document.addEventListener('keydown', (event) => {
   if (event.key !== 'Escape') return;
   if (sidebar.classList.contains('open')) closeSidebar();
   else if (search.isOpen()) search.setPanel(false);
-  else if (!dropPanel.hidden) setDropPanel(false);
+  else if (drop.isOpen()) drop.setPanel(false);
 });
 
 voiceMuteBtn.addEventListener('click', () => voice.toggleMute());
