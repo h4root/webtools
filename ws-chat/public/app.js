@@ -83,6 +83,7 @@ import {
   linkExpiryEl,
 } from './dom.js';
 import { createAttachments } from './attachments.js';
+import { createSearch } from './search.js';
 import { isNarrow, timeLabel, formatSize, formatStats, deviceLabel, secureContext } from './format.js';
 
 const RECONNECT_MS = 2000;
@@ -127,10 +128,6 @@ const historyReady = new Set();
 const unread = new Map();
 const typing = new Map();
 let dropPending = 0;
-let searchQuery = '';
-let searchTimer = null;
-let pendingJump = null;
-const SEARCH_HINT = 'Ищем только там, куда у тебя есть доступ: каналы и твои личные переписки.';
 
 function keyOf(kind, id) {
   return kind === 'channel' ? `ch:${id}` : `dm:${id.toLowerCase()}`;
@@ -194,6 +191,17 @@ const call = createCall({
 const attachments = createAttachments({
   getToken: () => authToken,
   onError: (reason) => systemLine(reason),
+});
+
+const search = createSearch({
+  send: wsSend,
+  getNick: () => myNick,
+  openConversation: (kind, id) => openConversation(kind, id),
+  keyOf,
+  activeKey,
+  findRow: (id) => logEl.querySelector(`[data-id="${id}"]`),
+  scrollToMessage: (id) => scrollToMessage(id),
+  historyArrived: (key) => historyReady.has(key),
 });
 
 function wsUrl() {
@@ -307,7 +315,7 @@ function handleServer(message) {
       break;
     }
     case 'search':
-      renderSearchResults(message.query, message.messages);
+      search.renderResults(message.query, message.messages);
       break;
     case 'message':
       receiveMessage(message.msg);
@@ -415,13 +423,7 @@ function returnToGate(reason) {
   online = [];
   attachments.releaseUrls();
   logEl.replaceChildren();
-  clearTimeout(searchTimer);
-  searchQuery = '';
-  pendingJump = null;
-  searchInput.value = '';
-  searchResults.replaceChildren();
-  searchNote.textContent = SEARCH_HINT;
-  setSearchPanel(false);
+  search.reset();
   stopDrop();
   setDropPanel(false);
   closeSidebar();
@@ -533,88 +535,6 @@ function openConversation(kind, id) {
   updateCallButton();
   closeSidebar();
   textInput.focus();
-}
-
-function setSearchPanel(open) {
-  searchPanel.hidden = !open;
-  searchBtn.classList.toggle('active', open);
-  if (open) searchInput.focus();
-}
-
-function runSearch() {
-  const query = searchInput.value.trim();
-  searchQuery = query;
-  if (!query) {
-    searchResults.replaceChildren();
-    searchNote.textContent = SEARCH_HINT;
-    return;
-  }
-  searchNote.textContent = 'Ищем…';
-  wsSend({ type: 'search', query });
-}
-
-// Ответы могут прийти не в том порядке, в каком набирали: показываем только
-// тот, что отвечает нынешнему запросу.
-function renderSearchResults(query, messages) {
-  if (query !== searchQuery) return;
-  searchResults.replaceChildren();
-
-  if (messages.length === 0) {
-    searchNote.textContent = 'Ничего не нашлось.';
-    return;
-  }
-  searchNote.textContent = `Нашлось: ${messages.length}`;
-
-  for (const msg of messages) {
-    const target = targetOf(msg);
-    const li = document.createElement('li');
-    li.className = 'search-hit';
-
-    const head = document.createElement('div');
-    head.className = 'search-hit-head';
-    const where = document.createElement('span');
-    where.className = 'search-hit-where';
-    where.textContent = target.kind === 'channel' ? `# ${target.id}` : `@ ${target.id}`;
-    const when = document.createElement('span');
-    when.className = 'search-hit-when';
-    when.textContent = timeLabel(msg.ts);
-    head.append(where, when);
-
-    const body = document.createElement('div');
-    body.className = 'search-hit-body';
-    body.textContent = `${msg.from}: ${msg.text}`;
-
-    li.append(head, body);
-    li.addEventListener('click', () => {
-      pendingJump = { key: keyOf(target.kind, target.id), id: msg.id };
-      openConversation(target.kind, target.id);
-      if (isNarrow()) setSearchPanel(false);
-    });
-    searchResults.append(li);
-  }
-}
-
-function targetOf(msg) {
-  if (msg.channel) return { kind: 'channel', id: msg.channel };
-  const other = msg.from.toLowerCase() === myNick.toLowerCase() ? msg.to : msg.from;
-  return { kind: 'dm', id: other };
-}
-
-// Найденное может оказаться старше загруженного куска истории — тогда честнее
-// сказать об этом, чем молча открыть разговор и ничего не подсветить.
-function flushJump() {
-  if (!pendingJump || pendingJump.key !== activeKey()) return;
-  if (logEl.querySelector(`[data-id="${pendingJump.id}"]`)) {
-    scrollToMessage(pendingJump.id);
-    pendingJump = null;
-    return;
-  }
-  // loaded означает «история запрошена», а не «пришла»: сдаваться можно только
-  // после ответа сервера, иначе отказ вынесен до того, как смотреть было куда.
-  if (historyReady.has(pendingJump.key)) {
-    pendingJump = null;
-    searchNote.textContent = 'Разговор открыт, но сообщение старше загруженной истории.';
-  }
 }
 
 function requestHistory(target) {
@@ -1045,7 +965,7 @@ function renderLog() {
   missedBelow = 0;
   scrollToBottom();
   applyMotionState();
-  flushJump();
+  search.flushJump();
 }
 
 function receiveTyping(message) {
@@ -1498,29 +1418,26 @@ dropBtn.addEventListener('click', () => {
 });
 
 searchBtn.addEventListener('click', () => {
-  const open = searchPanel.hidden;
+  const open = !search.isOpen();
   if (open && isNarrow()) {
     closeSidebar();
     setDropPanel(false);
     membersPanel.hidden = true;
     membersBtn.classList.remove('active');
   }
-  setSearchPanel(open);
+  search.setPanel(open);
 });
 
-searchInput.addEventListener('input', () => {
-  clearTimeout(searchTimer);
-  searchTimer = setTimeout(runSearch, 250);
-});
+searchInput.addEventListener('input', () => search.schedule());
 
-searchCloseBtn.addEventListener('click', () => setSearchPanel(false));
+searchCloseBtn.addEventListener('click', () => search.setPanel(false));
 dropCloseBtn.addEventListener('click', () => setDropPanel(false));
 sidebarCloseBtn.addEventListener('click', closeSidebar);
 
 document.addEventListener('keydown', (event) => {
   if (event.key !== 'Escape') return;
   if (sidebar.classList.contains('open')) closeSidebar();
-  else if (!searchPanel.hidden) setSearchPanel(false);
+  else if (search.isOpen()) search.setPanel(false);
   else if (!dropPanel.hidden) setDropPanel(false);
 });
 
@@ -1580,7 +1497,7 @@ function initUI() {
   dropCloseBtn.appendChild(icon('cross', 16));
   searchBtn.appendChild(icon('search', 18));
   searchCloseBtn.appendChild(icon('cross', 16));
-  searchNote.textContent = SEARCH_HINT;
+  searchNote.textContent = search.hint;
   setButton(voiceLeaveBtn, 'cross');
   setButton(callBtn, 'phone', 'Позвонить');
   setButton(callAccept, 'phone', 'Принять');
