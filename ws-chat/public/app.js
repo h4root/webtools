@@ -5,81 +5,84 @@ import { mountSettings, settings } from './settings.js';
 import { mountLanDrop } from '/drop-client/lan-drop.js';
 import autoAnimate from './vendor/auto-animate.mjs';
 
-const gate = document.getElementById('gate');
-const nickForm = document.getElementById('nick-form');
-const nickInput = document.getElementById('nick-input');
-const gateError = document.getElementById('gate-error');
-const gateHint = document.getElementById('gate-hint');
-const gateInsecure = document.getElementById('gate-insecure');
-const gateSubmit = document.getElementById('gate-submit');
-const gateMain = document.getElementById('gate-main');
-const gateTabs = document.getElementById('gate-tabs');
-const linkBackBtn = document.getElementById('link-back');
-const passwordInput = document.getElementById('password-input');
-const modeGuestBtn = document.getElementById('mode-guest');
-const modeLoginBtn = document.getElementById('mode-login');
-const modeRegisterBtn = document.getElementById('mode-register');
-const logoutBtn = document.getElementById('logout-btn');
-const appEl = document.getElementById('app');
-const meEl = document.getElementById('me');
-const channelListEl = document.getElementById('channel-list');
-const dmListEl = document.getElementById('dm-list');
-const channelAddBtn = document.getElementById('channel-add');
-const chatTitle = document.getElementById('chat-title');
-const logEl = document.getElementById('log');
-const typingEl = document.getElementById('typing');
-const composer = document.getElementById('composer');
-const textInput = document.getElementById('text-input');
-const replyBar = document.getElementById('reply-bar');
-const attachTray = document.getElementById('attach-tray');
-const attachBtn = document.getElementById('attach-btn');
-const fileInput = document.getElementById('file-input');
-const menuBtn = document.getElementById('menu-btn');
-const sidebar = document.getElementById('sidebar');
-const backdrop = document.getElementById('backdrop');
-const membersBtn = document.getElementById('members-btn');
-const membersPanel = document.getElementById('members');
-const membersListEl = document.getElementById('members-list');
-const voiceListEl = document.getElementById('voice-list');
-const voiceAddBtn = document.getElementById('voice-add');
-const voiceStatus = document.getElementById('voice-status');
-const voiceConn = document.getElementById('voice-conn');
-const voiceMuteBtn = document.getElementById('voice-mute');
-const voiceDeafenBtn = document.getElementById('voice-deafen');
-const voiceLeaveBtn = document.getElementById('voice-leave');
-const callBtn = document.getElementById('call-btn');
-const callIncoming = document.getElementById('call-incoming');
-const callIncomingText = document.getElementById('call-incoming-text');
-const callAccept = document.getElementById('call-accept');
-const callDecline = document.getElementById('call-decline');
-const callPanel = document.getElementById('call-panel');
-const peerName = document.getElementById('peer-name');
-const partyMe = document.getElementById('party-me');
-const partyPeer = document.getElementById('party-peer');
-const callStatus = document.getElementById('call-status');
-const callStats = document.getElementById('call-stats');
-const callMute = document.getElementById('call-mute');
-const callHangup = document.getElementById('call-hangup');
-const callGrip = document.getElementById('call-grip');
-const sendBtn = document.getElementById('send-btn');
-const settingsEl = document.getElementById('settings');
-const connBanner = document.getElementById('conn-banner');
-const jumpNewBtn = document.getElementById('jump-new');
-const searchBtn = document.getElementById('search-btn');
-const searchPanel = document.getElementById('search-panel');
-const searchInput = document.getElementById('search-input');
-const searchCloseBtn = document.getElementById('search-close');
-const searchNote = document.getElementById('search-note');
-const searchResults = document.getElementById('search-results');
-const dropBtn = document.getElementById('drop-btn');
-const dropPanel = document.getElementById('drop-panel');
-const dropMount = document.getElementById('drop-mount');
-const dropCloseBtn = document.getElementById('drop-close');
-const sidebarCloseBtn = document.getElementById('sidebar-close');
-const modeLinkBtn = document.getElementById('mode-link');
-const linkBox = document.getElementById('link-box');
-const linkCodeEl = document.getElementById('link-code');
-const linkExpiryEl = document.getElementById('link-expiry');
+import {
+  gate,
+  nickForm,
+  nickInput,
+  gateError,
+  gateHint,
+  gateInsecure,
+  gateSubmit,
+  gateMain,
+  gateTabs,
+  linkBackBtn,
+  passwordInput,
+  modeGuestBtn,
+  modeLoginBtn,
+  modeRegisterBtn,
+  logoutBtn,
+  appEl,
+  meEl,
+  channelListEl,
+  dmListEl,
+  channelAddBtn,
+  chatTitle,
+  logEl,
+  typingEl,
+  composer,
+  textInput,
+  replyBar,
+  attachTray,
+  attachBtn,
+  fileInput,
+  menuBtn,
+  sidebar,
+  backdrop,
+  membersBtn,
+  membersPanel,
+  membersListEl,
+  voiceListEl,
+  voiceAddBtn,
+  voiceStatus,
+  voiceConn,
+  voiceMuteBtn,
+  voiceDeafenBtn,
+  voiceLeaveBtn,
+  callBtn,
+  callIncoming,
+  callIncomingText,
+  callAccept,
+  callDecline,
+  callPanel,
+  peerName,
+  partyMe,
+  partyPeer,
+  callStatus,
+  callStats,
+  callMute,
+  callHangup,
+  callGrip,
+  sendBtn,
+  settingsEl,
+  connBanner,
+  jumpNewBtn,
+  searchBtn,
+  searchPanel,
+  searchInput,
+  searchCloseBtn,
+  searchNote,
+  searchResults,
+  dropBtn,
+  dropPanel,
+  dropMount,
+  dropCloseBtn,
+  sidebarCloseBtn,
+  modeLinkBtn,
+  linkBox,
+  linkCodeEl,
+  linkExpiryEl,
+} from './dom.js';
+import { isNarrow, timeLabel, formatSize, formatStats, deviceLabel, secureContext } from './format.js';
 
 const RECONNECT_MS = 2000;
 const RECONNECT_MAX_MS = 15000;
@@ -756,10 +759,6 @@ function applyMotionState() {
   else logAnimation.disable();
 }
 
-function timeLabel(ts) {
-  return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-}
-
 function renderText(parent, text) {
   let mentionsMe = false;
   const parts = text.split(/(@[\p{L}\p{N}_.-]+)/gu);
@@ -1168,18 +1167,6 @@ function renderStats(stats) {
   callStats.append(dot, text);
 }
 
-function formatStats(s) {
-  const parts = [];
-  if (s.rttMs != null) parts.push(`${s.rttMs} мс`);
-  if (s.protocol) parts.push(s.protocol);
-  if (s.localType && s.remoteType) parts.push(`${s.localType}↔${s.remoteType}`);
-  if (s.codec) parts.push(s.codec);
-  if (s.lossPct != null) parts.push(`потери ${s.lossPct}%`);
-  if (s.jitterMs != null) parts.push(`джиттер ${s.jitterMs} мс`);
-  if (s.kbps != null) parts.push(`${s.kbps} кбит/с`);
-  return parts.join(' · ');
-}
-
 function setMeter(party, level, speaking) {
   party.querySelector('.meter > i').style.width = `${Math.min(100, Math.round(level * 140))}%`;
   party.querySelector('.ring').classList.toggle('speaking', speaking);
@@ -1188,12 +1175,6 @@ function setMeter(party, level, speaking) {
 function renderLevels(levels) {
   setMeter(partyMe, levels.local, levels.localSpeaking);
   setMeter(partyPeer, levels.remote, levels.remoteSpeaking);
-}
-
-const NARROW = 720;
-
-function isNarrow() {
-  return window.innerWidth <= NARROW;
 }
 
 function openSidebar() {
@@ -1250,12 +1231,6 @@ function renderReplyBar() {
   cancel.appendChild(icon('cross', 14));
   cancel.addEventListener('click', cancelReply);
   replyBar.append(label, cancel);
-}
-
-function formatSize(bytes) {
-  if (bytes < 1024) return `${bytes} Б`;
-  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} КБ`;
-  return `${(bytes / 1024 / 1024).toFixed(1)} МБ`;
 }
 
 const INLINE_MIME = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/avif', 'image/bmp']);
@@ -1462,10 +1437,6 @@ function setGateBusy(busy) {
   for (const tab of gateTabs.children) tab.disabled = busy;
 }
 
-function secureContext() {
-  return location.protocol === 'https:' || ['localhost', '127.0.0.1', '::1'].includes(location.hostname);
-}
-
 // Плашка уровня страницы, а не поля: иначе она то появлялась бы, то исчезала
 // при переключении вкладок и дёргала высоту формы.
 function warnIfInsecure() {
@@ -1599,17 +1570,6 @@ membersBtn.addEventListener('click', () => {
 });
 
 let drop = null;
-
-function deviceLabel() {
-  const ua = navigator.userAgent;
-  if (/iPhone/.test(ua)) return 'iPhone';
-  if (/iPad/.test(ua)) return 'iPad';
-  if (/Android/.test(ua)) return 'Android';
-  if (/Macintosh/.test(ua)) return 'Mac';
-  if (/Windows/.test(ua)) return 'Windows';
-  if (/Linux/.test(ua)) return 'Linux';
-  return '';
-}
 
 // Соединение живёт всё время, пока ты в чате. Иначе файл можно прислать
 // только в ту минуту, когда панель открыта, — то есть практически никогда.
