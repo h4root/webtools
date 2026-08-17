@@ -82,6 +82,7 @@ import {
   linkCodeEl,
   linkExpiryEl,
 } from './dom.js';
+import { createAttachments } from './attachments.js';
 import { isNarrow, timeLabel, formatSize, formatStats, deviceLabel, secureContext } from './format.js';
 
 const RECONNECT_MS = 2000;
@@ -114,7 +115,6 @@ let voicePresence = {};
 let callPhase = 'idle';
 let lastTypingSent = 0;
 let replyingTo = null;
-let pendingAttachments = [];
 let ws = null;
 let reconnectTimer = null;
 let reconnectDelay = RECONNECT_MS;
@@ -188,6 +188,11 @@ const call = createCall({
   send: wsSend,
   onState: renderCall,
   onLevels: renderLevels,
+  onError: (reason) => systemLine(reason),
+});
+
+const attachments = createAttachments({
+  getToken: () => authToken,
   onError: (reason) => systemLine(reason),
 });
 
@@ -408,7 +413,7 @@ function returnToGate(reason) {
   renderDocumentTitle();
   dmPartners = [];
   online = [];
-  releaseBlobUrls();
+  attachments.releaseUrls();
   logEl.replaceChildren();
   clearTimeout(searchTimer);
   searchQuery = '';
@@ -815,7 +820,7 @@ function fillRow(row, msg) {
     row.appendChild(text);
   }
 
-  if (msg.attachments?.length) row.appendChild(renderAttachments(msg.attachments));
+  if (msg.attachments?.length) row.appendChild(attachments.render(msg.attachments));
 
   const meta = document.createElement('span');
   meta.className = 'meta';
@@ -1233,131 +1238,6 @@ function renderReplyBar() {
   replyBar.append(label, cancel);
 }
 
-const INLINE_MIME = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/avif', 'image/bmp']);
-
-const blobUrls = new Map();
-
-function attachmentUrl(att) {
-  if (!blobUrls.has(att.url)) {
-    blobUrls.set(
-      att.url,
-      fetch(att.url, { headers: { Authorization: `Bearer ${authToken}` } })
-        .then((res) => (res.ok ? res.blob() : Promise.reject(new Error(String(res.status)))))
-        .then((data) => URL.createObjectURL(new Blob([data], { type: INLINE_MIME.has(att.mime) ? att.mime : 'application/octet-stream' })))
-        .catch((error) => {
-          blobUrls.delete(att.url);
-          throw error;
-        }),
-    );
-  }
-  return blobUrls.get(att.url);
-}
-
-function releaseBlobUrls() {
-  for (const pending of blobUrls.values()) {
-    pending.then(URL.revokeObjectURL, () => {});
-  }
-  blobUrls.clear();
-}
-
-function renderAttachments(attachments) {
-  const box = document.createElement('div');
-  box.className = 'attachments';
-  for (const att of attachments) {
-    if (INLINE_MIME.has(att.mime)) {
-      const link = document.createElement('a');
-      link.target = '_blank';
-      link.rel = 'noopener';
-      link.className = 'att-image';
-      const img = document.createElement('img');
-      img.alt = att.name;
-      img.loading = 'lazy';
-      attachmentUrl(att).then(
-        (url) => {
-          img.src = url;
-          link.href = url;
-        },
-        () => {
-          link.replaceChildren(document.createTextNode(`Не удалось загрузить ${att.name}`));
-          link.classList.add('att-failed');
-        },
-      );
-      link.appendChild(img);
-      box.appendChild(link);
-    } else {
-      const link = document.createElement('a');
-      link.download = att.name;
-      link.className = 'att-file';
-      attachmentUrl(att).then(
-        (url) => {
-          link.href = url;
-        },
-        () => link.classList.add('att-failed'),
-      );
-      link.appendChild(icon('file', 18));
-      const info = document.createElement('span');
-      info.className = 'att-info';
-      const nm = document.createElement('span');
-      nm.className = 'att-name';
-      nm.textContent = att.name;
-      const sz = document.createElement('span');
-      sz.className = 'att-size';
-      sz.textContent = formatSize(att.size);
-      info.append(nm, sz);
-      link.appendChild(info);
-      box.appendChild(link);
-    }
-  }
-  return box;
-}
-
-async function uploadFile(file) {
-  const res = await fetch('/upload', {
-    method: 'POST',
-    headers: {
-      'Content-Type': file.type || 'application/octet-stream',
-      'X-Filename': encodeURIComponent(file.name),
-      Authorization: `Bearer ${authToken}`,
-    },
-    body: file,
-  });
-  if (!res.ok) throw new Error(res.status === 429 ? 'слишком много загрузок подряд' : `ошибка ${res.status}`);
-  return res.json();
-}
-
-async function addFiles(files) {
-  for (const file of files) {
-    if (pendingAttachments.length >= 10) break;
-    try {
-      pendingAttachments.push(await uploadFile(file));
-      renderAttachTray();
-    } catch (error) {
-      systemLine(`Не удалось загрузить ${file.name}: ${error.message}`);
-    }
-  }
-}
-
-function removeAttachment(id) {
-  pendingAttachments = pendingAttachments.filter((a) => a.id !== id);
-  renderAttachTray();
-}
-
-function renderAttachTray() {
-  attachTray.replaceChildren();
-  for (const att of pendingAttachments) {
-    const chip = document.createElement('span');
-    chip.className = 'attach-chip';
-    const nm = document.createElement('span');
-    nm.className = 'ac-name';
-    nm.textContent = att.name;
-    const rm = document.createElement('button');
-    rm.type = 'button';
-    rm.appendChild(icon('cross', 12));
-    rm.addEventListener('click', () => removeAttachment(att.id));
-    chip.append(nm, rm);
-    attachTray.appendChild(chip);
-  }
-}
 
 const GATE_MODES = {
   guest: {
@@ -1506,24 +1386,24 @@ logoutBtn.addEventListener('click', () => {
 composer.addEventListener('submit', (event) => {
   event.preventDefault();
   const text = textInput.value.trim();
-  if (!text && pendingAttachments.length === 0) return;
+  const files = attachments.pending();
+  if (!text && files.length === 0) return;
   const base = active.kind === 'channel' ? { channel: active.id } : { to: active.id };
   wsSend({
     type: 'message',
     ...base,
     text,
     replyTo: replyingTo?.id,
-    attachments: pendingAttachments.length ? pendingAttachments : undefined,
+    attachments: files.length ? files : undefined,
   });
   textInput.value = '';
-  pendingAttachments = [];
-  renderAttachTray();
+  attachments.clear();
   cancelReply();
 });
 
 attachBtn.addEventListener('click', () => fileInput.click());
 fileInput.addEventListener('change', () => {
-  addFiles([...fileInput.files]);
+  attachments.add([...fileInput.files]);
   fileInput.value = '';
 });
 textInput.addEventListener('keydown', (event) => {
