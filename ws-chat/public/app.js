@@ -294,7 +294,7 @@ function handleServer(message) {
       call.handlePresence(message.users);
       break;
     case 'dms':
-      dmPartners = message.list.map((d) => d.nick);
+      dmPartners = message.list.map((d) => ({ nick: d.nick, ts: d.ts }));
       renderChannels();
       break;
     case 'history': {
@@ -443,7 +443,7 @@ function forgetUser(nick) {
     }
     conversations.set(key, left);
   }
-  dmPartners = dmPartners.filter((n) => n.toLowerCase() !== lower);
+  dmPartners = dmPartners.filter((p) => p.nick.toLowerCase() !== lower);
   if (active.kind === 'dm' && active.id.toLowerCase() === lower) openConversation('channel', channels[0] ?? 'general');
   else renderLog();
   renderChannels();
@@ -470,7 +470,7 @@ function receiveMessage(msg) {
   const key = messageKey(msg);
   convOf(key).push(msg);
   clearTyping(key, msg.from);
-  if (msg.to !== undefined) rememberPartner(msg.from === myNick ? msg.to : msg.from);
+  if (msg.to !== undefined) rememberPartner(msg.from === myNick ? msg.to : msg.from, msg.ts);
   if (key === activeKey()) {
     appendRow(msg);
     renderTyping();
@@ -480,10 +480,12 @@ function receiveMessage(msg) {
   renderChannels();
 }
 
-function rememberPartner(nick) {
+function rememberPartner(nick, ts) {
   if (!nick || nick === myNick) return;
   const lower = nick.toLowerCase();
-  if (!dmPartners.some((n) => n.toLowerCase() === lower)) dmPartners.unshift(nick);
+  const known = dmPartners.find((p) => p.nick.toLowerCase() === lower);
+  if (known) known.ts = Math.max(known.ts, ts);
+  else dmPartners.push({ nick, ts });
 }
 
 function systemLine(text) {
@@ -569,13 +571,18 @@ function isOnline(nick) {
   return nick === myNick || online.some((n) => n.toLowerCase() === lower);
 }
 
+// Свежие переписки сверху, как в мессенджерах. Ниже — те, кому ещё не писали:
+// они попадают в список просто потому, что сейчас в сети, и двигать их нечему.
 function dmList() {
   const seen = new Map();
-  for (const nick of [...online, ...dmPartners]) {
-    if (nick !== myNick) seen.set(nick.toLowerCase(), nick);
-  }
+  for (const nick of online) if (nick !== myNick) seen.set(nick.toLowerCase(), nick);
+  for (const partner of dmPartners) if (partner.nick !== myNick) seen.set(partner.nick.toLowerCase(), partner.nick);
   if (active.kind === 'dm' && !seen.has(active.id.toLowerCase())) seen.set(active.id.toLowerCase(), active.id);
-  return [...seen.values()].sort((a, b) => Number(isOnline(b)) - Number(isOnline(a)) || a.localeCompare(b));
+
+  return [...seen.entries()]
+    .map(([lower, nick]) => ({ nick, ts: dmPartners.find((p) => p.nick.toLowerCase() === lower)?.ts ?? 0 }))
+    .sort((a, b) => b.ts - a.ts || Number(isOnline(b.nick)) - Number(isOnline(a.nick)) || a.nick.localeCompare(b.nick))
+    .map((entry) => entry.nick);
 }
 
 function navItem(kind, id, label, offline = false) {
@@ -591,9 +598,11 @@ function navItem(kind, id, label, offline = false) {
 
   const count = unread.get(key) ?? 0;
   if (count > 0 && !isActive) {
+    item.classList.add('unread');
     const badge = document.createElement('span');
     badge.className = 'badge';
-    badge.textContent = String(count);
+    // Четырёхзначный счётчик растянул бы строку и вытеснил имя канала.
+    badge.textContent = count > 99 ? '99+' : String(count);
     item.appendChild(badge);
   }
 
