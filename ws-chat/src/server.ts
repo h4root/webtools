@@ -10,6 +10,8 @@ import { Hub, type Client } from './chat.ts';
 import { Store } from './store.ts';
 import { BlobStore, loadKey } from './blobs.ts';
 import { Auth } from './auth.ts';
+import { networkInterfaces } from 'node:os';
+import { hostAddresses } from './tls.ts';
 import { deriveKey } from './sealed.ts';
 import { createClient } from './wsclient.ts';
 import { describeUpload, planDownload, UploadQuota } from './attachments.ts';
@@ -266,9 +268,16 @@ sweepAccounts();
 
 server.listen(PORT, HOST, () => {
   const scheme = useTls ? 'https' : 'http';
-  console.log(`chat server on ${scheme}://${HOST}:${PORT}`);
+  console.log(`chat server on ${scheme}://localhost:${PORT}`);
+  // 0.0.0.0 в адресной строке не набрать: печатаем то, что реально открывать
+  // с телефона.
+  for (const address of hostAddresses(networkInterfaces())) {
+    const host = address.includes(':') ? `[${address}]` : address;
+    console.log(`  в сети: ${scheme}://${host}:${PORT}`);
+  }
   if (!useTls) {
-    console.log('HTTP: микрофон/камера будут работать только на localhost. Для доступа с других устройств задай TLS_KEY и TLS_CERT (HTTPS).');
+    console.log('HTTP: микрофон, камера и звонки работают только на localhost.');
+    console.log('Для доступа с других устройств: npm run cert, затем TLS_KEY и TLS_CERT в .env.');
   }
 });
 

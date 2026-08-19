@@ -8,7 +8,8 @@
     "dev": "tsx watch src/server.ts",
     "start": "tsx src/server.ts",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "cert": "tsx scripts/make-cert.ts"
   },
   "dependencies": {
     "dotenv": "^16.4.7",
