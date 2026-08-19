@@ -40,6 +40,11 @@ export const SIGNALS_PER_WINDOW = 400;
 
 const SIGNAL_TYPES = new Set(['voice-signal', 'call-signal', 'call-invite', 'call-accept', 'call-decline', 'call-end']);
 
+interface VoiceState {
+  channel: string;
+  muted: boolean;
+}
+
 interface RateEntry {
   windowStartedAt: number;
   actions: number;
@@ -53,7 +58,7 @@ function isValidNick(nick: string): boolean {
 
 export class Hub {
   private readonly clients = new Set<Client>();
-  private readonly voiceOf = new Map<Client, string>();
+  private readonly voiceOf = new Map<Client, VoiceState>();
   private readonly rate = new Map<string, RateEntry>();
   private readonly ringing = new Map<Client, Set<Client>>();
   private readonly invitedBy = new Map<Client, Client>();
@@ -379,6 +384,9 @@ export class Hub {
       case 'voice-leave':
         this.voiceLeave(client);
         break;
+      case 'voice-mute':
+        this.voiceMute(client, message.muted);
+        break;
       case 'voice-signal':
         this.voiceSignal(client, message.to, message.data);
         break;
@@ -423,8 +431,8 @@ export class Hub {
       client.send({ type: 'error', reason: 'Канал не удалить' });
       return;
     }
-    for (const [peer, channel] of [...this.voiceOf]) {
-      if (channel === name) this.voiceOf.delete(peer);
+    for (const [peer, state] of [...this.voiceOf]) {
+      if (state.channel === name) this.voiceOf.delete(peer);
     }
     this.broadcast({ type: 'voice-channels', list: this.store.listVoiceChannels() });
     this.broadcastVoicePresence();
@@ -613,7 +621,7 @@ export class Hub {
       client.send({ type: 'error', reason: 'Нет такого голосового канала' });
       return;
     }
-    if (this.voiceOf.get(client) === channel) return;
+    if (this.voiceOf.get(client)?.channel === channel) return;
 
     // Голос одноустройственный: два микрофона одного человека в канале дают
     // эхо, а сигналинг адресуется по нику и не смог бы выбрать между ними.
@@ -624,11 +632,13 @@ export class Hub {
     }
 
     const present = [...this.voiceOf]
-      .filter(([c, ch]) => ch === channel && c !== client && c.nick)
-      .map(([c]) => c.nick!)
-      .sort((a, b) => a.localeCompare(b));
+      .filter(([c, state]) => state.channel === channel && c !== client && c.nick)
+      .map(([c, state]) => ({ nick: c.nick!, muted: state.muted }))
+      .sort((a, b) => a.nick.localeCompare(b.nick));
 
-    this.voiceOf.set(client, channel);
+    // Входим всегда с живым микрофоном: мут — состояние устройства, а не
+    // аккаунта, и наследовать его от прежнего входа неоткуда.
+    this.voiceOf.set(client, { channel, muted: false });
     client.send({ type: 'voice-roster', channel, users: present });
     this.broadcastVoicePresence();
   }
@@ -637,11 +647,24 @@ export class Hub {
     if (this.voiceOf.delete(client)) this.broadcastVoicePresence();
   }
 
+  // Себе не отвечаем: у клиента своё состояние микрофона первично, и эхо от
+  // сервера только спорило бы с ним.
+  private voiceMute(client: Client, muted: boolean): void {
+    const state = this.voiceOf.get(client);
+    if (!state || state.muted === muted) return;
+    state.muted = muted;
+    for (const [peer, peerState] of this.voiceOf) {
+      if (peer !== client && peerState.channel === state.channel) {
+        peer.send({ type: 'voice-mute', nick: client.nick!, muted });
+      }
+    }
+  }
+
   private voiceSignal(client: Client, toNick: string, data: unknown): void {
-    const channel = this.voiceOf.get(client);
+    const channel = this.voiceOf.get(client)?.channel;
     if (!channel) return;
     const lower = toNick.toLowerCase();
-    const target = [...this.voiceOf].find(([c, ch]) => ch === channel && c.nick?.toLowerCase() === lower)?.[0];
+    const target = [...this.voiceOf].find(([c, state]) => state.channel === channel && c.nick?.toLowerCase() === lower)?.[0];
     target?.send({ type: 'voice-signal', from: client.nick!, data });
   }
 
@@ -666,12 +689,12 @@ export class Hub {
     const map: Record<string, string[]> = {};
     for (const name of this.store.listVoiceChannels()) map[name] = [];
     const seen = new Set<string>();
-    for (const [client, channel] of this.voiceOf) {
-      if (!client.nick || !map[channel]) continue;
-      const key = `${channel}:${client.nick.toLowerCase()}`;
+    for (const [client, state] of this.voiceOf) {
+      if (!client.nick || !map[state.channel]) continue;
+      const key = `${state.channel}:${client.nick.toLowerCase()}`;
       if (seen.has(key)) continue;
       seen.add(key);
-      map[channel].push(client.nick);
+      map[state.channel].push(client.nick);
     }
     for (const name of Object.keys(map)) map[name].sort((a, b) => a.localeCompare(b));
     return map;

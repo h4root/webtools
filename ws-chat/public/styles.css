@@ -1522,6 +1522,21 @@ html.motion-off *::after {
   white-space: nowrap;
 }
 
+.voice-members li > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Зелёная точка значит «слышно». У молчащего она гаснет, а рядом встаёт
+   перечёркнутый микрофон. */
+.voice-members li.muted::before {
+  background: var(--dim);
+}
+
+.voice-members li.muted {
+  opacity: 0.75;
+}
+
 .voice-members li::before {
   content: '';
   width: 6px;

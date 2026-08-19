@@ -363,6 +363,10 @@ function handleServer(message) {
     case 'voice-roster':
       voice.handleRoster(message.channel, message.users);
       break;
+    case 'voice-mute':
+      voice.handleMute(message.nick, message.muted);
+      renderVoiceChannels();
+      break;
     case 'voice-left':
       voice.reset();
       systemLine(message.reason);
@@ -1017,7 +1021,7 @@ function renderVoice(state) {
     const label = document.createElement('span');
     label.textContent = state.channel;
     voiceConn.appendChild(label);
-    setButton(voiceMuteBtn, state.muted ? 'sound-off' : 'microphone');
+    setButton(voiceMuteBtn, state.muted ? 'mic-off' : 'microphone');
     voiceMuteBtn.classList.toggle('muted', state.muted);
     setButton(voiceDeafenBtn, state.deafened ? 'sound-off' : 'sound-on');
     voiceDeafenBtn.classList.toggle('muted', state.deafened);
@@ -1050,7 +1054,16 @@ function renderVoiceChannels() {
       ul.className = 'voice-members';
       for (const nick of members) {
         const m = document.createElement('li');
-        m.textContent = nick === myNick ? `${nick} (вы)` : nick;
+        const label = document.createElement('span');
+        label.textContent = nick === myNick ? `${nick} (вы)` : nick;
+        m.appendChild(label);
+        // Про мут известно только по своему каналу: сервер рассылает его тем,
+        // кто рядом, и знать про соседние комнаты незачем.
+        if (name === voiceChannel && voice.isMuted(nick)) {
+          m.classList.add('muted');
+          m.title = 'Микрофон выключен';
+          m.appendChild(icon('mic-off', 13));
+        }
         ul.appendChild(m);
       }
       li.appendChild(ul);

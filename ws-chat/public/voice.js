@@ -6,6 +6,7 @@ const DROP_GRACE_MS = 8000;
 
 export function createVoice({ send, onState, onError, onSpeaking, getNick }) {
   const calls = new Map();
+  const mutedPeers = new Set();
   let localStream = null;
   let channel = null;
   let muted = false;
@@ -156,6 +157,7 @@ export function createVoice({ send, onState, onError, onSpeaking, getNick }) {
     localStream = stream;
     muted = false;
     deafened = false;
+    mutedPeers.clear();
     applyMic();
     localAnalyser = makeAnalyser(localStream);
     channel = target;
@@ -174,14 +176,22 @@ export function createVoice({ send, onState, onError, onSpeaking, getNick }) {
     channel = null;
     muted = false;
     deafened = false;
+    mutedPeers.clear();
     teardown();
     emit();
+  }
+
+  // Наружу уходит не сам мут, а то, слышно тебя или нет: заглушка выключает
+  // микрофон тоже, и для остальных это неотличимо.
+  function announceMic() {
+    send({ type: 'voice-mute', muted: muted || deafened });
   }
 
   function toggleMute() {
     if (!channel) return;
     muted = !muted;
     applyMic();
+    announceMic();
     emit();
   }
 
@@ -189,14 +199,27 @@ export function createVoice({ send, onState, onError, onSpeaking, getNick }) {
     if (!channel) return;
     deafened = !deafened;
     applyDeafen();
+    announceMic();
     emit();
   }
 
   async function handleRoster(rosterChannel, users) {
     if (rosterChannel !== channel) return;
-    for (const nick of users) {
+    for (const { nick, muted: peerMuted } of users) {
+      if (peerMuted) mutedPeers.add(nick.toLowerCase());
       if (!calls.has(nick)) await offerTo(nick);
     }
+  }
+
+  function handleMute(nick, peerMuted) {
+    const lower = nick.toLowerCase();
+    if (peerMuted) mutedPeers.add(lower);
+    else mutedPeers.delete(lower);
+  }
+
+  function isMuted(nick) {
+    if (nick.toLowerCase() === (getNick() ?? '').toLowerCase()) return muted || deafened;
+    return mutedPeers.has(nick.toLowerCase());
   }
 
   async function handleSignal(from, data) {
@@ -250,5 +273,5 @@ export function createVoice({ send, onState, onError, onSpeaking, getNick }) {
 
   settings.onChange(applyDeviceChange);
 
-  return { join, leave, reset, toggleMute, toggleDeafen, handleRoster, handleSignal, handlePresence };
+  return { join, leave, reset, toggleMute, toggleDeafen, handleRoster, handleMute, isMuted, handleSignal, handlePresence };
 }

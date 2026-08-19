@@ -50,6 +50,11 @@ export interface WireMessage {
 
 export type AuthMode = 'guest' | 'register' | 'login' | 'resume';
 
+export interface VoiceMember {
+  nick: string;
+  muted: boolean;
+}
+
 export interface SessionInfo {
   id: string;
   device: string;
@@ -79,6 +84,7 @@ export type ClientMessage =
   | { type: 'voice-channel-create'; name: string }
   | { type: 'voice-join'; channel: string }
   | { type: 'voice-leave' }
+  | { type: 'voice-mute'; muted: boolean }
   | { type: 'voice-signal'; to: string; data: unknown }
   | { type: 'call-invite'; to: string }
   | { type: 'call-accept'; to: string }
@@ -108,7 +114,8 @@ export type ServerMessage =
   | { type: 'system'; text: string }
   | { type: 'error'; reason: string }
   | { type: 'voice-channels'; list: string[] }
-  | { type: 'voice-roster'; channel: string; users: string[] }
+  | { type: 'voice-roster'; channel: string; users: VoiceMember[] }
+  | { type: 'voice-mute'; nick: string; muted: boolean }
   // Голос переехал на другое устройство этого же аккаунта: сверни свой WebRTC.
   | { type: 'voice-left'; reason: string }
   | { type: 'voice-presence'; channels: Record<string, string[]> }
@@ -240,6 +247,8 @@ export function parseClientMessage(raw: string): ClientMessage | null {
       return isValidChannelName(data.channel) ? { type: 'voice-join', channel: data.channel } : null;
     case 'voice-leave':
       return { type: 'voice-leave' };
+    case 'voice-mute':
+      return typeof data.muted === 'boolean' ? { type: 'voice-mute', muted: data.muted } : null;
     case 'voice-signal':
       if (!isBoundedString(data.to, NICK_MAX)) return null;
       if (data.data === undefined) return null;
