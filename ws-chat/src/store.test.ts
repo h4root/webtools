@@ -182,6 +182,83 @@ describe('Store', () => {
   });
 });
 
+describe('Store: отметки чтения', () => {
+  let store: Store;
+
+  beforeEach(() => {
+    store = new Store();
+  });
+
+  it('двигает отметку вперёд и не откатывает назад', () => {
+    const a = store.addChannelMessage('general', 'bob', 'раз');
+    const b = store.addChannelMessage('general', 'bob', 'два');
+
+    expect(store.markRead('alice', channelKey('general'), b.id)).toBe(true);
+    expect(store.markRead('alice', channelKey('general'), a.id)).toBe(false);
+    expect(store.readMark('alice', channelKey('general'))).toBe(b.id);
+  });
+
+  it('считает непрочитанным только чужое после отметки', () => {
+    const first = store.addChannelMessage('general', 'bob', 'до отметки');
+    store.markRead('alice', channelKey('general'), first.id);
+    store.addChannelMessage('general', 'bob', 'после');
+    store.addChannelMessage('general', 'alice', 'своё не считается');
+    store.addChannelMessage('general', 'carol', 'ещё чужое');
+
+    expect(store.unreadCount('alice', channelKey('general'))).toBe(2);
+  });
+
+  it('без отметки не считает ничего: истории чтения ещё нет', () => {
+    store.addChannelMessage('general', 'bob', 'старое');
+    expect(store.unreadCount('alice', channelKey('general'))).toBe(0);
+  });
+
+  it('не путает отметки разных людей и разных разговоров', () => {
+    const m = store.addChannelMessage('general', 'bob', 'общее');
+    store.markRead('alice', channelKey('general'), m.id);
+
+    expect(store.readMark('carol', channelKey('general'))).toBe(0);
+    expect(store.readMark('alice', channelKey('random'))).toBe(0);
+  });
+
+  it('регистр ника не заводит вторую отметку', () => {
+    const m = store.addChannelMessage('general', 'bob', 'привет');
+    store.markRead('Alice', channelKey('general'), m.id);
+    expect(store.readMark('alice', channelKey('general'))).toBe(m.id);
+  });
+
+  it('пустой разговор при первом заходе всё равно получает отметку', () => {
+    expect(store.hasMark('alice', channelKey('general'))).toBe(false);
+    store.ensureMark('alice', channelKey('general'), 0);
+    expect(store.hasMark('alice', channelKey('general'))).toBe(true);
+
+    store.addChannelMessage('general', 'bob', 'пришло позже');
+    expect(store.unreadCount('alice', channelKey('general'))).toBe(1);
+  });
+
+  it('ensureMark не перебивает уже поставленную отметку', () => {
+    const m = store.addChannelMessage('general', 'bob', 'раз');
+    store.markRead('alice', channelKey('general'), m.id);
+    store.ensureMark('alice', channelKey('general'), 0);
+    expect(store.readMark('alice', channelKey('general'))).toBe(m.id);
+  });
+
+  it('purgeUser уносит отметки ушедшего', () => {
+    const m = store.addChannelMessage('general', 'bob', 'общее');
+    store.markRead('гость', channelKey('general'), m.id);
+    store.purgeUser('гость');
+    expect(store.readMark('гость', channelKey('general'))).toBe(0);
+  });
+
+  it('удаление канала уносит отметки по нему', () => {
+    store.createChannel('dev');
+    const m = store.addChannelMessage('dev', 'bob', 'черновик');
+    store.markRead('alice', channelKey('dev'), m.id);
+    store.removeChannel('dev');
+    expect(store.readMark('alice', channelKey('dev'))).toBe(0);
+  });
+});
+
 describe('Store: поиск', () => {
   let store: Store;
 
@@ -241,6 +318,18 @@ describe('Store: персистентность', () => {
   afterEach(() => {
     vi.restoreAllMocks();
     rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('отметки чтения переживают перезапуск', () => {
+    const store = new Store(file);
+    const m = store.addChannelMessage('general', 'bob', 'до перезапуска');
+    store.markRead('alice', channelKey('general'), m.id);
+    store.addChannelMessage('general', 'bob', 'после отметки');
+    store.flush();
+
+    const loaded = new Store(file);
+    expect(loaded.readMark('alice', channelKey('general'))).toBe(m.id);
+    expect(loaded.unreadCount('alice', channelKey('general'))).toBe(1);
   });
 
   it('flush сохраняет то, что ещё висит в дебаунсе', () => {

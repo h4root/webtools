@@ -104,6 +104,7 @@ const conversations = new Map();
 const loaded = new Set();
 const historyReady = new Set();
 const unread = new Map();
+const readMarks = new Map();
 const typing = new Map();
 
 function keyOf(kind, id) {
@@ -308,6 +309,22 @@ function handleServer(message) {
     case 'search':
       search.renderResults(message.query, message.messages);
       break;
+    case 'reads':
+      for (const mark of message.list) {
+        const key = mark.channel ? `ch:${mark.channel}` : `dm:${mark.to.toLowerCase()}`;
+        readMarks.set(key, mark.id);
+        if (mark.unread) unread.set(key, mark.unread);
+      }
+      renderChannels();
+      break;
+    // Прочитано на другом устройстве этого же аккаунта.
+    case 'read': {
+      const key = message.channel ? `ch:${message.channel}` : `dm:${message.to.toLowerCase()}`;
+      readMarks.set(key, Math.max(readMarks.get(key) ?? 0, message.id));
+      unread.set(key, 0);
+      renderChannels();
+      break;
+    }
     case 'message':
       receiveMessage(message.msg);
       break;
@@ -412,6 +429,7 @@ function returnToGate(reason) {
   loaded.clear();
   historyReady.clear();
   unread.clear();
+  readMarks.clear();
   typing.clear();
   renderDocumentTitle();
   dmPartners = [];
@@ -944,6 +962,19 @@ function scrollToBottom() {
   logEl.scrollTop = logEl.scrollHeight;
   missedBelow = 0;
   renderJumpNew();
+  markActiveRead();
+}
+
+// Прочитанным считается то, что ты видел: разговор открыт и ты внизу. Отметка
+// только растёт, поэтому лишних сообщений на сервер не уходит.
+function markActiveRead() {
+  const key = activeKey();
+  const list = conversations.get(key);
+  const newest = list?.length ? list[list.length - 1].id : 0;
+  if (!newest || (readMarks.get(key) ?? 0) >= newest) return;
+  readMarks.set(key, newest);
+  unread.set(key, 0);
+  wsSend(active.kind === 'channel' ? { type: 'read', channel: active.id, id: newest } : { type: 'read', to: active.id, id: newest });
 }
 
 function renderJumpNew() {

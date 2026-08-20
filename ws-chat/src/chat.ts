@@ -1,4 +1,4 @@
-import { NICK_MAX, parseClientMessage, type AttachmentRef, type ClientMessage, type ServerMessage } from './protocol.ts';
+import { NICK_MAX, parseClientMessage, type AttachmentRef, type ClientMessage, type ReadMark, type ServerMessage } from './protocol.ts';
 import { Store, channelKey, dmKey, recipientsOf } from './store.ts';
 import { safeDevice, type Auth } from './auth.ts';
 import { LinkCodes } from './linkcodes.ts';
@@ -132,8 +132,47 @@ export class Hub {
     client.send({ type: 'dms', list: this.store.dmPartners(trimmed) });
     client.send({ type: 'voice-channels', list: this.store.listVoiceChannels() });
     client.send({ type: 'voice-presence', channels: this.voicePresenceMap() });
+    client.send({ type: 'reads', list: this.readMarks(trimmed) });
     if (firstDevice) this.broadcast({ type: 'system', text: `${trimmed} присоединился` });
     this.broadcastPresence();
+  }
+
+  // Отметки заводятся при первом заходе в разговор, а не задним числом: иначе
+  // весь старый хвост свалился бы как непрочитанное.
+  private readMarks(nick: string): ReadMark[] {
+    // Считаем один раз до обхода: первая же заведённая отметка сделала бы
+    // аккаунт «знакомым» для всех следующих разговоров.
+    const known = this.store.knownReader(nick);
+    const list: ReadMark[] = [];
+    for (const channel of this.store.listChannels()) {
+      const key = channelKey(channel);
+      list.push({ channel, ...this.markFor(nick, key, known) });
+    }
+    for (const partner of this.store.dmPartners(nick)) {
+      const key = dmKey(nick, partner.nick);
+      list.push({ to: partner.nick, ...this.markFor(nick, key, known) });
+    }
+    return list;
+  }
+
+  // Впервые вошедшему весь старый хвост непрочитанным не считаем: истории
+  // чтения у него нет. А вот разговор, заведённый пока знакомый аккаунт был
+  // офлайн, он и правда не читал — такой отсчитывается с нуля.
+  private markFor(nick: string, key: string, known: boolean): { id: number; unread: number } {
+    const baseline = known ? 0 : (this.store.history(key, 1)[0]?.id ?? 0);
+    this.store.ensureMark(nick, key, baseline);
+    return { id: this.store.readMark(nick, key), unread: this.store.unreadCount(nick, key) };
+  }
+
+  private markRead(client: Client, message: Extract<ClientMessage, { type: 'read' }>): void {
+    const key = message.channel ? channelKey(message.channel) : dmKey(client.nick!, message.to!);
+    if (!this.store.markRead(client.nick!, key, message.id)) return;
+    // Прочитал на телефоне — на ноутбуке счётчик тоже должен погаснуть.
+    const lower = client.nick!.toLowerCase();
+    for (const peer of this.clients) {
+      if (peer === client || peer.nick?.toLowerCase() !== lower) continue;
+      peer.send({ type: 'read', channel: message.channel, to: message.to, id: message.id });
+    }
   }
 
   private async changePassword(client: Client, message: Extract<ClientMessage, { type: 'change-password' }>): Promise<void> {
@@ -359,6 +398,9 @@ export class Hub {
         break;
       case 'history':
         this.sendHistory(client, message);
+        break;
+      case 'read':
+        this.markRead(client, message);
         break;
       case 'search':
         client.send({ type: 'search', query: message.query, messages: this.store.search(client.nick!, message.query) });

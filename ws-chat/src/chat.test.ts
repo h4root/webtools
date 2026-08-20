@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Hub, ACTIONS_PER_WINDOW, RATE_WINDOW_MS, type Client } from './chat.ts';
-import { Store, channelKey } from './store.ts';
+import { Store, channelKey, dmKey } from './store.ts';
 import { Auth } from './auth.ts';
 import type { ServerMessage } from './protocol.ts';
 
@@ -416,6 +416,96 @@ describe('Hub', () => {
     hub.handle(alice, JSON.stringify({ type: 'typing', to: 'bob' }));
 
     expect(carol.inbox.some((m) => m.type === 'typing')).toBe(false);
+  });
+
+  it('при входе отдаёт счётчики непрочитанного по отметкам', () => {
+    const first = makeClient('first');
+    hub.join(first, 'alice');
+    hub.leave(first);
+
+    store.addChannelMessage('general', 'bob', 'пока тебя не было раз');
+    store.addChannelMessage('general', 'bob', 'пока тебя не было два');
+
+    const again = makeClient('again');
+    hub.join(again, 'alice');
+
+    const reads = again.inbox.find((m) => m.type === 'reads');
+    const general = reads?.type === 'reads' && reads.list.find((r) => r.channel === 'general');
+    expect(general && general.unread).toBe(2);
+  });
+
+  it('на первом заходе непрочитанного нет: истории чтения ещё не было', () => {
+    store.addChannelMessage('general', 'bob', 'старое');
+    const a = makeClient('a');
+    hub.join(a, 'alice');
+
+    const reads = a.inbox.find((m) => m.type === 'reads');
+    const general = reads?.type === 'reads' && reads.list.find((r) => r.channel === 'general');
+    expect(general && general.unread).toBe(0);
+  });
+
+  it('разговор, заведённый пока тебя не было, приходит непрочитанным', () => {
+    const first = makeClient('first');
+    hub.join(first, 'alice');
+    hub.leave(first);
+
+    store.addDirectMessage('bob', 'alice', 'личное пока тебя не было');
+    store.createChannel('news');
+    store.addChannelMessage('news', 'bob', 'в новом канале');
+
+    const again = makeClient('again');
+    hub.join(again, 'alice');
+    const reads = again.inbox.find((m) => m.type === 'reads');
+    if (reads?.type !== 'reads') throw new Error('нет reads');
+
+    expect(reads.list.find((r) => r.to === 'bob')?.unread).toBe(1);
+    expect(reads.list.find((r) => r.channel === 'news')?.unread).toBe(1);
+  });
+
+  it('отметка с одного устройства гасит непрочитанное на другом', () => {
+    const laptop = makeClient('laptop');
+    const phone = makeClient('phone');
+    hub.join(laptop, 'alice');
+    hub.join(phone, 'alice');
+    const m = store.addChannelMessage('general', 'bob', 'прочитано на ноутбуке');
+
+    hub.handle(laptop, JSON.stringify({ type: 'read', channel: 'general', id: m.id }));
+
+    expect(phone.inbox.at(-1)).toEqual({ type: 'read', channel: 'general', id: m.id });
+    expect(laptop.inbox.some((x) => x.type === 'read')).toBe(false);
+  });
+
+  it('чужая отметка чтения не уходит посторонним', () => {
+    const alice = makeClient('alice');
+    const bob = makeClient('bob');
+    hub.join(alice, 'alice');
+    hub.join(bob, 'bob');
+    const m = store.addChannelMessage('general', 'bob', 'общее');
+
+    hub.handle(alice, JSON.stringify({ type: 'read', channel: 'general', id: m.id }));
+
+    expect(bob.inbox.some((x) => x.type === 'read')).toBe(false);
+  });
+
+  it('отметка чтения записывается на того, кто её прислал', () => {
+    const alice = makeClient('alice');
+    hub.join(alice, 'alice');
+    const m = store.addChannelMessage('general', 'bob', 'общее');
+
+    hub.handle(alice, JSON.stringify({ type: 'read', channel: 'general', id: m.id }));
+
+    expect(store.readMark('alice', channelKey('general'))).toBe(m.id);
+    expect(store.readMark('bob', channelKey('general'))).toBe(0);
+  });
+
+  it('отметку в личке ведёт по паре ников', () => {
+    const alice = makeClient('alice');
+    hub.join(alice, 'alice');
+    const m = store.addDirectMessage('bob', 'alice', 'личное');
+
+    hub.handle(alice, JSON.stringify({ type: 'read', to: 'bob', id: m.id }));
+
+    expect(store.readMark('alice', dmKey('alice', 'bob'))).toBe(m.id);
   });
 
   it('обновляет presence на вход и выход', () => {

@@ -50,6 +50,13 @@ export interface WireMessage {
 
 export type AuthMode = 'guest' | 'register' | 'login' | 'resume';
 
+export interface ReadMark {
+  channel?: string;
+  to?: string;
+  id: number;
+  unread: number;
+}
+
 export interface VoiceMember {
   nick: string;
   muted: boolean;
@@ -77,6 +84,7 @@ export type ClientMessage =
   | { type: 'message'; channel?: string; to?: string; text: string; replyTo?: number; attachments?: AttachmentRef[] }
   | { type: 'history'; channel?: string; to?: string }
   | { type: 'search'; query: string }
+  | { type: 'read'; channel?: string; to?: string; id: number }
   | { type: 'edit'; id: number; text: string }
   | { type: 'delete'; id: number }
   | { type: 'react'; id: number; emoji: string }
@@ -107,6 +115,8 @@ export type ServerMessage =
   | { type: 'message'; msg: WireMessage }
   | { type: 'history'; channel?: string; to?: string; messages: WireMessage[] }
   | { type: 'search'; query: string; messages: WireMessage[] }
+  | { type: 'reads'; list: ReadMark[] }
+  | { type: 'read'; channel?: string; to?: string; id: number }
   | { type: 'edited'; id: number; text: string }
   | { type: 'deleted'; id: number }
   | { type: 'reaction'; id: number; reactions: Reactions }
@@ -229,6 +239,11 @@ export function parseClientMessage(raw: string): ClientMessage | null {
     }
     case 'search':
       return isBoundedString(data.query, SEARCH_QUERY_MAX) ? { type: 'search', query: data.query.trim() } : null;
+    case 'read': {
+      const target = parseTarget(data);
+      if (!target || typeof data.id !== 'number' || !Number.isInteger(data.id) || data.id <= 0) return null;
+      return { type: 'read', ...target, id: data.id };
+    }
     case 'typing': {
       const target = parseTarget(data);
       return target ? { type: 'typing', ...target } : null;
