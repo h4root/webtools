@@ -1052,8 +1052,10 @@ function renderVoice(state) {
     const label = document.createElement('span');
     label.textContent = state.channel;
     voiceConn.appendChild(label);
-    setButton(voiceMuteBtn, state.muted ? 'mic-off' : 'microphone');
-    voiceMuteBtn.classList.toggle('muted', state.muted);
+    // Заглушка выключает и микрофон, поэтому кнопка не должна выглядеть живой.
+    const micOff = state.muted || state.deafened;
+    setButton(voiceMuteBtn, micOff ? 'mic-off' : 'microphone');
+    voiceMuteBtn.classList.toggle('muted', micOff);
     setButton(voiceDeafenBtn, state.deafened ? 'sound-off' : 'sound-on');
     voiceDeafenBtn.classList.toggle('muted', state.deafened);
   }
