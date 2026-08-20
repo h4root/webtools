@@ -506,13 +506,24 @@ export class Hub {
     this.dispatch(recipientsOf(message), { type: 'reaction', id, reactions: message.reactions ?? {} });
   }
 
+  // Адресуем аккаунт, а не сокет. Пока ник был равен одному соединению,
+  // сравнения сокетов хватало; с несколькими устройствами оно и своё же
+  // второе окно считало посторонним, и до чужих доходило только до первого.
   private relayTyping(client: Client, message: Extract<ClientMessage, { type: 'typing' }>): void {
+    const mine = client.nick!.toLowerCase();
     if (message.channel) {
-      for (const c of this.clients) {
-        if (c !== client) c.send({ type: 'typing', from: client.nick!, channel: message.channel });
+      for (const peer of this.clients) {
+        if (peer.nick?.toLowerCase() === mine) continue;
+        peer.send({ type: 'typing', from: client.nick!, channel: message.channel });
       }
-    } else {
-      this.findByNick(message.to!)?.send({ type: 'typing', from: client.nick!, to: client.nick! });
+      return;
+    }
+    // Сообщения доходят до всех устройств собеседника — индикатор должен вести
+    // себя так же, а не выбирать первое попавшееся.
+    const target = message.to!.toLowerCase();
+    for (const peer of this.clients) {
+      if (peer === client || peer.nick?.toLowerCase() !== target) continue;
+      peer.send({ type: 'typing', from: client.nick!, to: client.nick! });
     }
   }
 

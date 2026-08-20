@@ -376,6 +376,48 @@ describe('Hub', () => {
     expect(a.inbox.some((m) => m.type === 'typing')).toBe(false);
   });
 
+  it('не показывает «печатает» на своём же втором устройстве', () => {
+    const laptop = makeClient('laptop');
+    const phone = makeClient('phone');
+    const bob = makeClient('bob');
+    hub.join(laptop, 'alice');
+    hub.join(phone, 'alice');
+    hub.join(bob, 'bob');
+
+    hub.handle(laptop, JSON.stringify({ type: 'typing', channel: 'general' }));
+
+    expect(phone.inbox.some((m) => m.type === 'typing')).toBe(false);
+    expect(bob.inbox.at(-1)).toEqual({ type: 'typing', from: 'alice', channel: 'general' });
+  });
+
+  it('в личке показывает «печатает» на всех устройствах собеседника', () => {
+    const alice = makeClient('alice');
+    const laptop = makeClient('laptop');
+    const phone = makeClient('phone');
+    hub.join(alice, 'alice');
+    hub.join(laptop, 'bob');
+    hub.join(phone, 'bob');
+
+    hub.handle(alice, JSON.stringify({ type: 'typing', to: 'bob' }));
+
+    const expected = { type: 'typing', from: 'alice', to: 'alice' };
+    expect(laptop.inbox.at(-1)).toEqual(expected);
+    expect(phone.inbox.at(-1)).toEqual(expected);
+  });
+
+  it('в личке «печатает» не уходит третьему', () => {
+    const alice = makeClient('alice');
+    const bob = makeClient('bob');
+    const carol = makeClient('carol');
+    hub.join(alice, 'alice');
+    hub.join(bob, 'bob');
+    hub.join(carol, 'carol');
+
+    hub.handle(alice, JSON.stringify({ type: 'typing', to: 'bob' }));
+
+    expect(carol.inbox.some((m) => m.type === 'typing')).toBe(false);
+  });
+
   it('обновляет presence на вход и выход', () => {
     const a = makeClient('a');
     const b = makeClient('b');
