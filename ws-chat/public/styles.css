@@ -2293,3 +2293,51 @@ html.motion-off *::after {
 .row.flash {
   animation: row-flash 1s ease;
 }
+
+/* --- контекстное меню (заготовка) --- */
+
+.ctx-menu {
+  position: fixed;
+  z-index: 60;
+  min-width: 180px;
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+}
+
+.ctx-menu hr {
+  height: 1px;
+  margin: 4px 6px;
+  border: 0;
+  background: var(--line);
+}
+
+.ctx-item {
+  padding: 7px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--fg);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 400;
+  text-align: left;
+  cursor: pointer;
+}
+
+.ctx-item:hover:not(:disabled) {
+  background: var(--line);
+}
+
+.ctx-item.danger {
+  color: #e5533c;
+}
+
+.ctx-item:disabled {
+  opacity: 0.45;
+  cursor: default;
+}

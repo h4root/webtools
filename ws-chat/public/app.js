@@ -64,6 +64,7 @@ import { createAttachments } from './attachments.js';
 import { createSearch } from './search.js';
 import { createGate } from './gate.js';
 import { createDrop } from './drop.js';
+import { createContextMenu } from './menu.js';
 import { isNarrow, timeLabel, formatSize, formatStats, deviceLabel, secureContext } from './format.js';
 
 const RECONNECT_MS = 2000;
@@ -179,6 +180,7 @@ function request(message) {
 }
 
 const gate = createGate({ request });
+const contextMenu = createContextMenu();
 
 const drop = createDrop({
   getToken: () => authToken,
