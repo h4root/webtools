@@ -126,8 +126,9 @@ export type ServerMessage =
   | { type: 'voice-channels'; list: string[] }
   | { type: 'voice-roster'; channel: string; users: VoiceMember[] }
   | { type: 'voice-mute'; nick: string; muted: boolean }
-  // Голос переехал на другое устройство этого же аккаунта: сверни свой WebRTC.
-  | { type: 'voice-left'; reason: string }
+  // Голос свернуть: переехал на другое устройство или канала больше нет.
+  // Причина необязательна — о том, что уже объявлено всем, не говорим дважды.
+  | { type: 'voice-left'; reason?: string }
   | { type: 'voice-presence'; channels: Record<string, string[]> }
   | { type: 'voice-signal'; from: string; data: unknown }
   | { type: 'call-invite'; from: string }

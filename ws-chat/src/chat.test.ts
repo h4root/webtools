@@ -1299,6 +1299,45 @@ describe('Hub voice channels', () => {
     expect(vc && vc.type === 'voice-channels' && vc.list).toContain('general');
   });
 
+  it('удаление канала выгоняет тех, кто в нём сидел', () => {
+    const a = makeClient('a');
+    const b = makeClient('b');
+    hub.join(a, 'alice');
+    hub.join(b, 'bob');
+    hub.handle(a, JSON.stringify({ type: 'voice-join', channel: 'games' }));
+    hub.handle(b, JSON.stringify({ type: 'voice-join', channel: 'games' }));
+
+    hub.handle(a, JSON.stringify({ type: 'voice-channel-delete', name: 'games' }));
+
+    expect(a.inbox.some((m) => m.type === 'voice-left')).toBe(true);
+    expect(b.inbox.some((m) => m.type === 'voice-left')).toBe(true);
+  });
+
+  it('об удалении объявляет один раз: у выгнанных нет своей причины', () => {
+    const a = makeClient('a');
+    hub.join(a, 'alice');
+    hub.handle(a, JSON.stringify({ type: 'voice-join', channel: 'games' }));
+
+    hub.handle(a, JSON.stringify({ type: 'voice-channel-delete', name: 'games' }));
+
+    const left = a.inbox.find((m) => m.type === 'voice-left');
+    expect(left?.type === 'voice-left' && left.reason).toBeUndefined();
+    expect(a.inbox.filter((m) => m.type === 'system' && m.text.includes('games удалён'))).toHaveLength(1);
+  });
+
+  it('удаление канала не трогает тех, кто был в другом', () => {
+    const a = makeClient('a');
+    const b = makeClient('b');
+    hub.join(a, 'alice');
+    hub.join(b, 'bob');
+    hub.handle(a, JSON.stringify({ type: 'voice-join', channel: 'general' }));
+    hub.handle(b, JSON.stringify({ type: 'voice-join', channel: 'games' }));
+
+    hub.handle(b, JSON.stringify({ type: 'voice-channel-delete', name: 'games' }));
+
+    expect(a.inbox.some((m) => m.type === 'voice-left')).toBe(false);
+  });
+
   it('первому в канале — пустой roster, второму — первого', () => {
     const a = makeClient('a');
     const b = makeClient('b');

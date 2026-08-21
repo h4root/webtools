@@ -473,8 +473,12 @@ export class Hub {
       client.send({ type: 'error', reason: 'Канал не удалить' });
       return;
     }
+    // Сервер про них уже забыл, а у них микрофон включён и панель показывает
+    // канал, которого нет: без этого сообщения клиент об этом не узнает.
     for (const [peer, state] of [...this.voiceOf]) {
-      if (state.channel === name) this.voiceOf.delete(peer);
+      if (state.channel !== name) continue;
+      this.voiceOf.delete(peer);
+      peer.send({ type: 'voice-left' });
     }
     this.broadcast({ type: 'voice-channels', list: this.store.listVoiceChannels() });
     this.broadcastVoicePresence();

@@ -388,7 +388,7 @@ function handleServer(message) {
       break;
     case 'voice-left':
       voice.reset();
-      systemLine(message.reason);
+      if (message.reason) systemLine(message.reason);
       break;
     case 'voice-signal':
       voice.handleSignal(message.from, message.data);
