@@ -65,6 +65,7 @@ import { createSearch } from './search.js';
 import { createGate } from './gate.js';
 import { createDrop } from './drop.js';
 import { createContextMenu } from './menu.js';
+import { splitText } from './linkify.js';
 import { isNarrow, timeLabel, formatSize, formatStats, deviceLabel, secureContext } from './format.js';
 
 const RECONNECT_MS = 2000;
@@ -710,22 +711,41 @@ function applyMotionState() {
 
 function renderText(parent, text) {
   let mentionsMe = false;
-  const parts = text.split(/(@[\p{L}\p{N}_.-]+)/gu);
-  for (const part of parts) {
-    if (part.startsWith('@') && part.length > 1) {
+  for (const part of splitText(text)) {
+    if (part.kind === 'mention') {
       const span = document.createElement('span');
       span.className = 'mention';
-      span.textContent = part;
-      if (part.slice(1).toLowerCase() === myNick.toLowerCase()) {
+      span.textContent = part.value;
+      if (part.value.slice(1).toLowerCase() === myNick.toLowerCase()) {
         span.classList.add('me');
         mentionsMe = true;
       }
       parent.appendChild(span);
-    } else if (part) {
-      parent.appendChild(document.createTextNode(part));
+    } else if (part.kind === 'link') {
+      const link = document.createElement('a');
+      link.className = 'msg-link';
+      // href присваиваем свойством, а не разметкой, и схему уже проверил
+      // splitText — в DOM ничего исполняемого не попадает.
+      link.href = part.value;
+      link.target = '_blank';
+      // noopener обязателен: без него открытая вкладка получает window.opener
+      // и может увести исходную страницу куда угодно.
+      link.rel = 'noopener noreferrer';
+      link.textContent = shortenUrl(part.value);
+      link.title = part.value;
+      parent.appendChild(link);
+    } else {
+      parent.appendChild(document.createTextNode(part.value));
     }
   }
   return mentionsMe;
+}
+
+// Длинный адрес разрывает ленту по ширине, поэтому в тексте показываем
+// укороченный, а полный оставляем в href и подсказке.
+function shortenUrl(url) {
+  if (url.length <= 60) return url;
+  return `${url.slice(0, 45)}…${url.slice(-12)}`;
 }
 
 function fillRow(row, msg) {
@@ -1237,6 +1257,7 @@ fileInput.addEventListener('change', () => {
   attachments.add([...fileInput.files]);
   fileInput.value = '';
 });
+
 textInput.addEventListener('keydown', (event) => {
   if (event.key === 'Escape' && replyingTo) cancelReply();
 });
