@@ -30,6 +30,7 @@ export const fileInput = document.getElementById('file-input');
 export const menuBtn = document.getElementById('menu-btn');
 export const sidebar = document.getElementById('sidebar');
 export const backdrop = document.getElementById('backdrop');
+export const dropHint = document.getElementById('drop-hint');
 export const membersBtn = document.getElementById('members-btn');
 export const membersPanel = document.getElementById('members');
 export const membersListEl = document.getElementById('members-list');

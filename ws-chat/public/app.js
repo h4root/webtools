@@ -24,6 +24,7 @@ import {
   menuBtn,
   sidebar,
   backdrop,
+  dropHint,
   membersBtn,
   membersPanel,
   membersListEl,
@@ -1258,6 +1259,52 @@ fileInput.addEventListener('change', () => {
   fileInput.value = '';
 });
 
+// Скриншот из буфера — самый частый способ поделиться картинкой, а до сих пор
+// его надо было сначала сохранить на диск.
+document.addEventListener('paste', (event) => {
+  if (!joined) return;
+  const files = [...(event.clipboardData?.files ?? [])];
+  if (files.length === 0) return;
+  event.preventDefault();
+  attachments.add(files);
+});
+
+// dragenter и dragleave срабатывают и на дочерних элементах, поэтому считаем
+// вход и выход, а не полагаемся на одно событие.
+let dragDepth = 0;
+
+function showDropHint(show) {
+  dragDepth = show ? dragDepth : 0;
+  dropHint.hidden = !show;
+}
+
+function hasFiles(event) {
+  return [...(event.dataTransfer?.types ?? [])].includes('Files');
+}
+
+document.addEventListener('dragenter', (event) => {
+  if (!joined || !hasFiles(event)) return;
+  dragDepth++;
+  dropHint.hidden = false;
+});
+
+document.addEventListener('dragover', (event) => {
+  if (!joined || !hasFiles(event)) return;
+  // Без этого браузер откроет файл вместо того, чтобы отдать его нам.
+  event.preventDefault();
+});
+
+document.addEventListener('dragleave', () => {
+  if (dragDepth > 0) dragDepth--;
+  if (dragDepth === 0) dropHint.hidden = true;
+});
+
+document.addEventListener('drop', (event) => {
+  if (!joined || !hasFiles(event)) return;
+  event.preventDefault();
+  showDropHint(false);
+  attachments.add([...(event.dataTransfer?.files ?? [])]);
+});
 textInput.addEventListener('keydown', (event) => {
   if (event.key === 'Escape' && replyingTo) cancelReply();
 });

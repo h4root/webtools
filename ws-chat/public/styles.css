@@ -2353,3 +2353,19 @@ html.motion-off *::after {
   cursor: default;
 }
 
+/* --- перенос файлов в окно --- */
+
+.drop-hint {
+  position: fixed;
+  inset: 0;
+  z-index: 55;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, var(--bg) 82%, transparent);
+  border: 2px dashed var(--accent);
+  color: var(--accent);
+  font-size: 15px;
+  /* Плашка не должна перехватывать сам drop: события летят к документу. */
+  pointer-events: none;
+}
