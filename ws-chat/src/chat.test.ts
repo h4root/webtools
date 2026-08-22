@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { Hub, ACTIONS_PER_WINDOW, RATE_WINDOW_MS, type Client } from './chat.ts';
 import { Store, channelKey, dmKey } from './store.ts';
 import { Auth } from './auth.ts';
+import { LINK_TTL_MS } from './linkcodes.ts';
 import { PROTOCOL_VERSION, type ServerMessage } from './protocol.ts';
 
 type TestClient = Client & { inbox: ServerMessage[]; closed: boolean };
@@ -1314,6 +1315,16 @@ describe('Hub: вход и выход', () => {
     hub.handle(laptop, JSON.stringify({ type: 'link-approve', code: 'ZZZZZZ' }));
     expect(laptop.inbox.some((m) => m.type === 'error')).toBe(true);
     expect(laptop.inbox.some((m) => m.type === 'link-approved')).toBe(false);
+  });
+
+  it('запрос кода продлевает срок: устройство честно ждёт подтверждения', async () => {
+    const phone = makeClient('phone');
+    phone.authDeadline = Date.now() + 1000;
+
+    hub.handle(phone, JSON.stringify({ type: 'link-request', device: 'iPhone' }));
+
+    expect(phone.inbox.some((m) => m.type === 'link-code')).toBe(true);
+    expect(phone.authDeadline).toBeGreaterThan(Date.now() + LINK_TTL_MS - 1000);
   });
 
   it('подбор кода упирается в общий лимит действий', async () => {

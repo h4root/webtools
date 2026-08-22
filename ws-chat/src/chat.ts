@@ -10,6 +10,10 @@ export interface Client {
   source?: string;
   guest?: boolean;
   authPending?: boolean;
+  // Срок, к которому сокет обязан представиться. Ставит его сервер, продлевает
+  // выдача кода привязки: такое устройство ждёт подтверждения на законных
+  // основаниях, иногда все две минуты.
+  authDeadline?: number;
   send(message: ServerMessage): void;
   close?(): void;
 }
@@ -343,6 +347,7 @@ export class Hub {
       const device = safeDevice(message.device);
       const { code, expiresAt } = this.links.create(client);
       this.linkDevice.set(client, device);
+      client.authDeadline = expiresAt;
       client.send({ type: 'link-code', code, expiresAt });
       return;
     }

@@ -12,6 +12,7 @@ import { BlobStore, loadKey } from './blobs.ts';
 import { Auth } from './auth.ts';
 import { networkInterfaces } from 'node:os';
 import { hostAddresses } from './tls.ts';
+import { ConnectionLimiter, isAbandoned } from './connections.ts';
 import { deriveKey } from './sealed.ts';
 import { createClient } from './wsclient.ts';
 import { describeUpload, planDownload, UploadQuota } from './attachments.ts';
@@ -35,6 +36,12 @@ const SWEEP_MS = 60000;
 const ACCOUNT_SWEEP_MS = 5 * 60 * 1000;
 const UPLOAD_GRACE_MS = 30 * 60 * 1000;
 const UPLOADS_PER_MIN = 30;
+// Соединений на один адрес и всего. На локальную сеть с запасом, но потолок
+// есть: без него сокеты копятся, пока не кончится память.
+const CONNS_PER_SOURCE = Number(process.env.CONNS_PER_SOURCE ?? 24);
+const CONNS_TOTAL = Number(process.env.CONNS_TOTAL ?? 256);
+// Сколько сокет может молчать, не представившись.
+const AUTH_GRACE_MS = Number(process.env.AUTH_GRACE_MS ?? 30000);
 
 // Блобы шифруются мастер-ключом напрямую — так сложилось, и менять это нельзя,
 // иначе уже загруженные вложения перестанут открываться. Истории даём отдельный
@@ -210,6 +217,8 @@ function sameOrigin(request: IncomingMessage): boolean {
   }
 }
 
+const connections = new ConnectionLimiter({ perSource: CONNS_PER_SOURCE, total: CONNS_TOTAL });
+
 server.on('upgrade', (request, socket, head) => {
   const { pathname } = new URL(request.url ?? '/', 'http://localhost');
   const target = pathname === '/drop' ? dropWss : pathname === '/' ? wss : null;
@@ -218,6 +227,14 @@ server.on('upgrade', (request, socket, head) => {
     socket.destroy();
     return;
   }
+  // Считаем до рукопожатия: отказ не должен стоить дороже отказа.
+  if (!connections.allow(sourceOf(request))) {
+    socket.write('HTTP/1.1 503 Service Unavailable\r\n\r\n');
+    socket.destroy();
+    return;
+  }
+  const source = sourceOf(request);
+  socket.once('close', () => connections.release(source));
   target.handleUpgrade(request, socket, head, (ws) => target.emit('connection', ws, request));
 });
 
@@ -247,6 +264,9 @@ wss.on('connection', (ws, request: IncomingMessage) => {
     hub.leave(client);
   });
 
+  client.authDeadline = Date.now() + AUTH_GRACE_MS;
+  idleClients.set(ws, client);
+
   ws.on('message', (data) => {
     try {
       hub.handle(client, data.toString());
@@ -263,8 +283,16 @@ wss.on('connection', (ws, request: IncomingMessage) => {
   });
 });
 
+const idleClients = new WeakMap<WebSocket, Client>();
+
 const heartbeat = setInterval(() => {
+  const now = Date.now();
   for (const ws of wss.clients) {
+    const client = idleClients.get(ws);
+    if (client && isAbandoned(client, now)) {
+      ws.close(1008, 'не представился');
+      continue;
+    }
     if (alive.get(ws) === false) {
       ws.terminate();
       continue;
