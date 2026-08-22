@@ -58,6 +58,8 @@ export function planDownload(attachment: AttachmentRef | null, blob: { mime: str
   return { status: 200, contentType: disposition.contentType, disposition: disposition.header(attachment.name) };
 }
 
+const PRUNE_AT = 1000;
+
 export class UploadQuota {
   private counters = new Map<string, { count: number; until: number }>();
 
@@ -68,6 +70,7 @@ export class UploadQuota {
 
   allow(key: string): boolean {
     const now = Date.now();
+    if (this.counters.size > PRUNE_AT) this.prune(now);
     const entry = this.counters.get(key);
     if (!entry || entry.until < now) {
       this.counters.set(key, { count: 1, until: now + this.windowMs });
@@ -75,6 +78,14 @@ export class UploadQuota {
     }
     entry.count++;
     return entry.count <= this.perWindow;
+  }
+
+  // Счётчик живёт окном, а не подпиской: чистим протухшее сами, иначе карта
+  // растёт по числу тех, кто когда-либо грузил.
+  private prune(now: number): void {
+    for (const [key, entry] of this.counters) {
+      if (entry.until < now) this.counters.delete(key);
+    }
   }
 
   forget(key: string): void {

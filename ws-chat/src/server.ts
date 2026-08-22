@@ -115,7 +115,9 @@ app.post('/upload', express.raw({ type: () => true, limit: ATTACH_SIZE_MAX }), (
     res.status(401).json({ error: 'unauthorized' });
     return;
   }
-  if (!uploadQuota.allow(client.token)) {
+  // Считаем на аккаунт, а не на сессию: иначе десять устройств дают
+  // десятикратную норму, а новый вход — свежую.
+  if (!uploadQuota.allow(client.nick.toLowerCase())) {
     res.status(429).json({ error: 'too-many-uploads' });
     return;
   }
@@ -253,7 +255,6 @@ wss.on('connection', (ws, request: IncomingMessage) => {
     }
   });
   ws.on('close', () => {
-    uploadQuota.forget(client.token);
     hub.leave(client);
   });
   ws.on('error', () => {

@@ -184,6 +184,24 @@ describe('HTTP-слой', () => {
     socket.close();
   });
 
+  it('квота загрузок не сбрасывается переподключением', async () => {
+    const peer = await login(base, 'quota-user');
+    const unique = () => new Uint8Array([...crypto.getRandomValues(new Uint8Array(16))]);
+
+    let refused = false;
+    for (let i = 0; i < 40 && !refused; i++) {
+      refused = (await upload(base, peer.token, unique())).status === 429;
+    }
+    expect(refused).toBe(true);
+
+    // Обрыв не должен возвращать право лить заново.
+    peer.socket.close();
+    await new Promise((r) => setTimeout(r, 300));
+
+    const after = await upload(base, peer.token, unique());
+    expect(after.status).toBe(429);
+  }, 30000);
+
   it('health отвечает и не кешируется', async () => {
     const res = await fetch(`${base}/health`);
     expect(res.status).toBe(200);
