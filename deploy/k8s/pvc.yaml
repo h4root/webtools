@@ -1,0 +1,13 @@
+# История, аккаунты, сессии, вложения и ключ шифрования. Том обязан пережить
+# перезапуск: без ключа не открыть ни переписку, ни вложения.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ws-chat-data
+  namespace: ws-chat
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi

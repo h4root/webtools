@@ -304,6 +304,7 @@
     <button class="tab" role="tab" id="tab-voice" aria-controls="p-voice" aria-selected="false"># голос</button>
     <button class="tab" role="tab" id="tab-transfer" aria-controls="p-transfer" aria-selected="false"># передача</button>
     <button class="tab" role="tab" id="tab-security" aria-controls="p-security" aria-selected="false"># безопасность</button>
+    <button class="tab" role="tab" id="tab-deploy" aria-controls="p-deploy" aria-selected="false"># развёртывание</button>
     <button class="tab" role="tab" id="tab-dev" aria-controls="p-dev" aria-selected="false"># разработка</button>
   </nav>
 
@@ -574,6 +575,69 @@ npm run cert -- --force      # заменить существующий</code><
         <p>Сквозного шифрования нет. И пока клиент приходит с того же сервера, оно не решит задачу целиком: сервер может подменить сам скрипт. Выход — упакованное приложение, которое приносит свой код.</p>
         <p>По <code>http://</code> пароль виден любому, кто слушает сеть. На экране входа об этом висит предупреждение; гостевого входа это не касается. Решение — HTTPS. Вариант с SRP, при котором пароль вообще не покидает устройство, пока в планах.</p>
       </div>
+    </section>
+
+    <section class="panel" role="tabpanel" id="p-deploy" aria-labelledby="tab-deploy" tabindex="-1" hidden>
+      <h1>Развёртывание на своём сервере</h1>
+      <p class="lede">Два пути: одной командой через Docker или в кластере Kubernetes. Первого хватает почти всегда.</p>
+
+      <div class="limit">
+        <span class="limit-label">Что нужно знать заранее</span>
+        <p>Чат держит разговоры, присутствие и голосовой сигналинг в памяти своего процесса. Поэтому копия у него ровно одна, и «добавить ещё подов» не сделает его быстрее — сделает два независимых чата, где люди не видят друг друга. Масштабировать здесь нечего, и это свойство замысла, а не недоделка.</p>
+        <p>Второе: <strong>ключ шифрования и том с данными должны жить вместе</strong>. Потеряешь ключ — переписку и вложения не открыть уже никак.</p>
+      </div>
+
+      <h2>Docker: самый короткий путь</h2>
+      <p>Нужен сервер с установленным Docker. Всё остальное — три команды.</p>
+      <pre><code>git clone https://github.com/h4root/webtools
+cd webtools
+
+# ключ шифрования: сгенерируй один раз и сохрани у себя
+echo "UPLOAD_KEY=$(openssl rand -hex 32)" > .env
+
+docker compose up -d</code></pre>
+      <p>Чат поднимется на порту 3000. Проверить, что он жив: <code>curl localhost:3000/health</code> — ответ <code>{"status":"ok"}</code>.</p>
+      <p>Данные лежат в томе <code>data</code> и переживают перезапуск и обновление образа. Обновиться: <code>docker compose pull &amp;&amp; docker compose up -d</code>. Остановить: <code>docker compose down</code> — том при этом остаётся.</p>
+
+      <div class="limit">
+        <span class="limit-label">Порт 3000 наружу открывать не надо</span>
+        <p>По <code>http://</code> браузер не даст микрофон никому, кроме как на самом сервере, а пароль при входе будет видно в сети. Поставь перед чатом любой обратный прокси с сертификатом — Caddy, nginx, Traefik — и отдавай наружу уже <code>https</code>. Прокси должен пропускать заголовки апгрейда WebSocket и не рвать долгие соединения.</p>
+      </div>
+
+      <h2>Kubernetes</h2>
+      <p>Готовые манифесты лежат в <code>deploy/k8s</code>. Порядок такой:</p>
+      <pre><code># 1. пространство имён
+kubectl apply -f deploy/k8s/namespace.yaml
+
+# 2. ключ шифрования — командой, не файлом
+kubectl -n ws-chat create secret generic ws-chat-key \
+  --from-literal=UPLOAD_KEY=$(openssl rand -hex 32)
+
+# 3. поправь домен в deploy/k8s/ingress.yaml, затем
+kubectl apply -k deploy/k8s</code></pre>
+      <p>Проверить: <code>kubectl -n ws-chat get pods</code> и <code>kubectl -n ws-chat logs deploy/ws-chat</code>.</p>
+
+      <h3>Почему манифесты выглядят именно так</h3>
+      <ul>
+        <li><strong>Одна копия и стратегия <code>Recreate</code>.</strong> Обновление сначала гасит старый под и только потом поднимает новый: два пода подрались бы за том и развели два разных чата.</li>
+        <li><strong>Готовность спрашивает <code>/health</code>, живость — только порт.</strong> Готовность отвечает «нет», если сервер не может сохранять историю, и под убирают из балансировки. Вешать на это живость нельзя: неверный ключ перезапуском не лечится, вышел бы вечный цикл перезапусков.</li>
+        <li><strong><code>TRUST_PROXY=1</code>.</strong> Внутри кластера адрес клиента приходит от ingress-контроллера. Вне кластера этот флаг включать нельзя: заголовок подставляет кто угодно, и ограничение попыток входа обходится случайным адресом.</li>
+        <li><strong>Таймауты в ingress подняты до часа.</strong> Значения по умолчанию рвут долгие соединения чата молча.</li>
+        <li><strong>Контейнер не root, файловая система только на чтение</strong>, кроме тома с данными и <code>/tmp</code>.</li>
+      </ul>
+
+      <h2>Сколько это ест</h2>
+      <p>Запрошено 50 мКПУ и 96 МБ, потолок — одно ядро и 256 МБ. Для десятка человек в одной сети этого с запасом: тяжёлое здесь — голос и передача файлов, а они идут между устройствами напрямую и через сервер не проходят.</p>
+
+      <h2>Резервная копия</h2>
+      <p>Достаточно скопировать каталог данных целиком: в нём и история, и аккаунты, и вложения, и ключ.</p>
+      <pre><code># docker
+docker run --rm -v webtools_data:/data -v "$PWD":/backup alpine \
+  tar czf /backup/ws-chat-backup.tar.gz -C /data .
+
+# kubernetes
+kubectl -n ws-chat exec deploy/ws-chat -- tar cz -C /data . > ws-chat-backup.tar.gz</code></pre>
+      <p>Восстановление — распаковать обратно в тот же том до запуска.</p>
     </section>
 
     <section class="panel" role="tabpanel" id="p-dev" aria-labelledby="tab-dev" tabindex="-1" hidden>

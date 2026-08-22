@@ -1,0 +1,27 @@
+services:
+  ws-chat:
+    build:
+      context: .
+      dockerfile: ws-chat/Dockerfile
+    image: ghcr.io/h4root/ws-chat:main
+    restart: unless-stopped
+    # Раздаёт сигналы дочерним процессам: без этого остановка не доходит до
+    # сервера, и он не успевает дописать историю.
+    init: true
+    ports:
+      - "3000:3000"
+    environment:
+      # Ключ шифрования истории и вложений. Задай свой:
+      #   openssl rand -hex 32
+      # Если не задать, он заведётся сам внутри тома и обязан вместе с ним жить.
+      UPLOAD_KEY: "${UPLOAD_KEY:-}"
+    volumes:
+      - data:/data
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O-", "http://127.0.0.1:3000/health"]
+      interval: 30s
+      timeout: 3s
+      start_period: 10s
+
+volumes:
+  data:

@@ -1,0 +1,12 @@
+*
+!ws-chat
+!lan-drop
+ws-chat/node_modules
+ws-chat/data
+ws-chat/docs
+lan-drop/node_modules
+**/*.test.ts
+**/*.test.js
+**/.env
+**/.env.*
+!**/.env.example

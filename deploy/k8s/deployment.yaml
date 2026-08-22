@@ -1,0 +1,91 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ws-chat
+  namespace: ws-chat
+spec:
+  # Ровно одна копия, и это не экономия. Разговоры, присутствие и голосовой
+  # сигналинг живут в памяти процесса: вторая копия завела бы себе отдельный
+  # чат, а люди в нём не видели бы друг друга.
+  replicas: 1
+  strategy:
+    # По той же причине не RollingUpdate: новый под не должен подниматься,
+    # пока старый держит том и соединения.
+    type: Recreate
+  selector:
+    matchLabels:
+      app: ws-chat
+  template:
+    metadata:
+      labels:
+        app: ws-chat
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      # Успеть дописать историю на диск по SIGTERM.
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: ws-chat
+          image: ghcr.io/h4root/ws-chat:main
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 3000
+          env:
+            - name: DATA_DIR
+              value: /data
+            - name: HOST
+              value: 0.0.0.0
+            # Заголовок X-Forwarded-For учитывается только за своим прокси.
+            # В кластере им является ingress-контроллер.
+            - name: TRUST_PROXY
+              value: "1"
+            - name: UPLOAD_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: ws-chat-key
+                  key: UPLOAD_KEY
+          # Готовность спрашивает у сервера, способен ли он сохранять: если
+          # история не пишется, под убирают из балансировки.
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          # Живость — только «процесс отвечает». На /health её вешать нельзя:
+          # неверный ключ перезапуском не лечится, получился бы вечный цикл.
+          livenessProbe:
+            tcpSocket:
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 20
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 50m
+              memory: 96Mi
+            limits:
+              cpu: "1"
+              memory: 256Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: ws-chat-data
+        - name: tmp
+          emptyDir: {}
