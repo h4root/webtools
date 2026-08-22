@@ -182,6 +182,55 @@ describe('Store', () => {
   });
 });
 
+describe('Store: метка отправки', () => {
+  let store: Store;
+
+  beforeEach(() => {
+    store = new Store();
+  });
+
+  it('находит сообщение по метке его автора', () => {
+    const m = store.addChannelMessage('general', 'alice', 'раз', { nonce: 'n1' });
+    expect(store.findByNonce('alice', 'n1')?.id).toBe(m.id);
+  });
+
+  it('метки разных авторов не путаются', () => {
+    store.addChannelMessage('general', 'alice', 'моё', { nonce: 'общая' });
+    store.addChannelMessage('general', 'bob', 'чужое', { nonce: 'общая' });
+
+    expect(store.findByNonce('alice', 'общая')?.text).toBe('моё');
+    expect(store.findByNonce('bob', 'общая')?.text).toBe('чужое');
+  });
+
+  it('регистр ника не заводит вторую метку', () => {
+    store.addChannelMessage('general', 'Alice', 'привет', { nonce: 'n1' });
+    expect(store.findByNonce('alice', 'n1')).not.toBeNull();
+  });
+
+  it('без метки ничего не находится', () => {
+    store.addChannelMessage('general', 'alice', 'без метки');
+    expect(store.findByNonce('alice', 'n1')).toBeNull();
+  });
+
+  it('метка работает и в личке', () => {
+    const m = store.addDirectMessage('alice', 'bob', 'личное', { nonce: 'n2' });
+    expect(store.findByNonce('alice', 'n2')?.id).toBe(m.id);
+  });
+
+  it('вытесненное из истории по метке больше не находится', () => {
+    store.addChannelMessage('general', 'alice', 'самое первое', { nonce: 'старая' });
+    for (let i = 0; i < HISTORY_LIMIT; i++) store.addChannelMessage('general', 'alice', `ещё ${i}`);
+
+    expect(store.findByNonce('alice', 'старая')).toBeNull();
+  });
+
+  it('удалённое по метке больше не находится', () => {
+    const m = store.addChannelMessage('general', 'alice', 'пока', { nonce: 'n3' });
+    store.remove(m.id, 'alice');
+    expect(store.findByNonce('alice', 'n3')).toBeNull();
+  });
+});
+
 describe('Store: отметки чтения', () => {
   let store: Store;
 

@@ -105,6 +105,8 @@ const loaded = new Set();
 const historyReady = new Set();
 const unread = new Map();
 const readMarks = new Map();
+// Отправленные, но ещё не вернувшиеся эхом: метка -> сообщение.
+const unsent = new Map();
 
 function activeKey() {
   return keyOf(active.kind, active.id);
@@ -131,6 +133,18 @@ function flushOutbox() {
   const pending = outbox;
   outbox = [];
   for (const message of pending) wsSend(message);
+  // Отправленное в уже мёртвый сокет не попадало в очередь и пропадало молча.
+  // Повторяем сами; сервер узнает повтор по метке и второй раз не создаст.
+  for (const message of unsent.values()) wsSend(message);
+}
+
+function newNonce() {
+  return crypto.randomUUID().replaceAll('-', '');
+}
+
+function sendMessage(message) {
+  unsent.set(message.nonce, message);
+  wsSend(message);
 }
 
 function renderConnState() {
@@ -425,6 +439,7 @@ function returnToGate(reason) {
   historyReady.clear();
   unread.clear();
   readMarks.clear();
+  unsent.clear();
   typing.reset();
   renderDocumentTitle();
   dmPartners = [];
@@ -485,8 +500,13 @@ function enterApp() {
 }
 
 function receiveMessage(msg) {
+  if (msg.nonce) unsent.delete(msg.nonce);
   const key = messageKey(msg, myNick);
-  convOf(key).push(msg);
+  const list = convOf(key);
+  // Повтор после обрыва возвращает то же сообщение: показать его второй раз
+  // нельзя.
+  if (list.some((known) => known.id === msg.id)) return;
+  list.push(msg);
   typing.clear(key, msg.from);
   if (msg.to !== undefined) rememberPartner(msg.from === myNick ? msg.to : msg.from, msg.ts);
   if (key === activeKey()) {
@@ -1104,12 +1124,13 @@ composer.addEventListener('submit', (event) => {
   const files = attachments.pending();
   if (!text && files.length === 0) return;
   const base = active.kind === 'channel' ? { channel: active.id } : { to: active.id };
-  wsSend({
+  sendMessage({
     type: 'message',
     ...base,
     text,
     replyTo: replyingTo?.id,
     attachments: files.length ? files : undefined,
+    nonce: newNonce(),
   });
   textInput.value = '';
   attachments.clear();

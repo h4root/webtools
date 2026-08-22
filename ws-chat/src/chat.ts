@@ -499,6 +499,16 @@ export class Hub {
   }
 
   private sendMessage(client: Client, message: Extract<ClientMessage, { type: 'message' }>): void {
+    // Повтор после обрыва: сообщение уже принято, но эхо до автора не дошло.
+    // Возвращаем ему то же самое, остальным второй раз ничего не шлём.
+    if (message.nonce) {
+      const known = this.store.findByNonce(client.nick!, message.nonce);
+      if (known) {
+        client.send({ type: 'message', msg: known });
+        return;
+      }
+    }
+
     const attachments = this.resolveAttachments(message.attachments);
     if (!message.text && !attachments) {
       client.send({ type: 'error', reason: 'Вложение не найдено' });
@@ -513,6 +523,7 @@ export class Hub {
       const wire = this.store.addChannelMessage(message.channel, client.nick!, message.text, {
         replyTo: message.replyTo,
         attachments,
+        nonce: message.nonce,
       });
       this.broadcast({ type: 'message', msg: wire });
       return;
@@ -523,6 +534,7 @@ export class Hub {
     const wire = this.store.addDirectMessage(client.nick!, to, message.text, {
       replyTo: message.replyTo,
       attachments,
+      nonce: message.nonce,
     });
     this.sendToNicks([client.nick!, to], { type: 'message', msg: wire });
   }

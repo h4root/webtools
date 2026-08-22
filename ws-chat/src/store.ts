@@ -22,11 +22,13 @@ interface StoredMessage {
   reactions?: Reactions;
   replyTo?: ReplyRef;
   attachments?: AttachmentRef[];
+  nonce?: string;
 }
 
 interface MessageExtra {
   replyTo?: number;
   attachments?: AttachmentRef[];
+  nonce?: string;
 }
 
 export function channelKey(name: string): string {
@@ -48,6 +50,7 @@ function toWire(message: StoredMessage): WireMessage {
     to: message.to,
     reactions: message.reactions && Object.keys(message.reactions).length ? message.reactions : undefined,
     replyTo: message.replyTo,
+    nonce: message.nonce,
     attachments: message.attachments?.map((a) => ({
       url: `/uploads/${a.id}`,
       name: a.name,
@@ -65,6 +68,8 @@ export class Store {
   private byKey = new Map<string, StoredMessage[]>();
   private byId = new Map<number, StoredMessage>();
   private byBlob = new Map<string, Set<number>>();
+  // Метка отправки автора -> id: по ней повтор узнаётся как тот же самый.
+  private byNonce = new Map<string, number>();
   // ник в нижнем регистре -> разговор -> id последнего прочитанного
   private reads = new Map<string, Map<string, number>>();
   private nextId = 1;
@@ -253,8 +258,13 @@ export class Store {
     return messages;
   }
 
+  private nonceKey(from: string, nonce: string): string {
+    return `${from.toLowerCase()}|${nonce}`;
+  }
+
   private index(message: StoredMessage): void {
     this.byId.set(message.id, message);
+    if (message.nonce) this.byNonce.set(this.nonceKey(message.from, message.nonce), message.id);
     for (const attachment of message.attachments ?? []) {
       const users = this.byBlob.get(attachment.id) ?? new Set<number>();
       users.add(message.id);
@@ -264,6 +274,7 @@ export class Store {
 
   private unindex(message: StoredMessage): void {
     this.byId.delete(message.id);
+    if (message.nonce) this.byNonce.delete(this.nonceKey(message.from, message.nonce));
     for (const attachment of message.attachments ?? []) {
       const users = this.byBlob.get(attachment.id);
       if (!users) continue;
@@ -310,6 +321,7 @@ export class Store {
       edited: false,
       replyTo: this.makeReply(extra.replyTo, key),
       attachments: extra.attachments,
+      nonce: extra.nonce,
     });
   }
 
@@ -325,7 +337,15 @@ export class Store {
       edited: false,
       replyTo: this.makeReply(extra.replyTo, key),
       attachments: extra.attachments,
+      nonce: extra.nonce,
     });
+  }
+
+  // Метка своя у каждого автора: чужую не подобрать и на чужую не наткнуться.
+  findByNonce(from: string, nonce: string): WireMessage | null {
+    const id = this.byNonce.get(this.nonceKey(from, nonce));
+    const message = id === undefined ? undefined : this.byId.get(id);
+    return message ? toWire(message) : null;
   }
 
   find(id: number): StoredMessage | undefined {

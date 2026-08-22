@@ -6,8 +6,10 @@ export const ATTACH_MAX = 10;
 export const ATTACH_SIZE_MAX = 26_214_400;
 export const PASSWORD_LIMIT = 200;
 export const SEARCH_QUERY_MAX = 100;
+export const NONCE_MAX = 64;
 
 const ATTACH_ID = /^[a-f0-9]{32}$/;
+const NONCE = /^[A-Za-z0-9_-]{1,64}$/;
 
 export const REACTIONS = ['👍', '❤️', '😂', '🔥', '🎉', '😮', '😢', '👀'];
 
@@ -46,6 +48,8 @@ export interface WireMessage {
   reactions?: Reactions;
   replyTo?: ReplyRef;
   attachments?: Attachment[];
+  // Метка отправки: осмысленна только автору, остальным ни о чём не говорит.
+  nonce?: string;
 }
 
 export type AuthMode = 'guest' | 'register' | 'login' | 'resume';
@@ -81,7 +85,7 @@ export type ClientMessage =
   | { type: 'channel-create'; name: string }
   | { type: 'channel-delete'; name: string }
   | { type: 'voice-channel-delete'; name: string }
-  | { type: 'message'; channel?: string; to?: string; text: string; replyTo?: number; attachments?: AttachmentRef[] }
+  | { type: 'message'; channel?: string; to?: string; text: string; replyTo?: number; attachments?: AttachmentRef[]; nonce?: string }
   | { type: 'history'; channel?: string; to?: string }
   | { type: 'search'; query: string }
   | { type: 'read'; channel?: string; to?: string; id: number }
@@ -226,12 +230,14 @@ export function parseClientMessage(raw: string): ClientMessage | null {
       const hasText = text.trim().length > 0;
       if (!hasText && attachments.length === 0) return null;
       const replyTo = typeof data.replyTo === 'number' ? data.replyTo : undefined;
+      if (data.nonce !== undefined && (typeof data.nonce !== 'string' || !NONCE.test(data.nonce))) return null;
       return {
         type: 'message',
         ...target,
         text: hasText ? text : '',
         replyTo,
         attachments: attachments.length ? attachments : undefined,
+        nonce: data.nonce as string | undefined,
       };
     }
     case 'history': {

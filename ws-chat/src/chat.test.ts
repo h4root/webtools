@@ -165,6 +165,71 @@ describe('Hub', () => {
     expect(typeof lastMessage(b)?.id).toBe('number');
   });
 
+  it('повтор с той же меткой не создаёт второе сообщение', () => {
+    const a = makeClient('a');
+    hub.join(a, 'alice');
+
+    const send = () => hub.handle(a, JSON.stringify({ type: 'message', channel: 'general', text: 'один раз', nonce: 'n1' }));
+    send();
+    send();
+
+    expect(store.history(channelKey('general'))).toHaveLength(1);
+  });
+
+  it('на повтор отправителю возвращается то же сообщение', () => {
+    const a = makeClient('a');
+    hub.join(a, 'alice');
+
+    hub.handle(a, JSON.stringify({ type: 'message', channel: 'general', text: 'один раз', nonce: 'n1' }));
+    const first = lastMessage(a);
+    hub.handle(a, JSON.stringify({ type: 'message', channel: 'general', text: 'один раз', nonce: 'n1' }));
+
+    expect(lastMessage(a)?.id).toBe(first?.id);
+    expect(msgCount(a, 'один раз')).toBe(2);
+  });
+
+  it('повтор не рассылается остальным заново', () => {
+    const a = makeClient('a');
+    const b = makeClient('b');
+    hub.join(a, 'alice');
+    hub.join(b, 'bob');
+
+    hub.handle(a, JSON.stringify({ type: 'message', channel: 'general', text: 'один раз', nonce: 'n1' }));
+    hub.handle(a, JSON.stringify({ type: 'message', channel: 'general', text: 'один раз', nonce: 'n1' }));
+
+    expect(msgCount(b, 'один раз')).toBe(1);
+  });
+
+  it('одинаковая метка у разных людей — разные сообщения', () => {
+    const a = makeClient('a');
+    const b = makeClient('b');
+    hub.join(a, 'alice');
+    hub.join(b, 'bob');
+
+    hub.handle(a, JSON.stringify({ type: 'message', channel: 'general', text: 'от алисы', nonce: 'shared-1' }));
+    hub.handle(b, JSON.stringify({ type: 'message', channel: 'general', text: 'от боба', nonce: 'shared-1' }));
+
+    expect(store.history(channelKey('general'))).toHaveLength(2);
+  });
+
+  it('без метки повтор остаётся отдельным сообщением', () => {
+    const a = makeClient('a');
+    hub.join(a, 'alice');
+
+    hub.handle(a, JSON.stringify({ type: 'message', channel: 'general', text: 'дважды' }));
+    hub.handle(a, JSON.stringify({ type: 'message', channel: 'general', text: 'дважды' }));
+
+    expect(store.history(channelKey('general'))).toHaveLength(2);
+  });
+
+  it('метка возвращается автору, чтобы он узнал своё сообщение', () => {
+    const a = makeClient('a');
+    hub.join(a, 'alice');
+
+    hub.handle(a, JSON.stringify({ type: 'message', channel: 'general', text: 'моё', nonce: 'n7' }));
+    expect(lastMessage(a)?.nonce).toBe('n7');
+  });
+
   it('отклоняет сообщение в несуществующий канал', () => {
     const a = makeClient('a');
     hub.join(a, 'alice');
