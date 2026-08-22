@@ -1,0 +1,46 @@
+name: node
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'ws-chat/**'
+      - 'lan-drop/**'
+      - '.github/workflows/node.yml'
+  pull_request:
+    paths:
+      - 'ws-chat/**'
+      - 'lan-drop/**'
+      - '.github/workflows/node.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: node-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        project: [ws-chat, lan-drop]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: ${{ matrix.project }}/package-lock.json
+
+      - run: npm ci
+        working-directory: ${{ matrix.project }}
+
+      - run: npm run typecheck
+        working-directory: ${{ matrix.project }}
+
+      - run: npm test
+        working-directory: ${{ matrix.project }}
