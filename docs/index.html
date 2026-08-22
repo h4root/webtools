@@ -1,0 +1,205 @@
+<meta charset="utf-8">
+<title>webtools</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;600&family=JetBrains+Mono:wght@400;700&display=swap">
+
+<style>
+  :root {
+    --ground: #eff3ef;
+    --panel: #ffffff;
+    --sunken: #f4f7f4;
+    --line: #d8e0d9;
+    --text: #141a16;
+    --dim: #5b6c60;
+    --accent: #0f7a45;
+    --shadow: 0 1px 2px rgba(20, 26, 22, 0.06);
+    color-scheme: light;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground: #0c0f0d;
+      --panel: #121613;
+      --sunken: #0f140f;
+      --line: #1f2a22;
+      --text: #d7e2d9;
+      --dim: #6f8577;
+      --accent: #35d07f;
+      --shadow: none;
+      color-scheme: dark;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --ground: #0c0f0d;
+    --panel: #121613;
+    --sunken: #0f140f;
+    --line: #1f2a22;
+    --text: #d7e2d9;
+    --dim: #6f8577;
+    --accent: #35d07f;
+    --shadow: none;
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--text);
+    font-family: 'IBM Plex Sans', system-ui, sans-serif;
+    font-size: 16px;
+    line-height: 1.65;
+  }
+
+  .wrap {
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 72px 24px 80px;
+    display: flex;
+    flex-direction: column;
+    gap: 28px;
+  }
+
+  h1 {
+    margin: 0;
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-size: 30px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    color: var(--accent);
+  }
+
+  .lede { margin: 0; color: var(--dim); font-size: 17px; max-width: 60ch; }
+
+  h2 {
+    margin: 16px 0 0;
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.8px;
+    text-transform: uppercase;
+    color: var(--dim);
+  }
+
+  .list { display: flex; flex-direction: column; gap: 10px; }
+
+  .item {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    padding: 16px 18px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--panel);
+    box-shadow: var(--shadow);
+  }
+
+  .item-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  .item-name {
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-size: 15px;
+    font-weight: 700;
+  }
+
+  .item p { margin: 0; color: var(--dim); font-size: 14.5px; }
+
+  a { color: var(--accent); text-underline-offset: 2px; }
+  a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 2px; }
+
+  .manual {
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-size: 12.5px;
+    white-space: nowrap;
+  }
+
+  .no-manual {
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-size: 12.5px;
+    color: var(--dim);
+    white-space: nowrap;
+  }
+
+  .foot {
+    margin-top: 24px;
+    padding-top: 20px;
+    border-top: 1px solid var(--line);
+    color: var(--dim);
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-size: 12px;
+    line-height: 1.7;
+  }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>webtools</h1>
+    <p class="lede">Небольшие самостоятельные инструменты в одном репозитории. Два браузерных — для локальной сети, четыре консольных. Каждый собирается и запускается у себя.</p>
+  </header>
+
+  <h2>Браузерные</h2>
+  <div class="list">
+    <div class="item">
+      <div class="item-head">
+        <span class="item-name">ws-chat</span>
+        <a class="manual" href="ws-chat/">справочник →</a>
+      </div>
+      <p>Чат для локальной сети: каналы и личные переписки, голосовые каналы и звонки, зашифрованные вложения. Страница не делает ни одного внешнего запроса.</p>
+    </div>
+    <div class="item">
+      <div class="item-head">
+        <span class="item-name">lan-drop</span>
+        <span class="no-manual">README в репозитории</span>
+      </div>
+      <p>Передача файлов между устройствами в одной сети прямо из браузера, по WebRTC DataChannel. Сервер сводит пиров, но байты через него не идут.</p>
+    </div>
+  </div>
+
+  <h2>Консольные</h2>
+  <div class="list">
+    <div class="item">
+      <div class="item-head">
+        <span class="item-name">certcheck</span>
+        <span class="no-manual">README в репозитории</span>
+      </div>
+      <p>Срок и валидность TLS-сертификатов для списка доменов.</p>
+    </div>
+    <div class="item">
+      <div class="item-head">
+        <span class="item-name">dotenv-lint</span>
+        <span class="no-manual">README в репозитории</span>
+      </div>
+      <p>Сверка <code>.env</code> с <code>.env.example</code>: пропущенные ключи, плейсхолдеры и слабые значения.</p>
+    </div>
+    <div class="item">
+      <div class="item-head">
+        <span class="item-name">leakcheck</span>
+        <span class="no-manual">README в репозитории</span>
+      </div>
+      <p>Сканер захардкоженных секретов с хуком для pre-commit.</p>
+    </div>
+    <div class="item">
+      <div class="item-head">
+        <span class="item-name">captive-automatic</span>
+        <span class="no-manual">README в репозитории</span>
+      </div>
+      <p>Автоматическая авторизация в сетях с captive-порталом.</p>
+    </div>
+  </div>
+
+  <p class="lede">Три консольных написаны без единой рантайм-зависимости — это условие, а не совпадение.</p>
+
+  <footer class="foot">
+    Исходники: <a href="https://github.com/h4root/webtools">github.com/h4root/webtools</a><br>
+    Справочник ws-chat собран Claude Opus 5 по коду и истории изменений проекта.
+  </footer>
+</div>
