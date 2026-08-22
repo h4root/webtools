@@ -1,0 +1,647 @@
+<meta charset="utf-8">
+<title>Справочник ws-chat</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;600&family=JetBrains+Mono:wght@400;700&display=swap">
+
+<style>
+  /* Палитра взята у самого чата: справочник должен читаться как его
+     продолжение, а не как отдельный сайт про него. Светлая тема собрана
+     заново — простая инверсия убила бы контраст акцента. */
+  :root {
+    --ground: #eff3ef;
+    --panel: #ffffff;
+    --sunken: #f4f7f4;
+    --line: #d8e0d9;
+    --text: #141a16;
+    --dim: #5b6c60;
+    --accent: #0f7a45;
+    --accent-soft: #e2f0e8;
+    --warn: #8a6410;
+    --warn-soft: #f7efdc;
+    --shadow: 0 1px 2px rgba(20, 26, 22, 0.06);
+  }
+
+  :root:not([data-theme="light"]) {
+    color-scheme: light;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground: #0c0f0d;
+      --panel: #121613;
+      --sunken: #0f140f;
+      --line: #1f2a22;
+      --text: #d7e2d9;
+      --dim: #6f8577;
+      --accent: #35d07f;
+      --accent-soft: #16281d;
+      --warn: #d0a03a;
+      --warn-soft: #241d0e;
+      --shadow: none;
+      color-scheme: dark;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --ground: #0c0f0d;
+    --panel: #121613;
+    --sunken: #0f140f;
+    --line: #1f2a22;
+    --text: #d7e2d9;
+    --dim: #6f8577;
+    --accent: #35d07f;
+    --accent-soft: #16281d;
+    --warn: #d0a03a;
+    --warn-soft: #241d0e;
+    --shadow: none;
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--text);
+    font-family: 'IBM Plex Sans', system-ui, sans-serif;
+    font-size: 16px;
+    line-height: 1.65;
+  }
+
+  code, kbd, pre, .mono {
+    font-family: 'JetBrains Mono', ui-monospace, 'Courier New', monospace;
+  }
+
+  .shell {
+    display: grid;
+    grid-template-columns: 232px minmax(0, 1fr);
+    gap: 40px;
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 40px 24px 80px;
+  }
+
+  /* Рельс повторяет список каналов в самом чате: те же решётки, та же
+     подсветка активного. Ходить по справочнику так же, как по чату. */
+  .rail {
+    position: sticky;
+    top: 40px;
+    align-self: start;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .brand {
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 700;
+    font-size: 15px;
+    letter-spacing: 1px;
+    color: var(--accent);
+    padding: 0 10px 4px;
+  }
+
+  .brand-sub {
+    padding: 0 10px 16px;
+    margin: 0;
+    color: var(--dim);
+    font-size: 12.5px;
+    line-height: 1.5;
+  }
+
+  .tab {
+    display: block;
+    width: 100%;
+    padding: 7px 10px;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--dim);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    text-align: left;
+    cursor: pointer;
+  }
+
+  .tab:hover { color: var(--text); background: var(--sunken); }
+
+  .tab[aria-selected="true"] {
+    background: var(--accent-soft);
+    color: var(--accent);
+    font-weight: 700;
+  }
+
+  .tab:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  .content { min-width: 0; max-width: 68ch; }
+
+  .panel { display: flex; flex-direction: column; gap: 20px; }
+
+  h1 {
+    margin: 0;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 26px;
+    font-weight: 700;
+    letter-spacing: -0.3px;
+    text-wrap: balance;
+  }
+
+  h2 {
+    margin: 20px 0 0;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 17px;
+    font-weight: 700;
+    text-wrap: balance;
+  }
+
+  h3 {
+    margin: 12px 0 0;
+    font-size: 15px;
+    font-weight: 600;
+  }
+
+  .lede { margin: 0; color: var(--dim); font-size: 17px; }
+  p { margin: 0; }
+  ul { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 8px; }
+  li::marker { color: var(--accent); }
+
+  a { color: var(--accent); text-underline-offset: 2px; }
+  a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 2px; }
+
+  code {
+    padding: 1px 5px;
+    border-radius: 4px;
+    background: var(--sunken);
+    border: 1px solid var(--line);
+    font-size: 0.86em;
+  }
+
+  pre {
+    margin: 0;
+    padding: 14px 16px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--sunken);
+    overflow-x: auto;
+    font-size: 13px;
+    line-height: 1.6;
+  }
+
+  pre code { padding: 0; border: 0; background: none; font-size: inherit; }
+
+  .table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+    background: var(--panel);
+  }
+
+  th, td { padding: 9px 12px; text-align: left; border-bottom: 1px solid var(--line); vertical-align: top; }
+  tr:last-child td { border-bottom: 0; }
+
+  th {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.4px;
+    text-transform: uppercase;
+    color: var(--dim);
+  }
+
+  td:first-child { font-family: 'JetBrains Mono', monospace; font-size: 13px; white-space: nowrap; }
+
+  /* Отдельный вид для того, что честно не работает или отсутствует.
+     Это содержание, а не украшение: границы важнее возможностей. */
+  .limit {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 14px 16px;
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--warn);
+    border-radius: 8px;
+    background: var(--warn-soft);
+    font-size: 14.5px;
+  }
+
+  .limit-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.7px;
+    text-transform: uppercase;
+    color: var(--warn);
+  }
+
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px; }
+
+  .card {
+    padding: 14px 16px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--panel);
+    box-shadow: var(--shadow);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .card-title {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    font-weight: 700;
+  }
+
+  .card p { color: var(--dim); font-size: 14px; }
+
+  .colophon {
+    grid-column: 1 / -1;
+    margin-top: 48px;
+    padding-top: 20px;
+    border-top: 1px solid var(--line);
+    color: var(--dim);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    line-height: 1.7;
+  }
+
+  @media (max-width: 860px) {
+    .shell { grid-template-columns: 1fr; gap: 24px; padding: 24px 18px 60px; }
+    .rail { position: static; flex-direction: row; overflow-x: auto; gap: 4px; padding-bottom: 6px; }
+    .brand, .brand-sub { display: none; }
+    .tab { width: auto; white-space: nowrap; }
+    .content { max-width: none; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { animation: none !important; transition: none !important; }
+  }
+</style>
+
+<div class="shell">
+  <nav class="rail" role="tablist" aria-label="Разделы справочника">
+    <div class="brand">ws-chat</div>
+    <p class="brand-sub">Чат для локальной сети: текст, голос, файлы напрямую между устройствами.</p>
+    <button class="tab" role="tab" id="tab-overview" aria-controls="p-overview" aria-selected="true"># обзор</button>
+    <button class="tab" role="tab" id="tab-run" aria-controls="p-run" aria-selected="false"># запуск</button>
+    <button class="tab" role="tab" id="tab-accounts" aria-controls="p-accounts" aria-selected="false"># аккаунты</button>
+    <button class="tab" role="tab" id="tab-messages" aria-controls="p-messages" aria-selected="false"># общение</button>
+    <button class="tab" role="tab" id="tab-voice" aria-controls="p-voice" aria-selected="false"># голос</button>
+    <button class="tab" role="tab" id="tab-transfer" aria-controls="p-transfer" aria-selected="false"># передача</button>
+    <button class="tab" role="tab" id="tab-security" aria-controls="p-security" aria-selected="false"># безопасность</button>
+    <button class="tab" role="tab" id="tab-dev" aria-controls="p-dev" aria-selected="false"># разработка</button>
+  </nav>
+
+  <main class="content">
+    <section class="panel" role="tabpanel" id="p-overview" aria-labelledby="tab-overview" tabindex="-1">
+      <h1>Что это такое</h1>
+      <p class="lede">Чат, который живёт внутри одной локальной сети. Ничего не уходит наружу: ни сообщения, ни файлы, ни голос, ни единого запроса со страницы к чужому серверу.</p>
+
+      <p>Один человек запускает сервер на своей машине, остальные открывают его адрес в браузере. Сервер хранит переписку и раздаёт клиент; голос, звонки и прямая передача файлов идут между устройствами напрямую, минуя его.</p>
+
+      <div class="cards">
+        <div class="card">
+          <div class="card-title">Текст</div>
+          <p>Каналы и личные переписки, история переживает перезапуск, поиск, реакции, ответы, правка и удаление своих сообщений.</p>
+        </div>
+        <div class="card">
+          <div class="card-title">Голос</div>
+          <p>Групповые голосовые каналы и звонок один-на-один. Звук идёт P2P, сервер только сводит участников.</p>
+        </div>
+        <div class="card">
+          <div class="card-title">Файлы</div>
+          <p>Вложения до 25 МБ — через сервер, зашифрованными. Что угодно любого размера — напрямую между устройствами.</p>
+        </div>
+        <div class="card">
+          <div class="card-title">Устройства</div>
+          <p>Аккаунт открыт где угодно разом. Вход на новом устройстве по короткому коду, без набора пароля.</p>
+        </div>
+      </div>
+
+      <h2>С чего начать</h2>
+      <pre><code>cd ws-chat
+cp .env.example .env
+npm install
+npm run dev</code></pre>
+      <p>Дальше открыть <code>http://localhost:3000</code>. Адреса, по которым сервер виден с других устройств, печатаются при старте — их и раздавать.</p>
+
+      <div class="limit">
+        <span class="limit-label">Сразу о границах</span>
+        <p>Голос и звонки с чужих устройств не заработают, пока сервер не поднят по HTTPS: браузеры выдают микрофон только в защищённом контексте и молча отказывают в остальных случаях. Это решается одной командой — см. раздел «Запуск».</p>
+      </div>
+    </section>
+
+    <section class="panel" role="tabpanel" id="p-run" aria-labelledby="tab-run" tabindex="-1" hidden>
+      <h1>Запуск и настройка</h1>
+      <p class="lede">Сборки нет: TypeScript исполняется как есть через tsx, фронтенд — обычные ES-модули без бандлера.</p>
+
+      <h2>Команды</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Команда</th><th>Что делает</th></tr></thead>
+          <tbody>
+            <tr><td>npm run dev</td><td>Сервер с перезапуском при правках</td></tr>
+            <tr><td>npm start</td><td>Обычный запуск</td></tr>
+            <tr><td>npm test</td><td>Прогон тестов</td></tr>
+            <tr><td>npm run typecheck</td><td>Проверка типов без сборки</td></tr>
+            <tr><td>npm run cert</td><td>Самоподписанный сертификат для HTTPS</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h2>Переменные окружения</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Переменная</th><th>По умолчанию</th><th>Назначение</th></tr></thead>
+          <tbody>
+            <tr><td>PORT</td><td>3000</td><td>Порт HTTP и WebSocket</td></tr>
+            <tr><td>HOST</td><td>0.0.0.0</td><td>Адрес привязки</td></tr>
+            <tr><td>DATA_DIR</td><td>./data</td><td>История, аккаунты, сессии, вложения, ключ</td></tr>
+            <tr><td>UPLOAD_KEY</td><td>—</td><td>Мастер-ключ, 32 байта в hex. Не задан — заводится сам</td></tr>
+            <tr><td>TLS_KEY</td><td>—</td><td>Приватный ключ; вместе с TLS_CERT включает HTTPS</td></tr>
+            <tr><td>TLS_CERT</td><td>—</td><td>Сертификат</td></tr>
+            <tr><td>TRUST_PROXY</td><td>—</td><td>Доверять <code>X-Forwarded-For</code>. Только за своим прокси</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="limit">
+        <span class="limit-label">Мастер-ключ</span>
+        <p>Без него не открыть ни вложения, ни историю. Он лежит в <code>DATA_DIR/upload.key</code>; если каталог данных не переживает деплой, задавай <code>UPLOAD_KEY</code> явно. Потеряешь — данные не восстановить: сервер скажет об этом в лог и откажется писать поверх, чтобы не затереть то, что ещё можно спасти правильным ключом.</p>
+      </div>
+
+      <h2>HTTPS</h2>
+      <p>Микрофон, камера и WebRTC-медиа доступны браузеру только в защищённом контексте — это HTTPS или <code>localhost</code>. По <code>http://&lt;ip-хоста&gt;:3000</code> с чужого устройства микрофон блокируется молча, даже без запроса разрешения.</p>
+      <pre><code>npm run cert
+npm run cert -- chat.local   # добавить своё имя
+npm run cert -- --force      # заменить существующий</code></pre>
+      <p>Скрипт сам находит адреса хоста и вписывает их в <code>subjectAltName</code> — без этого браузер отвергнет сертификат, даже если принять предупреждение. Ключ пишется с правами 600 в <code>DATA_DIR/tls/</code>, сертификат живёт 825 дней: это предел, после которого macOS и iOS перестают доверять вовсе. Команда печатает готовые строки для <code>.env</code>.</p>
+
+      <div class="limit">
+        <span class="limit-label">Предупреждение браузера останется</span>
+        <p>Сертификат самоподписанный, поэтому на каждом устройстве один раз придётся нажать «Дополнительно» → «Перейти». Это не недоделка: доверия к самоподписанному сертификату иначе не получить. Шифрование при этом настоящее — трафик в сети не читается, включая пароль при входе. Полностью «зелёный замок» даёт только сертификат от публичного УЦ, а для него нужны домен и внешний адрес.</p>
+      </div>
+    </section>
+
+    <section class="panel" role="tabpanel" id="p-accounts" aria-labelledby="tab-accounts" tabindex="-1" hidden>
+      <h1>Аккаунты и устройства</h1>
+      <p class="lede">Два способа войти: гостем и с паролем. Разница не в удобстве, а в том, что остаётся после выхода.</p>
+
+      <h2>Гость</h2>
+      <p>Называет только ник. Личность переживает и перезагрузку страницы, и перезапуск сервера, а заканчивается двумя способами: по кнопке «Выйти» или сама собой, если гостем сутки не пользовались. Второе важно — вкладку закрывают гораздо чаще, чем жмут «Выйти», и без срока годности ник оставался бы занятым навсегда.</p>
+      <p>В обоих случаях гость стирается целиком: аккаунт, все его сессии, сообщения в каналах, обе стороны личной переписки, реакции и вложения. Заодно вычищаются снапшоты цитат — они специально переживают обычное удаление сообщения, и без этого текст стёртого гостя остался бы висеть в чужих ответах.</p>
+      <p>Сутки считаются от последнего использования, а не от входа. Открытая вкладка тоже считается активностью: уборка не трогает тех, кто сейчас в сети.</p>
+
+      <h2>С паролем</h2>
+      <p>Ник закрепляется навсегда, история переживает выход, а выход гасит только текущую сессию. Гостем такой ник занять уже нельзя.</p>
+      <p>Пароль меняется в настройках: нужен текущий, новый берёт свежую соль, и все остальные сессии гасятся — если старый пароль увели, открытое под ним в других местах доверия больше не заслуживает. Сессия, с которой меняли, остаётся, иначе меняющий выбьет сам себя.</p>
+
+      <h2>Несколько устройств разом</h2>
+      <p>Устройства не выбивают друг друга. В списке участников ник показывается один раз, «вышел» объявляется только когда отключилось последнее. Личные сообщения и отметки прочтения приходят на все.</p>
+      <p>Голос при этом одноустройственный: вход в голосовой канал с нового устройства выводит из него прежнее. Два микрофона одного человека дают эхо, а сигналинг, адресованный по нику, не смог бы выбрать между ними.</p>
+      <p>Звонок, наоборот, звонит на все устройства адресата разом. Кто первым взял трубку, тот и говорит; остальным приходит отбой с причиной <code>answered-elsewhere</code>. После приёма сигналинг идёт не по нику, а между двумя конкретными соединениями — иначе SDP мог бы уехать на устройство, которое трубку не брало.</p>
+
+      <h2>Вход по коду</h2>
+      <p>На новом устройстве есть «войти с другого устройства»: оно показывает шесть символов, а там, где ты уже вошёл, этот код вводится в настройках, в разделе «Устройства». Пароль на телефоне набирать не надо.</p>
+      <p>Код живёт две минуты, работает один раз и умирает вместе с сокетом, который его просил. В алфавите нет нуля, единицы, I, L и O — код читают с чужого экрана.</p>
+
+      <div class="limit">
+        <span class="limit-label">Что спрашивают при подтверждении</span>
+        <p>Код отдаёт не чужой аккаунт, а твой собственный — чужому устройству. Главная опасность тут не подбор, а «введи этот код, чтобы подтвердить» от постороннего, поэтому подтверждение требует явного согласия с прямым предупреждением. Гость подключать устройства не может: передавать ему нечего.</p>
+      </div>
+
+      <h2>Список устройств</h2>
+      <p>В настройках видно, где открыт аккаунт и когда им пользовались в последний раз. Любое отзывается по отдельности — отозванное сразу отключается, и по его токену больше не войти. Рядом «выйти со всех устройств», если проще погасить всё разом.</p>
+      <p>Наружу отдаётся только публичный идентификатор сессии; хэш токена клиент не видит. Отозвать чужую сессию, подобрав идентификатор, нельзя — проверка идёт в пределах своего ника.</p>
+    </section>
+
+    <section class="panel" role="tabpanel" id="p-messages" aria-labelledby="tab-messages" tabindex="-1" hidden>
+      <h1>Общение</h1>
+      <p class="lede">Текстовый костяк в духе Discord: именованные каналы плюс отдельный раздел личных переписок.</p>
+
+      <h2>Каналы и личные</h2>
+      <ul>
+        <li>Каналы создаются и удаляются из сайдбара. Удаление уносит историю канала, последний канал удалить нельзя, всего каналов не больше ста.</li>
+        <li>Личные не зависят от присутствия: список собеседников строится по переписке, а не по онлайну. Написать можно тому, кого сейчас нет в сети — сообщение дождётся его в истории.</li>
+        <li>История живёт на сервере и переживает перезапуск. Клиент подтягивает её при открытии разговора.</li>
+      </ul>
+
+      <h2>Непрочитанное</h2>
+      <p>Разговор с новыми сообщениями белеет и получает кружок со счётчиком справа (после 99 показывает «99+»). Личные всплывают наверх по свежести последнего сообщения; порядок каналов остаётся неизменным, чтобы список не прыгал под курсором.</p>
+      <p>Отметки чтения живут на сервере, а не в памяти вкладки: счётчики переживают перезагрузку и синхронизируются между устройствами — прочитал на телефоне, на ноутбуке кружок погас сам. Прочитанным считается то, что ты действительно видел: разговор открыт и лента внизу. Отметка только растёт, поэтому два устройства, читающие вразнобой, не возвращают друг другу уже разобранное.</p>
+      <p>Впервые вошедшему старый хвост непрочитанным не считается — истории чтения у него ещё нет. А вот разговор, заведённый пока знакомый аккаунт был офлайн, отсчитывается с нуля: его действительно не читали.</p>
+
+      <h2>Сообщения</h2>
+      <ul>
+        <li><strong>Правка и удаление</strong> своих сообщений, инлайн, с пометкой «изм.».</li>
+        <li><strong>Реакции</strong> — палитра из восьми эмодзи, чипы со счётчиком и подсветкой своих.</li>
+        <li><strong>Ответы</strong> — цитата над сообщением, клик по ней прокручивает к оригиналу с подсветкой. Снапшот цитаты переживает удаление оригинала.</li>
+        <li><strong>Упоминания</strong> — своё имя выделяется, сообщение помечается.</li>
+        <li><strong>Индикатор набора</strong> по каналу и по личке.</li>
+        <li><strong>Ссылки</strong> кликабельны. Узнаются только явные <code>http</code> и <code>https</code>: голый домен слишком легко спутать с текстом. Схема проверяется повторно, адрес собирается элементом со свойством <code>href</code>, без разметки. Хвостовая пунктуация и скобка вокруг ссылки в неё не попадают.</li>
+      </ul>
+
+      <h2>Поиск</h2>
+      <p>Лупа в шапке ищет по каналам и твоим личным перепискам. Доступ проверяется на сервере, а не в интерфейсе — чужие личные не найдутся, как точно ни угадай слово. Клик по находке открывает разговор и подсвечивает сообщение; если оно старше подгруженного куска истории, об этом говорится прямо, а не молча ничего не подсвечивается.</p>
+
+      <h2>Вложения</h2>
+      <p>Файлы и картинки, до 25 МБ и до десяти штук на сообщение. Картинки показываются в ленте, прочее — карточкой-ссылкой. Файл можно вставить из буфера или перетащить в окно: скриншот не надо сначала сохранять на диск.</p>
+
+      <h2>Мелочи, которые заметны в работе</h2>
+      <ul>
+        <li>Лента не выдёргивается из-под курсора: автоскролл только когда ты и так внизу, иначе появляется плашка «новых: N».</li>
+        <li>Обрыв связи не глотает сообщения — отправленное копится в очереди, видно в шапке, и уходит после переподключения.</li>
+        <li>Непрочитанное попадает в заголовок вкладки: свёрнутое окно иначе ничего не скажет.</li>
+        <li>На узких экранах сайдбар уезжает за край и открывается гамбургером.</li>
+      </ul>
+    </section>
+
+    <section class="panel" role="tabpanel" id="p-voice" aria-labelledby="tab-voice" tabindex="-1" hidden>
+      <h1>Голос и звонки</h1>
+      <p class="lede">Звук идёт между устройствами напрямую. Сервер видит только сигналинг — кто с кем соединяется, но не что говорят.</p>
+
+      <h2>Голосовые каналы</h2>
+      <p>По умолчанию <code>general</code> и <code>games</code>, новые создаются из сайдбара. Клик подключает, под каждым каналом видно, кто в нём. Ты в одном канале за раз, клик по другому переключает.</p>
+      <ul>
+        <li>Аудио — WebRTC-mesh внутри канала: каждый шлёт микрофон каждому, Opus поверх UDP и SRTP. Сигнал ходит только между участниками одного канала.</li>
+        <li>Нижняя панель: микрофон, заглушка (глушит звук всех и свой микрофон заодно) и выход.</li>
+        <li><code>iceServers</code> пуст — на локальной сети хватает host-кандидатов, трафик не покидает сеть.</li>
+      </ul>
+
+      <h2>Мут виден остальным</h2>
+      <p>У молчащего в списке канала гаснет зелёная точка и появляется перечёркнутый микрофон. Без этого собеседники ждали бы ответа от того, кто их не слышит.</p>
+      <p>Наружу уходит не сам мут, а то, слышно тебя или нет: заглушка выключает микрофон тоже, и снаружи это неотличимо. Состояние держит сервер, поэтому вошедший позже сразу видит, кто уже молчит. Мут принадлежит устройству, а не аккаунту — выход из канала и переход на другое устройство начинают с живого микрофона.</p>
+      <p>Удаление голосового канала выгоняет тех, кто в нём сидел: клиент гасит микрофон и сворачивает соединение. Иначе сервер про них уже забыл, а у них горит микрофон и панель показывает канал, которого нет.</p>
+
+      <h2>Звонок один-на-один</h2>
+      <p>В личке есть кнопка «Позвонить»: приглашение, входящий баннер с «Принять / Отклонить», соединение. Звонящий шлёт offer после приёма, поэтому glare не возникает. Если ника нет в сети — придёт отбой с причиной <code>offline</code>; если абонент уже в звонке — автоматический отказ с <code>busy</code>.</p>
+      <p>Панель звонка живёт поверх любого канала и показывает, кто говорит (зелёное кольцо, детект речи через WebAudio локально), уровень по каждому участнику и качество связи из <code>getStats()</code> раз в секунду: задержку, потери, джиттер, битрейт, кодек и используемый транспорт. Точка слева меняет цвет по качеству. Панель перетаскивается за верхний хват.</p>
+
+      <h2>Настройки звука</h2>
+      <p>Шестерёнка снизу слева: выбор микрофона и динамика, шумоподавление, эхоподавление, автоусиление. Смена устройства применяется на лету в активном голосе или звонке. Там же выбор шрифта — все три забандлены локально и работают офлайн.</p>
+
+      <div class="limit">
+        <span class="limit-label">Границы</span>
+        <p>Mesh рассчитан на небольшую группу: каждый шлёт каждому, и на десятках участников это перестанет работать — нужен SFU. Демонстрации экрана и громкости на участника пока нет.</p>
+      </div>
+    </section>
+
+    <section class="panel" role="tabpanel" id="p-transfer" aria-labelledby="tab-transfer" tabindex="-1" hidden>
+      <h1>Передача файлов напрямую</h1>
+      <p class="lede">Отдельный путь для файлов, которые не должны попадать на сервер вообще: они идут между устройствами по WebRTC DataChannel.</p>
+
+      <p>Кнопка со скрепкой в шапке открывает панель поверх чата — это встроенный lan-drop. Лимита в 25 МБ, как у вложений, здесь нет, и на диск сервера ничего не ложится.</p>
+
+      <h2>Как это устроено</h2>
+      <ul>
+        <li>Сигналинг живёт на отдельном пути <code>/drop</code> того же порта и <strong>требует сессию</strong>: клиент первым сообщением предъявляет токен, и только тогда попадает в реестр. Без этого сигналинг был бы дырой в обход всего входа — кто угодно в сети видел бы список устройств и стучался к ним.</li>
+        <li>Пир называется <code>ник · устройство</code>, поэтому два окна одного человека различимы. Адресуются именно устройства, а не ники: файл идёт в конкретное.</li>
+        <li>Приём подтверждается вручную. Входящее пишется на диск по мере поступления, так что размер файла не упирается в память вкладки.</li>
+      </ul>
+
+      <h2>Соединение живёт, пока ты в чате</h2>
+      <p>А не пока открыта панель. Иначе файл можно было бы прислать только в те минуты, когда получатель смотрит именно в эту панель, — то есть практически никогда. Предложение, пришедшее при закрытой панели, метит кнопку в шапке и попадает в счётчик заголовка вкладки.</p>
+
+      <h2>Отмена</h2>
+      <p>Начатую передачу можно прервать с любой стороны. Отмена идёт по сигналингу, а не по каналу данных: канал бывает забит очередью чанков или уже мёртв, а отмена должна дойти сразу. Отмена до ответа снимает предложение у получателя; недописанный файл не закрывается, а отбрасывается.</p>
+
+      <div class="limit">
+        <span class="limit-label">Где запасной путь</span>
+        <p>Запись на диск по мере поступления работает через File System Access API. Там, где его нет — Firefox, Safari, — включается сборка в памяти вкладки с сохранением в конце. Об этом предупреждают до согласия на приём, а не после.</p>
+      </div>
+    </section>
+
+    <section class="panel" role="tabpanel" id="p-security" aria-labelledby="tab-security" tabindex="-1" hidden>
+      <h1>Безопасность</h1>
+      <p class="lede">Что лежит на диске, чем закрыто и от чего это на самом деле защищает.</p>
+
+      <h2>Что лежит на диске</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Файл</th><th>Содержимое</th><th>Как защищено</th></tr></thead>
+          <tbody>
+            <tr><td>store.json</td><td>переписка, каналы, реакции, отметки чтения</td><td>AES-256-GCM на ключе, производном от мастер-ключа</td></tr>
+            <tr><td>uploads/*</td><td>вложения</td><td>AES-256-GCM; имя файла — HMAC от содержимого</td></tr>
+            <tr><td>accounts.json</td><td>ники, scrypt-хэши паролей</td><td>права 600; пароль не восстановить и без шифрования</td></tr>
+            <tr><td>sessions.json</td><td>ники, sha256 токенов</td><td>права 600; по хэшу токена войти нельзя</td></tr>
+            <tr><td>upload.key</td><td>мастер-ключ</td><td>права 600</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>История и вложения шифруются разными ключами: у истории он выводится из мастер-ключа через HMAC. Утечка одного не раскрывает второе, но хранить и переносить надо по-прежнему только один.</p>
+      <p>Аккаунты и сессии намеренно не шифруются. Там нет ничего, что шифрование защитило бы дополнительно: пароли уже посолены и прогнаны через scrypt, а от токенов хранятся только хэши.</p>
+
+      <h2>Вход</h2>
+      <ul>
+        <li>Пароль — scrypt (N=2¹⁵, r=8) с индивидуальной солью, сверка через <code>timingSafeEqual</code>. Проверка стоит около 100 мс: вход этого не замечает, перебор дорожает на порядки.</li>
+        <li>Вход под несуществующим ником всё равно прогоняет KDF по пустышке, чтобы по времени ответа нельзя было понять, какие ники заведены. Ответ на неверный ник и на неверный пароль одинаковый.</li>
+        <li>Серия промахов замедляет вход по этому нику с нарастанием до пятнадцати минут.</li>
+        <li>Сессия — случайный токен; на сервере лежит только его sha256. Утёкший файл сессий не даёт войти ни за кого.</li>
+        <li>Сессия живёт 30 дней у аккаунта с паролем и сутки у гостя. На аккаунт хранится не больше десяти — самые старые вытесняются.</li>
+      </ul>
+
+      <h2>Вложения</h2>
+      <p>Файлы не лежат в открытом виде и не раздаются по угадываемой ссылке. Токен нужен и для загрузки, и для скачивания, и передаётся заголовком, а не в URL: открыть <code>/uploads/&lt;id&gt;</code> в браузере не выйдет, вернётся 401.</p>
+      <p>Байты сжимаются gzip, если это что-то даёт, и шифруются AES-256-GCM. Метаданные открыты, но входят в AAD — подменить их, не сломав проверку, нельзя. Имя блоба — <code>HMAC(ключ, sha256(содержимое))</code>: одинаковые файлы занимают одно место, но по имени нельзя понять, что внутри, как выдавал бы обычный хэш.</p>
+      <p>Скачать вложение может только участник разговора, в котором оно приложено: картинку из чужой личной переписки не вытащить, даже зная id. Размер и mime берутся из самого блоба, а не из слов клиента. В ленте показываются только заведомо безопасные растровые форматы, всё остальное отдаётся как вложение с <code>nosniff</code>, чтобы svg и html не исполнились в origin.</p>
+
+      <h2>Недоверенный ввод</h2>
+      <p>Всё, что приходит по сокету, разбирается на границе: длины, типы, белые списки. Имена каналов проверяются по шаблону, а не по чёрному списку, поэтому <code>../</code> и разделители пути туда не проходят. Размер кадра ограничен ещё до разбора. На эту часть есть отдельный набор тестов — граница слишком важна, чтобы проверять её глазами.</p>
+
+      <div class="limit">
+        <span class="limit-label">От чего это не защищает</span>
+        <p>Сервер видит всё: он хранит переписку и может её прочитать. Шифрование на диске спасает от украденного диска и от чужого доступа к файлам, но не от того, кто владеет сервером.</p>
+        <p>Сквозного шифрования нет. И пока клиент приходит с того же сервера, оно не решит задачу целиком: сервер может подменить сам скрипт. Настоящий выход — упакованное приложение, которое приносит свой код.</p>
+        <p>По <code>http://</code> пароль виден любому, кто слушает сеть. На экране входа об этом висит предупреждение; гостевого входа это не касается. Решение — HTTPS. Вариант с SRP, при котором пароль вообще не покидает устройство, пока в планах.</p>
+      </div>
+    </section>
+
+    <section class="panel" role="tabpanel" id="p-dev" aria-labelledby="tab-dev" tabindex="-1" hidden>
+      <h1>Разработка</h1>
+      <p class="lede">TypeScript без сборки, фронтенд без бандлера, всё стороннее вложено локально.</p>
+
+      <h2>Раскладка</h2>
+      <pre><code>src/
+  protocol.ts   типы сообщений и проверка входящих
+  store.ts      каналы, история, отметки чтения, поиск
+  auth.ts       аккаунты, сессии, защита от перебора
+  blobs.ts      вложения: gzip, AES-256-GCM, дедупликация
+  linkcodes.ts  короткие коды входа
+  sealed.ts     запечатывание JSON
+  chat.ts       Hub: разговоры, присутствие, сигналинг
+  server.ts     Express и два WebSocket-пути
+  tls.ts        адреса хоста и конфиг для сертификата
+
+public/
+  app.js        сборка клиента: соединение, лента, панели
+  keys.js       ключи разговоров
+  typing.js     индикатор набора
+  reactions.js  чипы, палитра, всплеск
+  linkify.js    разбор текста на ссылки и упоминания
+  search.js gate.js drop.js dnd.js menu.js
+  attachments.js voice.js call.js settings.js
+  dom.js format.js icons.js</code></pre>
+
+      <h2>Как принято резать</h2>
+      <p>Модуль — это фабрика с явными зависимостями: <code>createVoice</code>, <code>createSearch</code>, <code>createGate</code>. Состояние держится приватным внутри, наружу торчат только нужные функции. Новая заметная функциональность заводится сразу своим модулем, а не дописывается в существующий «пока что»: <code>app.js</code> дважды доходил до полутора тысяч строк, и оба раза разбор превращался в отдельную работу.</p>
+
+      <h2>Тесты</h2>
+      <pre><code>npm test
+npm run typecheck
+npx vitest run src/store.test.ts
+npx vitest run -t "поиск"</code></pre>
+      <p>Логика на сервере покрывается по полному циклу: сначала падающий тест, потом реализация. Клиент — исключение, но не целиком: чистые куски вроде разбора ссылок, ключей разговоров и таймеров индикатора набора вынесены в модули и тоже проверяются тестами. DOM, WebRTC и всё, что требует человека или устройства, проверяется руками.</p>
+
+      <h2>Протокол</h2>
+      <p>JSON поверх WebSocket. Клиент отправляет <code>auth</code>, <code>message</code>, <code>history</code>, <code>search</code>, <code>read</code>, <code>edit</code>, <code>delete</code>, <code>react</code>, <code>typing</code>, управление каналами, а также <code>voice-*</code> и <code>call-*</code> для сигналинга.</p>
+      <p>Сервер отвечает <code>welcome</code>, <code>channels</code>, <code>dms</code>, <code>presence</code>, <code>message</code>, <code>history</code>, <code>reads</code>, <code>edited</code>, <code>deleted</code>, <code>reaction</code>, <code>typing</code>, <code>system</code>, <code>error</code> и зеркальными сигнальными сообщениями. Вложения ходят вне сокета: <code>POST /upload</code> и <code>GET /uploads/:id</code> с токеном в заголовке.</p>
+
+      <h2>Стороннее</h2>
+      <p>Иконки — akar-icons (MIT), инлайн-SVG. Анимация ленты — @formkit/auto-animate (MIT), вложен локально. Шрифты — JetBrains Mono, Victor Mono, IBM Plex Mono, тоже локально. Страница чата не делает ни одного внешнего запроса, и это часть модели безопасности, а не случайность.</p>
+    </section>
+
+    <footer class="colophon">
+      ws-chat · документация<br>
+      Собрана Claude Opus 5 по коду и истории изменений проекта.
+    </footer>
+  </main>
+</div>
+
+<script>
+  const tabs = [...document.querySelectorAll('[role="tab"]')];
+
+  function show(tab, focusPanel) {
+    for (const other of tabs) {
+      const panel = document.getElementById(other.getAttribute('aria-controls'));
+      const active = other === tab;
+      other.setAttribute('aria-selected', String(active));
+      panel.hidden = !active;
+    }
+    const panel = document.getElementById(tab.getAttribute('aria-controls'));
+    history.replaceState(null, '', '#' + tab.id.replace('tab-', ''));
+    if (focusPanel) panel.focus();
+  }
+
+  for (const tab of tabs) {
+    tab.addEventListener('click', () => show(tab, false));
+    tab.addEventListener('keydown', (event) => {
+      const step = event.key === 'ArrowDown' || event.key === 'ArrowRight' ? 1
+        : event.key === 'ArrowUp' || event.key === 'ArrowLeft' ? -1 : 0;
+      if (!step) return;
+      event.preventDefault();
+      const next = tabs[(tabs.indexOf(tab) + step + tabs.length) % tabs.length];
+      next.focus();
+      show(next, false);
+    });
+  }
+
+  const fromHash = tabs.find((t) => t.id === 'tab-' + location.hash.slice(1));
+  if (fromHash) show(fromHash, false);
+</script>
