@@ -180,14 +180,18 @@ export class Hub {
   }
 
   private async changePassword(client: Client, message: Extract<ClientMessage, { type: 'change-password' }>): Promise<void> {
-    const result = await this.auth!.changePassword(client.nick!, message.current, message.next, client.token);
+    // Ник берём до ожидания: пока считается scrypt, клиент успевает выйти, и
+    // тогда его ник уже сброшен. Выбить остальные устройства всё равно надо —
+    // это и есть смысл смены пароля.
+    const nick = client.nick!;
+    const result = await this.auth!.changePassword(nick, message.current, message.next, client.token);
     if (!result.ok) {
       client.send({ type: 'error', reason: AUTH_ERRORS[result.error!] ?? 'Не удалось сменить пароль' });
       return;
     }
     // Старый пароль мог утечь — значит и то, что открыто под ним на других
     // устройствах, доверия больше не заслуживает.
-    this.disconnectOthers(client, 'Пароль изменён, войди заново');
+    this.disconnectOthers(nick, client, 'Пароль изменён, войди заново');
     client.send({ type: 'password-changed' });
   }
 
@@ -238,8 +242,8 @@ export class Hub {
     this.sendSessions(client);
   }
 
-  private disconnectOthers(client: Client, reason: string): void {
-    const lower = client.nick!.toLowerCase();
+  private disconnectOthers(nick: string, client: Client, reason: string): void {
+    const lower = nick.toLowerCase();
     for (const peer of [...this.clients]) {
       if (peer === client || peer.nick?.toLowerCase() !== lower) continue;
       peer.send({ type: 'logged-out', reason });
@@ -254,7 +258,7 @@ export class Hub {
     this.auth?.revoke(client.token);
     if (everywhere) {
       this.auth?.revokeAllFor(nick);
-      this.disconnectOthers(client, 'Выход со всех устройств');
+      this.disconnectOthers(nick, client, 'Выход со всех устройств');
     }
     if (guest) {
       this.auth?.removeAccount(nick);

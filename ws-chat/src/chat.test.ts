@@ -1374,6 +1374,23 @@ describe('Hub: вход и выход', () => {
     expect(store.dmPartners('alice').map((p) => p.nick)).toEqual(['bob']);
   });
 
+  it('выход во время смены пароля не мешает выбить остальные устройства', async () => {
+    const laptop = makeClient('laptop');
+    const phone = makeClient('phone');
+    await auth(laptop, { mode: 'register', nick: 'alice', password: 'достаточно-длинный' });
+    const token = welcomeOf(laptop)?.token as string;
+    await auth(phone, { mode: 'resume', token });
+
+    // Оба сообщения в одном такте: выход попадает внутрь ожидания scrypt.
+    hub.handle(laptop, JSON.stringify({ type: 'change-password', current: 'достаточно-длинный', next: 'новый-длинный-пароль' }));
+    hub.handle(laptop, JSON.stringify({ type: 'logout' }));
+
+    await vi.waitFor(() => {
+      expect(phone.inbox.some((m) => m.type === 'logged-out')).toBe(true);
+    });
+    expect(phone.closed).toBe(true);
+  });
+
   it('выход по паролю гасит сессию, но не трогает написанное', async () => {
     const a = makeClient('a');
     await auth(a, { mode: 'register', nick: 'alice', password: 'достаточно-длинный' });
