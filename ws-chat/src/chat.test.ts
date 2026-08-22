@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { Hub, ACTIONS_PER_WINDOW, RATE_WINDOW_MS, type Client } from './chat.ts';
 import { Store, channelKey, dmKey } from './store.ts';
 import { Auth } from './auth.ts';
-import type { ServerMessage } from './protocol.ts';
+import { PROTOCOL_VERSION, type ServerMessage } from './protocol.ts';
 
 type TestClient = Client & { inbox: ServerMessage[]; closed: boolean };
 
@@ -69,6 +69,16 @@ describe('Hub', () => {
     expect(a.nick).toBe('alice');
     expect(a.inbox.some((m) => m.type === 'welcome' && m.nick === 'alice')).toBe(true);
     expect(channelsList(a)).toContain('general');
+  });
+
+  it('в welcome приходит версия протокола', () => {
+    const a = makeClient('a');
+    hub.join(a, 'alice');
+
+    const welcome = a.inbox.find((m) => m.type === 'welcome');
+    if (welcome?.type !== 'welcome') throw new Error('нет welcome');
+    expect(typeof PROTOCOL_VERSION).toBe('number');
+    expect(welcome.protocol).toBe(PROTOCOL_VERSION);
   });
 
   it('пускает два устройства одного аккаунта одновременно', () => {

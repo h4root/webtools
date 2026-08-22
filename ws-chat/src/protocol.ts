@@ -1,3 +1,7 @@
+// Растёт при несовместимом изменении формы сообщений. Клиент сверяет её с
+// той, с которой собран, и просит перезагрузку, если разошлись.
+export const PROTOCOL_VERSION = 1;
+
 export const NICK_MAX = 24;
 export const TEXT_MAX = 2000;
 export const SIGNAL_MAX = 16384;
@@ -105,7 +109,7 @@ export type ClientMessage =
   | { type: 'call-signal'; to: string; data: unknown };
 
 export type ServerMessage =
-  | { type: 'welcome'; nick: string; token: string; guest: boolean }
+  | { type: 'welcome'; nick: string; token: string; guest: boolean; protocol: number }
   | { type: 'auth-error'; reason: string; retryAfterMs?: number }
   | { type: 'logged-out'; reason?: string }
   | { type: 'password-changed' }

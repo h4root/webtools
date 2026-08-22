@@ -75,6 +75,9 @@ import { isNarrow, timeLabel, formatSize, formatStats, deviceLabel, secureContex
 const RECONNECT_MS = 2000;
 const RECONNECT_MAX_MS = 15000;
 
+// Держится вручную в согласии с PROTOCOL_VERSION на сервере: вкладка,
+// открытая до его обновления, узнаёт об этом по расхождению.
+const PROTOCOL_VERSION = 1;
 const TOKEN_KEY = 'ws-chat-token';
 const BASE_TITLE = document.title;
 
@@ -99,6 +102,7 @@ let reconnectTimer = null;
 let reconnectDelay = RECONNECT_MS;
 let outbox = [];
 let missedBelow = 0;
+let staleClient = false;
 
 const conversations = new Map();
 const loaded = new Set();
@@ -149,6 +153,13 @@ function sendMessage(message) {
 
 function renderConnState() {
   const online = ws && ws.readyState === WebSocket.OPEN && joined;
+  // Сервер обновился, а эта вкладка осталась на старом коде: дальше она может
+  // не понять новых сообщений, поэтому говорим об этом вместо молчания.
+  if (staleClient) {
+    connBanner.hidden = false;
+    connBanner.textContent = 'Чат обновился — перезагрузи страницу';
+    return;
+  }
   connBanner.hidden = Boolean(online);
   if (online) return;
   connBanner.textContent = outbox.length
@@ -278,6 +289,7 @@ function forgetToken() {
 function handleServer(message) {
   switch (message.type) {
     case 'welcome':
+      if (message.protocol !== PROTOCOL_VERSION) staleClient = true;
       myNick = message.nick;
       authToken = message.token;
       isGuest = message.guest;

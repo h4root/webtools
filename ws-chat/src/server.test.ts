@@ -153,6 +153,31 @@ describe('HTTP-слой', () => {
     expect(body).not.toContain(projectDir);
   }, 30000);
 
+  it('health отвечает и не кешируется', async () => {
+    const res = await fetch(`${base}/health`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get('cache-control')).toContain('no-store');
+
+    const body = (await res.json()) as { status: string; uptime: number };
+    expect(body.status).toBe('ok');
+    expect(typeof body.uptime).toBe('number');
+  });
+
+  it('health не раскрывает, кто в чате', async () => {
+    const body = await (await fetch(`${base}/health`)).json();
+    expect(JSON.stringify(body)).not.toMatch(/nick|token|user/i);
+  });
+
+  it('шрифты кешируются надолго, а код приложения — нет', async () => {
+    const font = await fetch(`${base}/fonts/jetbrains-mono-400.woff2`);
+    expect(font.status).toBe(200);
+    expect(font.headers.get('cache-control')).toMatch(/max-age=\d{5,}/);
+
+    const app = await fetch(`${base}/app.js`);
+    expect(app.status).toBe(200);
+    expect(app.headers.get('cache-control')).toContain('no-cache');
+  });
+
   it('на неизвестный путь отвечает коротко и без разметки', async () => {
     const res = await fetch(`${base}/нет-такого`);
     const body = await res.text();

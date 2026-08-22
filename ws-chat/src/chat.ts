@@ -1,4 +1,4 @@
-import { NICK_MAX, parseClientMessage, type AttachmentRef, type ClientMessage, type ReadMark, type ServerMessage } from './protocol.ts';
+import { NICK_MAX, PROTOCOL_VERSION, parseClientMessage, type AttachmentRef, type ClientMessage, type ReadMark, type ServerMessage } from './protocol.ts';
 import { Store, channelKey, dmKey, recipientsOf } from './store.ts';
 import { safeDevice, type Auth } from './auth.ts';
 import { LinkCodes } from './linkcodes.ts';
@@ -127,7 +127,7 @@ export class Hub {
     client.token = token;
     client.guest = guest;
     this.clients.add(client);
-    client.send({ type: 'welcome', nick: trimmed, token, guest });
+    client.send({ type: 'welcome', nick: trimmed, token, guest, protocol: PROTOCOL_VERSION });
     client.send({ type: 'channels', list: this.store.listChannels() });
     client.send({ type: 'dms', list: this.store.dmPartners(trimmed) });
     client.send({ type: 'voice-channels', list: this.store.listVoiceChannels() });

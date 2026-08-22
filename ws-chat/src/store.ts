@@ -193,6 +193,12 @@ export class Store {
     }
   }
 
+  // Сервер может работать, но молча терять историю: не тот ключ, нет прав на
+  // запись. Наружу это видно только отсюда.
+  canPersist(): boolean {
+    return !this.persistBlocked;
+  }
+
   flush(): void {
     if (this.saveTimer) {
       clearTimeout(this.saveTimer);

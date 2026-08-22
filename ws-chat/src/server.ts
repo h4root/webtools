@@ -74,17 +74,30 @@ app.use((_req, res, next) => {
   if (useTls) res.setHeader('Strict-Transport-Security', 'max-age=31536000');
   next();
 });
-app.use(
-  express.static(publicDir, {
-    setHeaders: (res) => res.setHeader('Cache-Control', 'no-cache'),
-  }),
-);
-app.use(
-  '/drop-client',
-  express.static(dropClientDir, {
-    setHeaders: (res) => res.setHeader('Cache-Control', 'no-cache'),
-  }),
-);
+// Живёт до входа: следит за тем, что процесс не просто поднят, а способен
+// сохранять. Наружу не отдаёт ничего о том, кто в чате.
+app.get('/health', (_req, res) => {
+  const persists = store.canPersist();
+  res.setHeader('Cache-Control', 'no-store');
+  res.status(persists ? 200 : 503).json({
+    status: persists ? 'ok' : 'degraded',
+    reason: persists ? undefined : 'история не сохраняется',
+    uptime: Math.round(process.uptime()),
+  });
+});
+
+// Шрифты и вендор не меняются от правки к правке, код приложения меняется
+// постоянно. Без хеша в имени вечный кэш опасен, поэтому срок ограничен
+// неделей: обновление доедет само, а лишний обход за 304 уходит.
+const STATIC_WEEK = 'public, max-age=604800';
+
+function cacheByPath(res: Response, file: string): void {
+  const stable = /[\\/](fonts|vendor)[\\/]/.test(file);
+  res.setHeader('Cache-Control', stable ? STATIC_WEEK : 'no-cache');
+}
+
+app.use(express.static(publicDir, { setHeaders: cacheByPath }));
+app.use('/drop-client', express.static(dropClientDir, { setHeaders: cacheByPath }));
 
 function authorize(req: Request): { nick: string; token: string } | null {
   const header = req.headers.authorization;
