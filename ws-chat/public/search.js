@@ -1,10 +1,11 @@
 import { timeLabel, isNarrow } from './format.js';
+import { keyOf, targetOf } from './keys.js';
 import { searchBtn, searchPanel, searchInput, searchNote, searchResults } from './dom.js';
 
 const HINT = 'Ищем только там, куда у тебя есть доступ: каналы и твои личные переписки.';
 const DEBOUNCE_MS = 250;
 
-export function createSearch({ send, getNick, openConversation, keyOf, activeKey, findRow, scrollToMessage, historyArrived }) {
+export function createSearch({ send, getNick, openConversation, activeKey, findRow, scrollToMessage, historyArrived }) {
   let query = '';
   let timer = null;
   let jump = null;
@@ -35,14 +36,8 @@ export function createSearch({ send, getNick, openConversation, keyOf, activeKey
     timer = setTimeout(run, DEBOUNCE_MS);
   }
 
-  function targetOf(msg) {
-    if (msg.channel) return { kind: 'channel', id: msg.channel };
-    const other = msg.from.toLowerCase() === getNick().toLowerCase() ? msg.to : msg.from;
-    return { kind: 'dm', id: other };
-  }
-
   function hitNode(msg) {
-    const target = targetOf(msg);
+    const target = targetOf(msg, getNick());
     const li = document.createElement('li');
     li.className = 'search-hit';
 

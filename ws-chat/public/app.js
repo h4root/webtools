@@ -24,7 +24,6 @@ import {
   menuBtn,
   sidebar,
   backdrop,
-  dropHint,
   membersBtn,
   membersPanel,
   membersListEl,
@@ -67,15 +66,14 @@ import { createGate } from './gate.js';
 import { createDrop } from './drop.js';
 import { createContextMenu } from './menu.js';
 import { splitText } from './linkify.js';
+import { keyOf, messageKey } from './keys.js';
+import { createTyping } from './typing.js';
+import { createReactions } from './reactions.js';
+import { createDropZone } from './dnd.js';
 import { isNarrow, timeLabel, formatSize, formatStats, deviceLabel, secureContext } from './format.js';
 
 const RECONNECT_MS = 2000;
 const RECONNECT_MAX_MS = 15000;
-const TYPING_SEND_MS = 2500;
-const TYPING_SHOW_MS = 5000;
-const REACTIONS = ['👍', '❤️', '😂', '🔥', '🎉', '😮', '😢', '👀'];
-
-let activePicker = null;
 
 const TOKEN_KEY = 'ws-chat-token';
 const BASE_TITLE = document.title;
@@ -95,7 +93,6 @@ let voiceChannel = null;
 let voiceChannels = [];
 let voicePresence = {};
 let callPhase = 'idle';
-let lastTypingSent = 0;
 let replyingTo = null;
 let ws = null;
 let reconnectTimer = null;
@@ -108,18 +105,9 @@ const loaded = new Set();
 const historyReady = new Set();
 const unread = new Map();
 const readMarks = new Map();
-const typing = new Map();
 
-function keyOf(kind, id) {
-  return kind === 'channel' ? `ch:${id}` : `dm:${id.toLowerCase()}`;
-}
 function activeKey() {
   return keyOf(active.kind, active.id);
-}
-function messageKey(msg) {
-  if (msg.channel) return `ch:${msg.channel}`;
-  const other = msg.from === myNick ? msg.to : msg.from;
-  return `dm:${other.toLowerCase()}`;
 }
 function convOf(key) {
   if (!conversations.has(key)) conversations.set(key, []);
@@ -181,8 +169,11 @@ function request(message) {
   else connect();
 }
 
+const typing = createTyping({ send: wsSend, onChange: renderTyping });
+const reactions = createReactions({ send: wsSend, getNick: () => myNick, findMessage: (id) => findMessage(id) });
 const gate = createGate({ request });
 const contextMenu = createContextMenu();
+createDropZone({ isReady: () => joined, onFiles: (files) => attachments.add(files) });
 
 const drop = createDrop({
   getToken: () => authToken,
@@ -193,7 +184,6 @@ const search = createSearch({
   send: wsSend,
   getNick: () => myNick,
   openConversation: (kind, id) => openConversation(kind, id),
-  keyOf,
   activeKey,
   findRow: (id) => logEl.querySelector(`[data-id="${id}"]`),
   scrollToMessage: (id) => scrollToMessage(id),
@@ -289,6 +279,7 @@ function handleServer(message) {
     case 'channels':
       channels = message.list;
       if (!channels.includes(active.id) && active.kind === 'channel') active.id = channels[0] ?? 'general';
+      typing.watch(activeKey());
       renderChannels();
       requestHistory(active);
       break;
@@ -339,10 +330,10 @@ function handleServer(message) {
       applyDelete(message.id);
       break;
     case 'reaction':
-      applyReaction(message.id, message.reactions);
+      reactions.apply(message.id, message.reactions);
       break;
     case 'typing':
-      receiveTyping(message);
+      typing.receive(message);
       break;
     case 'system':
       systemLine(message.text);
@@ -434,7 +425,7 @@ function returnToGate(reason) {
   historyReady.clear();
   unread.clear();
   readMarks.clear();
-  typing.clear();
+  typing.reset();
   renderDocumentTitle();
   dmPartners = [];
   online = [];
@@ -488,18 +479,18 @@ function enterApp() {
   meEl.replaceChildren(avatar, name);
   renderChannels();
   updateTitle();
+  typing.watch(activeKey());
   drop.start();
   textInput.focus();
 }
 
 function receiveMessage(msg) {
-  const key = messageKey(msg);
+  const key = messageKey(msg, myNick);
   convOf(key).push(msg);
-  clearTyping(key, msg.from);
+  typing.clear(key, msg.from);
   if (msg.to !== undefined) rememberPartner(msg.from === myNick ? msg.to : msg.from, msg.ts);
   if (key === activeKey()) {
     appendRow(msg);
-    renderTyping();
   } else {
     unread.set(key, (unread.get(key) ?? 0) + 1);
   }
@@ -550,7 +541,7 @@ function openConversation(kind, id) {
   renderChannels();
   requestHistory(active);
   renderLog();
-  renderTyping();
+  typing.watch(activeKey());
   updateCallButton();
   closeSidebar();
   textInput.focus();
@@ -811,7 +802,7 @@ function fillRow(row, msg) {
   react.appendChild(icon('smiley', 14));
   react.addEventListener('click', (e) => {
     e.stopPropagation();
-    openReactionPicker(react, msg);
+    reactions.open(react, msg);
   });
   actions.appendChild(react);
 
@@ -836,105 +827,7 @@ function fillRow(row, msg) {
   }
   row.appendChild(actions);
 
-  renderReactions(row, msg);
-}
-
-function renderReactions(row, msg, changed = new Set()) {
-  row.querySelector('.reactions')?.remove();
-  const reactions = msg.reactions;
-  if (!reactions || Object.keys(reactions).length === 0) return;
-
-  const box = document.createElement('div');
-  box.className = 'reactions';
-  for (const [emoji, users] of Object.entries(reactions)) {
-    const chip = document.createElement('button');
-    chip.type = 'button';
-    chip.className = 'reaction';
-    if (users.includes(myNick)) chip.classList.add('mine');
-    if (changed.has(emoji)) chip.classList.add('bump');
-    chip.title = users.join(', ');
-    const face = document.createElement('span');
-    face.textContent = emoji;
-    const count = document.createElement('span');
-    count.className = 'rcount';
-    count.textContent = String(users.length);
-    chip.append(face, count);
-    chip.addEventListener('click', (e) => {
-      e.stopPropagation();
-      if (!chip.classList.contains('mine')) burstReaction(emoji, chip.closest('.row'));
-      wsSend({ type: 'react', id: msg.id, emoji });
-    });
-    box.appendChild(chip);
-  }
-  row.appendChild(box);
-}
-
-function applyReaction(id, reactions) {
-  const msg = findMessage(id);
-  if (!msg) return;
-  const old = msg.reactions ?? {};
-  const changed = new Set();
-  for (const emoji of new Set([...Object.keys(old), ...Object.keys(reactions)])) {
-    if ((old[emoji]?.length ?? 0) !== (reactions[emoji]?.length ?? 0)) changed.add(emoji);
-  }
-  msg.reactions = Object.keys(reactions).length ? reactions : undefined;
-  const row = logEl.querySelector(`[data-id="${id}"]`);
-  if (row) renderReactions(row, msg, changed);
-}
-
-function burstReaction(emoji, row) {
-  if (!settings.animationsEnabled() || !row) return;
-  const rect = row.getBoundingClientRect();
-  const cx = rect.left + rect.width / 2;
-  const cy = rect.bottom;
-  for (let i = 0; i < 6; i++) {
-    const p = document.createElement('span');
-    p.className = 'reaction-burst';
-    p.textContent = emoji;
-    p.style.left = `${cx}px`;
-    p.style.top = `${cy}px`;
-    p.style.fontSize = `${22 + Math.random() * 18}px`;
-    p.style.setProperty('--dx', `${(Math.random() - 0.5) * 120}px`);
-    p.style.setProperty('--dy', `${-60 - Math.random() * 90}px`);
-    p.style.setProperty('--rot', `${(Math.random() - 0.5) * 80}deg`);
-    document.body.appendChild(p);
-    setTimeout(() => p.remove(), 1150);
-  }
-}
-
-function openReactionPicker(anchor, msg) {
-  closeReactionPicker();
-  const pick = document.createElement('div');
-  pick.className = 'react-picker';
-  for (const emoji of REACTIONS) {
-    const b = document.createElement('button');
-    b.type = 'button';
-    b.textContent = emoji;
-    b.addEventListener('click', (e) => {
-      e.stopPropagation();
-      if (!msg.reactions?.[emoji]?.includes(myNick)) burstReaction(emoji, logEl.querySelector(`[data-id="${msg.id}"]`));
-      wsSend({ type: 'react', id: msg.id, emoji });
-      closeReactionPicker();
-    });
-    pick.appendChild(b);
-  }
-  document.body.appendChild(pick);
-
-  const r = anchor.getBoundingClientRect();
-  const pad = 8;
-  const left = Math.max(pad, Math.min(window.innerWidth - pick.offsetWidth - pad, r.left + r.width / 2 - pick.offsetWidth / 2));
-  let top = r.top - pick.offsetHeight - pad;
-  if (top < pad) top = Math.min(window.innerHeight - pick.offsetHeight - pad, r.bottom + pad);
-  pick.style.left = `${left}px`;
-  pick.style.top = `${top}px`;
-
-  activePicker = pick;
-  setTimeout(() => document.addEventListener('click', closeReactionPicker, { once: true }), 0);
-}
-
-function closeReactionPicker() {
-  activePicker?.remove();
-  activePicker = null;
+  reactions.render(row, msg);
 }
 
 function createRow(msg) {
@@ -1026,30 +919,7 @@ function renderLog() {
   search.flushJump();
 }
 
-function receiveTyping(message) {
-  const key = message.channel ? `ch:${message.channel}` : `dm:${message.from.toLowerCase()}`;
-  addTyping(key, message.from);
-}
-
-function addTyping(key, nick) {
-  if (!typing.has(key)) typing.set(key, new Map());
-  const map = typing.get(key);
-  if (map.has(nick)) clearTimeout(map.get(nick));
-  map.set(nick, setTimeout(() => clearTyping(key, nick), TYPING_SHOW_MS));
-  if (key === activeKey()) renderTyping();
-}
-
-function clearTyping(key, nick) {
-  const map = typing.get(key);
-  if (!map || !map.has(nick)) return;
-  clearTimeout(map.get(nick));
-  map.delete(nick);
-  if (key === activeKey()) renderTyping();
-}
-
-function renderTyping() {
-  const map = typing.get(activeKey());
-  const nicks = map ? [...map.keys()] : [];
+function renderTyping(nicks) {
   typingEl.replaceChildren();
   if (nicks.length === 0) return;
   const verb = nicks.length === 1 ? 'печатает' : 'печатают';
@@ -1058,13 +928,6 @@ function renderTyping() {
   dots.className = 'typing-dots';
   dots.append(document.createElement('i'), document.createElement('i'), document.createElement('i'));
   typingEl.appendChild(dots);
-}
-
-function sendTyping() {
-  const now = Date.now();
-  if (now - lastTypingSent < TYPING_SEND_MS) return;
-  lastTypingSent = now;
-  wsSend(active.kind === 'channel' ? { type: 'typing', channel: active.id } : { type: 'typing', to: active.id });
 }
 
 function renderVoice(state) {
@@ -1259,58 +1122,12 @@ fileInput.addEventListener('change', () => {
   fileInput.value = '';
 });
 
-// Скриншот из буфера — самый частый способ поделиться картинкой, а до сих пор
-// его надо было сначала сохранить на диск.
-document.addEventListener('paste', (event) => {
-  if (!joined) return;
-  const files = [...(event.clipboardData?.files ?? [])];
-  if (files.length === 0) return;
-  event.preventDefault();
-  attachments.add(files);
-});
-
-// dragenter и dragleave срабатывают и на дочерних элементах, поэтому считаем
-// вход и выход, а не полагаемся на одно событие.
-let dragDepth = 0;
-
-function showDropHint(show) {
-  dragDepth = show ? dragDepth : 0;
-  dropHint.hidden = !show;
-}
-
-function hasFiles(event) {
-  return [...(event.dataTransfer?.types ?? [])].includes('Files');
-}
-
-document.addEventListener('dragenter', (event) => {
-  if (!joined || !hasFiles(event)) return;
-  dragDepth++;
-  dropHint.hidden = false;
-});
-
-document.addEventListener('dragover', (event) => {
-  if (!joined || !hasFiles(event)) return;
-  // Без этого браузер откроет файл вместо того, чтобы отдать его нам.
-  event.preventDefault();
-});
-
-document.addEventListener('dragleave', () => {
-  if (dragDepth > 0) dragDepth--;
-  if (dragDepth === 0) dropHint.hidden = true;
-});
-
-document.addEventListener('drop', (event) => {
-  if (!joined || !hasFiles(event)) return;
-  event.preventDefault();
-  showDropHint(false);
-  attachments.add([...(event.dataTransfer?.files ?? [])]);
-});
 textInput.addEventListener('keydown', (event) => {
   if (event.key === 'Escape' && replyingTo) cancelReply();
 });
 
 textInput.addEventListener('input', () => {
-  if (textInput.value.trim()) sendTyping();
+  if (textInput.value.trim()) typing.send(active);
 });
 
 channelAddBtn.addEventListener('click', () => {
