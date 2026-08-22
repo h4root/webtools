@@ -352,8 +352,10 @@ export class Hub {
       return;
     }
 
+    // Подтверждение кода — путь в аккаунт, поэтому оно считается наравне с
+    // обычными действиями: иначе шесть символов можно подбирать без предела.
     if (message.type === 'link-approve') {
-      this.approveLink(client, message.code);
+      if (this.allow(client, message.type)) this.approveLink(client, message.code);
       return;
     }
 

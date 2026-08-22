@@ -1241,6 +1241,19 @@ describe('Hub: вход и выход', () => {
     expect(laptop.inbox.some((m) => m.type === 'link-approved')).toBe(false);
   });
 
+  it('подбор кода упирается в общий лимит действий', async () => {
+    const laptop = makeClient('laptop');
+    await auth(laptop, { mode: 'register', nick: 'alice', password: 'достаточно-длинный' });
+
+    for (let i = 0; i < ACTIONS_PER_WINDOW + 20; i++) {
+      hub.handle(laptop, JSON.stringify({ type: 'link-approve', code: 'ZZZZZZ' }));
+    }
+
+    const refusals = laptop.inbox.filter((m) => m.type === 'error' && m.reason === 'Код неверный или истёк');
+    expect(refusals.length).toBeLessThanOrEqual(ACTIONS_PER_WINDOW);
+    expect(laptop.inbox.some((m) => m.type === 'error' && m.reason === 'Слишком часто')).toBe(true);
+  });
+
   it('код умирает вместе с устройством, которое его просило', async () => {
     const laptop = makeClient('laptop');
     await auth(laptop, { mode: 'register', nick: 'alice', password: 'достаточно-длинный' });
