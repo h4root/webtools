@@ -34,7 +34,16 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: ${{ matrix.project }}/package-lock.json
+          cache-dependency-path: |
+            ws-chat/package-lock.json
+            lan-drop/package-lock.json
+
+      # ws-chat подключает lan-drop через file:, и tsc заходит в его исходники.
+      # npm по такой ссылке зависимости связанного пакета не ставит.
+      - name: install lan-drop
+        if: matrix.project == 'ws-chat'
+        run: npm ci
+        working-directory: lan-drop
 
       - run: npm ci
         working-directory: ${{ matrix.project }}
