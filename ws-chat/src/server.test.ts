@@ -153,6 +153,37 @@ describe('HTTP-слой', () => {
     expect(body).not.toContain(projectDir);
   }, 30000);
 
+  it('не пускает сокет со сторонней страницы', async () => {
+    const url = base.replace('http', 'ws');
+    const refused = await new Promise<string>((resolve) => {
+      const socket = new WebSocket(url, { origin: 'https://evil.example' });
+      socket.on('open', () => resolve('пустило'));
+      socket.on('error', () => resolve('отказ'));
+      socket.on('close', () => resolve('отказ'));
+    });
+    expect(refused).toBe('отказ');
+  });
+
+  it('пускает сокет со своей же страницы', async () => {
+    const url = base.replace('http', 'ws');
+    const host = new URL(base).host;
+    const opened = await new Promise<string>((resolve) => {
+      const socket = new WebSocket(url, { origin: `http://${host}` });
+      socket.on('open', () => {
+        socket.close();
+        resolve('пустило');
+      });
+      socket.on('error', () => resolve('отказ'));
+    });
+    expect(opened).toBe('пустило');
+  });
+
+  it('пускает клиента без Origin: это не браузер', async () => {
+    const { socket } = await connect(base);
+    expect(socket.readyState).toBe(WebSocket.OPEN);
+    socket.close();
+  });
+
   it('health отвечает и не кешируется', async () => {
     const res = await fetch(`${base}/health`);
     expect(res.status).toBe(200);

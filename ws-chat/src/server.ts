@@ -194,10 +194,25 @@ attachSignaling(dropWss, {
   },
 });
 
+// WebSocket не подчиняется правилу общего источника: любая открытая страница
+// может соединиться с чатом браузером своего читателя, прочитать историю
+// каналов и писать от чужого имени. Сверяем источник с тем, кто нас отдал.
+// Пустой Origin — это не браузер: свой клиент, приложение, тесты.
+function sameOrigin(request: IncomingMessage): boolean {
+  const origin = request.headers.origin;
+  if (!origin) return true;
+  try {
+    return new URL(origin).host === request.headers.host;
+  } catch {
+    return false;
+  }
+}
+
 server.on('upgrade', (request, socket, head) => {
   const { pathname } = new URL(request.url ?? '/', 'http://localhost');
   const target = pathname === '/drop' ? dropWss : pathname === '/' ? wss : null;
-  if (!target) {
+  if (!target || !sameOrigin(request)) {
+    socket.write('HTTP/1.1 403 Forbidden\r\n\r\n');
     socket.destroy();
     return;
   }

@@ -529,8 +529,16 @@ export class Hub {
       return;
     }
 
+    // Офлайн-адресат законен, несуществующий — нет: иначе любой вошедший
+    // заводит разговоры с выдуманными никами, а store переписывается целиком
+    // при каждом сохранении.
+    const account = this.auth?.find(message.to!);
+    if (this.auth && !account) {
+      client.send({ type: 'error', reason: 'Нет такого собеседника' });
+      return;
+    }
     const target = this.findByNick(message.to!);
-    const to = target?.nick ?? message.to!;
+    const to = target?.nick ?? account?.nick ?? message.to!;
     const wire = this.store.addDirectMessage(client.nick!, to, message.text, {
       replyTo: message.replyTo,
       attachments,

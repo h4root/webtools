@@ -1341,6 +1341,28 @@ describe('Hub: вход и выход', () => {
     expect(laptop.inbox.some((m) => m.type === 'error')).toBe(true);
   });
 
+  it('в личку несуществующему нику писать нельзя', async () => {
+    const a = makeClient('a');
+    await auth(a, { mode: 'register', nick: 'alice', password: 'достаточно-длинный' });
+
+    hub.handle(a, JSON.stringify({ type: 'message', to: 'призрак', text: 'мусор' }));
+
+    expect(a.inbox.at(-1)).toEqual({ type: 'error', reason: 'Нет такого собеседника' });
+    expect(store.dmPartners('alice')).toEqual([]);
+  });
+
+  it('офлайн-адресату с настоящим аккаунтом писать по-прежнему можно', async () => {
+    const a = makeClient('a');
+    const b = makeClient('b');
+    await auth(b, { mode: 'register', nick: 'bob', password: 'достаточно-длинный' });
+    hub.leave(b);
+    await auth(a, { mode: 'register', nick: 'alice', password: 'достаточно-длинный' });
+
+    hub.handle(a, JSON.stringify({ type: 'message', to: 'bob', text: 'вернёшься — прочитаешь' }));
+
+    expect(store.dmPartners('alice').map((p) => p.nick)).toEqual(['bob']);
+  });
+
   it('выход по паролю гасит сессию, но не трогает написанное', async () => {
     const a = makeClient('a');
     await auth(a, { mode: 'register', nick: 'alice', password: 'достаточно-длинный' });

@@ -18,6 +18,9 @@ const NONCE = /^[A-Za-z0-9_-]{1,64}$/;
 export const REACTIONS = ['👍', '❤️', '😂', '🔥', '🎉', '😮', '😢', '👀'];
 
 const CHANNEL_PATTERN = /^[a-z0-9-]{1,24}$/;
+// Тот же набор, что при регистрации: адресат обязан выглядеть как настоящий
+// ник, иначе на границе проходит любая строка нужной длины.
+const NICK_PATTERN = /^[\p{L}\p{N} _.-]+$/u;
 
 export type Reactions = Record<string, string[]>;
 
@@ -162,7 +165,9 @@ function parseTarget(data: Record<string, unknown>): { channel?: string; to?: st
   const hasTo = data.to !== undefined;
   if (hasChannel === hasTo) return null;
   if (hasChannel) return isValidChannelName(data.channel) ? { channel: data.channel } : null;
-  return isBoundedString(data.to, NICK_MAX) ? { to: data.to.trim() } : null;
+  if (!isBoundedString(data.to, NICK_MAX)) return null;
+  const to = data.to.trim();
+  return NICK_PATTERN.test(to) ? { to } : null;
 }
 
 function parseAttachments(value: unknown): AttachmentRef[] | null {
