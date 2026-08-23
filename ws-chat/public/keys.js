@@ -16,3 +16,12 @@ export function messageKey(msg, myNick) {
   const target = targetOf(msg, myNick);
   return keyOf(target.kind, target.id);
 }
+
+// Тот же набор символов, что принимает сервер: имя канала становится частью
+// имени файла с историей.
+const CHANNEL = /^[a-z0-9-]{1,24}$/;
+
+export function channelSlug(raw) {
+  const slug = String(raw ?? '').trim().toLowerCase();
+  return CHANNEL.test(slug) ? slug : null;
+}

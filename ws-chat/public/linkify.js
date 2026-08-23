@@ -78,3 +78,10 @@ export function splitText(text) {
 function isWordChar(char) {
   return char !== undefined && /[\p{L}\p{N}]/u.test(char);
 }
+
+// Длинный адрес разрывает ленту по ширине, поэтому в тексте показываем
+// укороченный, а полный оставляем в href и подсказке.
+export function shortenUrl(url) {
+  if (url.length <= 60) return url;
+  return `${url.slice(0, 45)}…${url.slice(-12)}`;
+}

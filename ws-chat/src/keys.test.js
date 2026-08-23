@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { keyOf, targetOf, messageKey } from '../public/keys.js';
+import { keyOf, targetOf, messageKey, channelSlug } from '../public/keys.js';
 
 describe('keyOf', () => {
   it('канал и личка живут в разных пространствах имён', () => {
@@ -47,5 +47,22 @@ describe('messageKey', () => {
 
   it('сообщение канала ключуется каналом', () => {
     expect(messageKey({ channel: 'random', from: 'bob' }, 'alice')).toBe('ch:random');
+  });
+});
+
+describe('channelSlug', () => {
+  it('приводит к нижнему регистру и обрезает края', () => {
+    expect(channelSlug('  General  ')).toBe('general');
+    expect(channelSlug('dev-2')).toBe('dev-2');
+  });
+
+  it('отказывает всему, что сервер не примет', () => {
+    expect(channelSlug('')).toBeNull();
+    expect(channelSlug('   ')).toBeNull();
+    expect(channelSlug('общий')).toBeNull();
+    expect(channelSlug('с пробелом')).toBeNull();
+    expect(channelSlug('../etc')).toBeNull();
+    expect(channelSlug('a'.repeat(25))).toBeNull();
+    expect(channelSlug('a'.repeat(24))).toBe('a'.repeat(24));
   });
 });

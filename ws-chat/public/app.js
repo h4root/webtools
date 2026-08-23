@@ -1,8 +1,7 @@
 import { createVoice } from './voice.js';
 import { createCall } from './call.js';
 import { icon, setButton } from './icons.js';
-import { mountSettings, settings } from './settings.js';
-import autoAnimate from './vendor/auto-animate.mjs';
+import { mountSettings } from './settings.js';
 
 import {
   gateScreen,
@@ -10,15 +9,11 @@ import {
   logoutBtn,
   appEl,
   meEl,
-  channelListEl,
-  dmListEl,
   channelAddBtn,
   chatTitle,
-  logEl,
   typingEl,
   composer,
   textInput,
-  replyBar,
   attachBtn,
   fileInput,
   menuBtn,
@@ -26,32 +21,11 @@ import {
   backdrop,
   membersBtn,
   membersPanel,
-  membersListEl,
-  voiceListEl,
   voiceAddBtn,
-  voiceStatus,
-  voiceConn,
-  voiceMuteBtn,
-  voiceDeafenBtn,
-  voiceLeaveBtn,
   callBtn,
-  callIncoming,
-  callIncomingText,
-  callAccept,
-  callDecline,
-  callPanel,
-  peerName,
-  partyMe,
-  partyPeer,
-  callStatus,
-  callStats,
-  callMute,
-  callHangup,
-  callGrip,
   sendBtn,
   settingsEl,
   connBanner,
-  jumpNewBtn,
   searchBtn,
   searchInput,
   searchCloseBtn,
@@ -60,20 +34,22 @@ import {
   dropCloseBtn,
   sidebarCloseBtn,
 } from './dom.js';
+import { createSocket } from './socket.js';
 import { createAttachments } from './attachments.js';
 import { createSearch } from './search.js';
 import { createGate } from './gate.js';
 import { createDrop } from './drop.js';
 import { createContextMenu } from './menu.js';
-import { splitText } from './linkify.js';
-import { keyOf, messageKey } from './keys.js';
+import { createNav } from './nav.js';
+import { createLog } from './log.js';
+import { createReply } from './reply.js';
+import { createVoiceView } from './voiceview.js';
+import { createCallView } from './callview.js';
+import { keyOf, messageKey, channelSlug } from './keys.js';
 import { createTyping } from './typing.js';
 import { createReactions } from './reactions.js';
 import { createDropZone } from './dnd.js';
-import { isNarrow, timeLabel, formatSize, formatStats, deviceLabel, secureContext } from './format.js';
-
-const RECONNECT_MS = 2000;
-const RECONNECT_MAX_MS = 15000;
+import { isNarrow, deviceLabel } from './format.js';
 
 // Держится вручную в согласии с PROTOCOL_VERSION на сервере: вкладка,
 // открытая до его обновления, узнаёт об этом по расхождению.
@@ -92,16 +68,9 @@ let channels = [];
 let online = [];
 let dmPartners = [];
 let active = { kind: 'channel', id: 'general' };
-let voiceChannel = null;
 let voiceChannels = [];
 let voicePresence = {};
 let callPhase = 'idle';
-let replyingTo = null;
-let ws = null;
-let reconnectTimer = null;
-let reconnectDelay = RECONNECT_MS;
-let outbox = [];
-let missedBelow = 0;
 let staleClient = false;
 
 const conversations = new Map();
@@ -109,96 +78,98 @@ const loaded = new Set();
 const historyReady = new Set();
 const unread = new Map();
 const readMarks = new Map();
-// Отправленные, но ещё не вернувшиеся эхом: метка -> сообщение.
-const unsent = new Map();
 
 function activeKey() {
   return keyOf(active.kind, active.id);
 }
+
 function convOf(key) {
   if (!conversations.has(key)) conversations.set(key, []);
   return conversations.get(key);
 }
 
-const QUEUEABLE = new Set(['message', 'edit', 'delete', 'react', 'channel-create', 'voice-channel-create']);
+// Снимок для тех, кто только рисует: списки в боковой панели читают состояние,
+// но не меняют его.
+function snapshot() {
+  return { me: myNick, channels, online, partners: dmPartners, active, unread, voiceChannels, voicePresence };
+}
 
-function wsSend(message) {
-  if (ws && ws.readyState === WebSocket.OPEN) {
-    ws.send(JSON.stringify(message));
-    return;
-  }
-  if (joined && QUEUEABLE.has(message.type) && outbox.length < 100) {
-    outbox.push(message);
+const socket = createSocket({
+  isJoined: () => joined,
+  hello: sendHello,
+  onMessage: (message) => handleServer(message),
+  onDown: () => {
+    voice.reset();
+    call.hangup();
+    loaded.clear();
+    historyReady.clear();
     renderConnState();
-  }
-}
+  },
+  onQueueChange: renderConnState,
+});
 
-function flushOutbox() {
-  const pending = outbox;
-  outbox = [];
-  for (const message of pending) wsSend(message);
-  // Отправленное в уже мёртвый сокет не попадало в очередь и пропадало молча.
-  // Повторяем сами; сервер узнает повтор по метке и второй раз не создаст.
-  for (const message of unsent.values()) wsSend(message);
-}
-
-function newNonce() {
-  return crypto.randomUUID().replaceAll('-', '');
-}
-
-function sendMessage(message) {
-  unsent.set(message.nonce, message);
-  wsSend(message);
-}
-
-function renderConnState() {
-  const online = ws && ws.readyState === WebSocket.OPEN && joined;
-  // Сервер обновился, а эта вкладка осталась на старом коде: дальше она может
-  // не понять новых сообщений, поэтому говорим об этом вместо молчания.
-  if (staleClient) {
-    connBanner.hidden = false;
-    connBanner.textContent = 'Чат обновился — перезагрузи страницу';
-    return;
-  }
-  connBanner.hidden = Boolean(online);
-  if (online) return;
-  connBanner.textContent = outbox.length
-    ? `Нет связи — переподключаюсь, в очереди ${outbox.length}`
-    : 'Нет связи — переподключаюсь…';
-}
+const send = socket.send;
 
 const voice = createVoice({
-  send: wsSend,
-  onState: renderVoice,
-  onError: (reason) => systemLine(reason),
-  onSpeaking: (nicks) => applySpeaking(nicks),
+  send,
+  onState: (state) => voiceView.render(state),
+  onError: (reason) => log.system(reason),
+  onSpeaking: (nicks) => nav.applySpeaking(nicks),
   getNick: () => myNick,
 });
 
+let callView = null;
 const call = createCall({
-  send: wsSend,
-  onState: renderCall,
-  onLevels: renderLevels,
-  onError: (reason) => systemLine(reason),
+  send,
+  onState: (state) => callView.render(state),
+  onLevels: (levels) => callView.renderLevels(levels),
+  onError: (reason) => log.system(reason),
+});
+callView = createCallView({
+  call,
+  getPeer: () => active.id,
+  onPhase: (phase) => {
+    callPhase = phase;
+    updateCallButton();
+  },
+});
+
+const voiceView = createVoiceView({
+  voice,
+  send,
+  getState: snapshot,
+  onError: (reason) => log.system(reason),
 });
 
 const attachments = createAttachments({
   getToken: () => authToken,
-  onError: (reason) => systemLine(reason),
+  onError: (reason) => log.system(reason),
 });
 
-// Форма входа шлёт либо в живой сокет, либо поднимает его: sendHello
-// повторит запрос сама, как только соединение откроется.
-function request(message) {
-  if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(message));
-  else connect();
-}
-
-const typing = createTyping({ send: wsSend, onChange: renderTyping });
-const reactions = createReactions({ send: wsSend, getNick: () => myNick, findMessage: (id) => findMessage(id) });
-const gate = createGate({ request });
-const contextMenu = createContextMenu();
+const typing = createTyping({ send, onChange: renderTyping });
+const reactions = createReactions({ send, getNick: () => myNick, findMessage: (id) => findMessage(id) });
+const gate = createGate({ request: socket.request });
+createContextMenu();
 createDropZone({ isReady: () => joined, onFiles: (files) => attachments.add(files) });
+
+const nav = createNav({
+  getState: snapshot,
+  send,
+  onOpen: (kind, id) => openConversation(kind, id),
+});
+
+const reply = createReply();
+
+const log = createLog({
+  getNick: () => myNick,
+  send,
+  attachments,
+  reactions,
+  onReply: (msg) => reply.set(msg),
+  getMessages: () => convOf(activeKey()),
+  onSeen: () => markActiveRead(),
+  onRendered: () => search.flushJump(),
+});
 
 const drop = createDrop({
   getToken: () => authToken,
@@ -206,60 +177,34 @@ const drop = createDrop({
 });
 
 const search = createSearch({
-  send: wsSend,
+  send,
   getNick: () => myNick,
   openConversation: (kind, id) => openConversation(kind, id),
   activeKey,
-  findRow: (id) => logEl.querySelector(`[data-id="${id}"]`),
-  scrollToMessage: (id) => scrollToMessage(id),
+  findRow: (id) => log.rowOf(id),
+  scrollToMessage: (id) => log.scrollTo(id),
   historyArrived: (key) => historyReady.has(key),
 });
 
-function wsUrl() {
-  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-  return `${proto}://${location.host}`;
-}
-
 function sendHello() {
-  if (!ws || ws.readyState !== WebSocket.OPEN) return;
-  if (authToken) ws.send(JSON.stringify({ type: 'auth', mode: 'resume', token: authToken }));
-  else if (gate.mode() === 'link') ws.send(JSON.stringify({ type: 'link-request', device: deviceLabel() }));
-  else if (gate.pending()) ws.send(JSON.stringify({ type: 'auth', ...gate.pending() }));
+  if (authToken) socket.request({ type: 'auth', mode: 'resume', token: authToken });
+  else if (gate.mode() === 'link') socket.request({ type: 'link-request', device: deviceLabel() });
+  else if (gate.pending()) socket.request({ type: 'auth', ...gate.pending() });
 }
 
-function connect() {
-  ws = new WebSocket(wsUrl());
-  ws.addEventListener('open', () => {
-    reconnectDelay = RECONNECT_MS;
-    sendHello();
-  });
-  ws.addEventListener('message', (event) => {
-    let message;
-    try {
-      message = JSON.parse(event.data);
-    } catch {
-      return;
-    }
-    handleServer(message);
-  });
-  ws.addEventListener('close', () => {
-    voice.reset();
-    call.hangup();
-    loaded.clear();
-    historyReady.clear();
-    renderConnState();
-    scheduleReconnect();
-  });
-  ws.addEventListener('error', () => ws.close());
-}
-
-function scheduleReconnect() {
-  if (reconnectTimer || !joined) return;
-  reconnectTimer = setTimeout(() => {
-    reconnectTimer = null;
-    connect();
-  }, reconnectDelay);
-  reconnectDelay = Math.min(RECONNECT_MAX_MS, reconnectDelay * 2);
+function renderConnState() {
+  const live = socket.isOpen() && joined;
+  // Сервер обновился, а эта вкладка осталась на старом коде: дальше она может
+  // не понять новых сообщений, поэтому говорим об этом вместо молчания.
+  if (staleClient) {
+    connBanner.hidden = false;
+    connBanner.textContent = 'Чат обновился — перезагрузи страницу';
+    return;
+  }
+  connBanner.hidden = Boolean(live);
+  if (live) return;
+  const queued = socket.queued();
+  connBanner.textContent = queued ? `Нет связи — переподключаюсь, в очереди ${queued}` : 'Нет связи — переподключаюсь…';
 }
 
 function handleAuthError(message) {
@@ -286,6 +231,10 @@ function forgetToken() {
   } catch {}
 }
 
+function markKey(mark) {
+  return mark.channel ? `ch:${mark.channel}` : `dm:${mark.to.toLowerCase()}`;
+}
+
 function handleServer(message) {
   switch (message.type) {
     case 'welcome':
@@ -297,10 +246,9 @@ function handleServer(message) {
       try {
         localStorage.setItem(TOKEN_KEY, authToken);
       } catch {}
-      reconnectDelay = RECONNECT_MS;
       if (!joined) enterApp();
       renderConnState();
-      flushOutbox();
+      socket.flush();
       break;
     case 'channels':
       channels = message.list;
@@ -312,7 +260,7 @@ function handleServer(message) {
     case 'presence':
       online = message.users.filter((nick) => nick !== myNick);
       renderChannels();
-      renderMembers();
+      nav.renderMembers();
       call.handlePresence(message.users);
       break;
     case 'dms':
@@ -320,11 +268,11 @@ function handleServer(message) {
       renderChannels();
       break;
     case 'history': {
-      const key = message.channel ? `ch:${message.channel}` : `dm:${message.to.toLowerCase()}`;
+      const key = markKey(message);
       conversations.set(key, message.messages);
       loaded.add(key);
       historyReady.add(key);
-      if (key === activeKey()) renderLog();
+      if (key === activeKey()) log.render();
       break;
     }
     case 'search':
@@ -332,15 +280,14 @@ function handleServer(message) {
       break;
     case 'reads':
       for (const mark of message.list) {
-        const key = mark.channel ? `ch:${mark.channel}` : `dm:${mark.to.toLowerCase()}`;
-        readMarks.set(key, mark.id);
-        if (mark.unread) unread.set(key, mark.unread);
+        readMarks.set(markKey(mark), mark.id);
+        if (mark.unread) unread.set(markKey(mark), mark.unread);
       }
       renderChannels();
       break;
     // Прочитано на другом устройстве этого же аккаунта.
     case 'read': {
-      const key = message.channel ? `ch:${message.channel}` : `dm:${message.to.toLowerCase()}`;
+      const key = markKey(message);
       readMarks.set(key, Math.max(readMarks.get(key) ?? 0, message.id));
       unread.set(key, 0);
       renderChannels();
@@ -362,7 +309,7 @@ function handleServer(message) {
       typing.receive(message);
       break;
     case 'system':
-      systemLine(message.text);
+      log.system(message.text);
       break;
     case 'auth-error':
       handleAuthError(message);
@@ -392,30 +339,30 @@ function handleServer(message) {
       else if (linkNote) {
         linkNote(message.reason);
         linkNote = null;
-      } else systemLine(message.reason);
+      } else log.system(message.reason);
       break;
     case 'voice-channels':
       voiceChannels = message.list;
-      renderVoiceChannels();
+      voiceView.renderChannels();
       break;
     case 'voice-roster':
       voice.handleRoster(message.channel, message.users);
       break;
     case 'voice-mute':
       voice.handleMute(message.nick, message.muted);
-      renderVoiceChannels();
+      voiceView.renderChannels();
       break;
     case 'voice-left':
       voice.reset();
-      if (message.reason) systemLine(message.reason);
+      if (message.reason) log.system(message.reason);
       break;
     case 'voice-signal':
       voice.handleSignal(message.from, message.data);
       break;
     case 'voice-presence':
       voicePresence = message.channels;
-      renderVoiceChannels();
-      renderMembers();
+      voiceView.renderChannels();
+      nav.renderMembers();
       voice.handlePresence(message.channels);
       break;
     case 'call-invite':
@@ -431,12 +378,7 @@ function handleServer(message) {
 function finishLogout(reason) {
   forgetToken();
   gate.clearPending();
-  outbox = [];
-  if (ws) {
-    const socket = ws;
-    ws = null;
-    socket.close();
-  }
+  socket.stop();
   returnToGate(reason ?? (isGuest ? 'Гостевая личность стёрта' : 'Вы вышли'));
 }
 
@@ -444,20 +386,19 @@ function returnToGate(reason) {
   joined = false;
   voice.reset();
   call.hangup();
-  clearTimeout(reconnectTimer);
-  reconnectTimer = null;
+  socket.reset();
   conversations.clear();
   loaded.clear();
   historyReady.clear();
   unread.clear();
   readMarks.clear();
-  unsent.clear();
   typing.reset();
   renderDocumentTitle();
   dmPartners = [];
   online = [];
   attachments.releaseUrls();
-  logEl.replaceChildren();
+  log.clear();
+  reply.clear();
   search.reset();
   drop.stop();
   drop.setPanel(false);
@@ -489,7 +430,7 @@ function forgetUser(nick) {
   }
   dmPartners = dmPartners.filter((p) => p.nick.toLowerCase() !== lower);
   if (active.kind === 'dm' && active.id.toLowerCase() === lower) openConversation('channel', channels[0] ?? 'general');
-  else renderLog();
+  else log.render();
   renderChannels();
 }
 
@@ -512,7 +453,7 @@ function enterApp() {
 }
 
 function receiveMessage(msg) {
-  if (msg.nonce) unsent.delete(msg.nonce);
+  if (msg.nonce) socket.confirm(msg.nonce);
   const key = messageKey(msg, myNick);
   const list = convOf(key);
   // Повтор после обрыва возвращает то же сообщение: показать его второй раз
@@ -522,7 +463,7 @@ function receiveMessage(msg) {
   typing.clear(key, msg.from);
   if (msg.to !== undefined) rememberPartner(msg.from === myNick ? msg.to : msg.from, msg.ts);
   if (key === activeKey()) {
-    appendRow(msg);
+    log.append(msg);
   } else {
     unread.set(key, (unread.get(key) ?? 0) + 1);
   }
@@ -537,14 +478,10 @@ function rememberPartner(nick, ts) {
   else dmPartners.push({ nick, ts });
 }
 
-function systemLine(text) {
-  appendRow({ id: 0, from: '', text, ts: Date.now(), edited: false, system: true });
-}
-
 function findMessage(id) {
   for (const list of conversations.values()) {
-    const m = list.find((x) => x.id === id);
-    if (m) return m;
+    const found = list.find((msg) => msg.id === id);
+    if (found) return found;
   }
   return null;
 }
@@ -554,16 +491,27 @@ function applyEdit(id, text) {
   if (!msg) return;
   msg.text = text;
   msg.edited = true;
-  const row = logEl.querySelector(`[data-id="${id}"]`);
-  if (row) fillRow(row, msg);
+  log.update(msg);
 }
 
 function applyDelete(id) {
   for (const list of conversations.values()) {
-    const idx = list.findIndex((x) => x.id === id);
+    const idx = list.findIndex((msg) => msg.id === id);
     if (idx !== -1) list.splice(idx, 1);
   }
-  logEl.querySelector(`[data-id="${id}"]`)?.remove();
+  log.remove(id);
+}
+
+// Прочитанным считается то, что ты видел: разговор открыт и ты внизу. Отметка
+// только растёт, поэтому лишних сообщений на сервер не уходит.
+function markActiveRead() {
+  const key = activeKey();
+  const list = conversations.get(key);
+  const newest = list?.length ? list[list.length - 1].id : 0;
+  if (!newest || (readMarks.get(key) ?? 0) >= newest) return;
+  readMarks.set(key, newest);
+  unread.set(key, 0);
+  send(active.kind === 'channel' ? { type: 'read', channel: active.id, id: newest } : { type: 'read', to: active.id, id: newest });
 }
 
 function openConversation(kind, id) {
@@ -572,7 +520,7 @@ function openConversation(kind, id) {
   updateTitle();
   renderChannels();
   requestHistory(active);
-  renderLog();
+  log.render();
   typing.watch(activeKey());
   updateCallButton();
   closeSidebar();
@@ -583,7 +531,7 @@ function requestHistory(target) {
   const key = keyOf(target.kind, target.id);
   if (loaded.has(key)) return;
   loaded.add(key);
-  wsSend(target.kind === 'channel' ? { type: 'history', channel: target.id } : { type: 'history', to: target.id });
+  send(target.kind === 'channel' ? { type: 'history', channel: target.id } : { type: 'history', to: target.id });
 }
 
 function updateTitle() {
@@ -604,351 +552,8 @@ function renderDocumentTitle() {
 
 function renderChannels() {
   renderDocumentTitle();
-  channelListEl.replaceChildren();
-  for (const name of channels) {
-    channelListEl.appendChild(navItem('channel', name, `# ${name}`));
-  }
-  dmListEl.replaceChildren();
-  for (const nick of dmList()) {
-    dmListEl.appendChild(navItem('dm', nick, `@ ${nick}`, !isOnline(nick)));
-  }
+  nav.renderChannels();
   updateCallButton();
-}
-
-function isOnline(nick) {
-  const lower = nick.toLowerCase();
-  return nick === myNick || online.some((n) => n.toLowerCase() === lower);
-}
-
-// Свежие переписки сверху, как в мессенджерах. Ниже — те, кому ещё не писали:
-// они попадают в список просто потому, что сейчас в сети, и двигать их нечему.
-function dmList() {
-  const seen = new Map();
-  for (const nick of online) if (nick !== myNick) seen.set(nick.toLowerCase(), nick);
-  for (const partner of dmPartners) if (partner.nick !== myNick) seen.set(partner.nick.toLowerCase(), partner.nick);
-  if (active.kind === 'dm' && !seen.has(active.id.toLowerCase())) seen.set(active.id.toLowerCase(), active.id);
-
-  return [...seen.entries()]
-    .map(([lower, nick]) => ({ nick, ts: dmPartners.find((p) => p.nick.toLowerCase() === lower)?.ts ?? 0 }))
-    .sort((a, b) => b.ts - a.ts || Number(isOnline(b.nick)) - Number(isOnline(a.nick)) || a.nick.localeCompare(b.nick))
-    .map((entry) => entry.nick);
-}
-
-function navItem(kind, id, label, offline = false) {
-  const key = keyOf(kind, id);
-  const item = document.createElement('li');
-  const isActive = kind === active.kind && id.toLowerCase() === active.id.toLowerCase();
-  item.className = isActive ? 'channel active' : 'channel';
-  if (offline) item.classList.add('offline');
-
-  const text = document.createElement('span');
-  text.textContent = label;
-  item.appendChild(text);
-
-  const count = unread.get(key) ?? 0;
-  if (count > 0 && !isActive) {
-    item.classList.add('unread');
-    const badge = document.createElement('span');
-    badge.className = 'badge';
-    // Четырёхзначный счётчик растянул бы строку и вытеснил имя канала.
-    badge.textContent = count > 99 ? '99+' : String(count);
-    item.appendChild(badge);
-  }
-
-  if (kind === 'channel' && channels.length > 1) {
-    item.appendChild(deleteButton(`Удалить канал #${id} вместе с историей?`, () => wsSend({ type: 'channel-delete', name: id })));
-  }
-
-  item.addEventListener('click', () => openConversation(kind, id));
-  return item;
-}
-
-function deleteButton(question, onConfirm) {
-  const btn = document.createElement('button');
-  btn.type = 'button';
-  btn.className = 'chan-del';
-  btn.title = 'Удалить';
-  btn.appendChild(icon('cross', 12));
-  btn.addEventListener('click', (event) => {
-    event.stopPropagation();
-    if (confirm(question)) onConfirm();
-  });
-  return btn;
-}
-
-function renderMembers() {
-  membersListEl.replaceChildren();
-  const inVoice = new Set();
-  for (const [ch, nicks] of Object.entries(voicePresence)) {
-    if (!nicks.length) continue;
-    for (const n of nicks) inVoice.add(n.toLowerCase());
-    membersListEl.appendChild(memberGroup(ch, nicks, 'sound-on'));
-  }
-  const rest = [myNick, ...online]
-    .filter((n, i, arr) => arr.indexOf(n) === i && !inVoice.has(n.toLowerCase()))
-    .sort((a, b) => a.localeCompare(b));
-  membersListEl.appendChild(memberGroup('В сети', rest));
-}
-
-function memberGroup(label, nicks, iconName) {
-  const wrap = document.createElement('div');
-  wrap.className = 'member-group';
-  const head = document.createElement('div');
-  head.className = 'member-head';
-  if (iconName) head.appendChild(icon(iconName, 13));
-  const text = document.createElement('span');
-  text.textContent = `${label} — ${nicks.length}`;
-  head.appendChild(text);
-  wrap.appendChild(head);
-  for (const nick of nicks) wrap.appendChild(memberRow(nick));
-  return wrap;
-}
-
-function memberRow(nick) {
-  const row = document.createElement('div');
-  row.className = 'member';
-  row.dataset.nick = nick.toLowerCase();
-  const av = document.createElement('span');
-  av.className = 'm-avatar';
-  av.textContent = nick.slice(0, 1).toUpperCase();
-  const name = document.createElement('span');
-  name.className = 'm-name';
-  name.textContent = nick === myNick ? `${nick} (вы)` : nick;
-  row.append(av, name);
-  if (nick !== myNick) row.addEventListener('click', () => openConversation('dm', nick));
-  return row;
-}
-
-function applySpeaking(nicks) {
-  const set = new Set(nicks.map((n) => n.toLowerCase()));
-  for (const row of membersListEl.querySelectorAll('.member')) {
-    row.classList.toggle('speaking', set.has(row.dataset.nick));
-  }
-}
-
-const logAnimation = autoAnimate(logEl, { duration: 180, disrespectUserMotionPreference: true });
-
-function applyMotionState() {
-  if (settings.animationsEnabled()) logAnimation.enable();
-  else logAnimation.disable();
-}
-
-function renderText(parent, text) {
-  let mentionsMe = false;
-  for (const part of splitText(text)) {
-    if (part.kind === 'mention') {
-      const span = document.createElement('span');
-      span.className = 'mention';
-      span.textContent = part.value;
-      if (part.value.slice(1).toLowerCase() === myNick.toLowerCase()) {
-        span.classList.add('me');
-        mentionsMe = true;
-      }
-      parent.appendChild(span);
-    } else if (part.kind === 'link') {
-      const link = document.createElement('a');
-      link.className = 'msg-link';
-      // href присваиваем свойством, а не разметкой, и схему уже проверил
-      // splitText — в DOM ничего исполняемого не попадает.
-      link.href = part.value;
-      link.target = '_blank';
-      // noopener обязателен: без него открытая вкладка получает window.opener
-      // и может увести исходную страницу куда угодно.
-      link.rel = 'noopener noreferrer';
-      link.textContent = shortenUrl(part.value);
-      link.title = part.value;
-      parent.appendChild(link);
-    } else {
-      parent.appendChild(document.createTextNode(part.value));
-    }
-  }
-  return mentionsMe;
-}
-
-// Длинный адрес разрывает ленту по ширине, поэтому в тексте показываем
-// укороченный, а полный оставляем в href и подсказке.
-function shortenUrl(url) {
-  if (url.length <= 60) return url;
-  return `${url.slice(0, 45)}…${url.slice(-12)}`;
-}
-
-function fillRow(row, msg) {
-  row.replaceChildren();
-
-  if (msg.replyTo) {
-    const quote = document.createElement('button');
-    quote.type = 'button';
-    quote.className = 'reply-quote';
-    const qwho = document.createElement('span');
-    qwho.className = 'rq-who';
-    qwho.textContent = msg.replyTo.from;
-    const qtext = document.createElement('span');
-    qtext.className = 'rq-text';
-    qtext.textContent = msg.replyTo.text || 'вложение';
-    quote.append(qwho, qtext);
-    quote.addEventListener('click', (e) => {
-      e.stopPropagation();
-      scrollToMessage(msg.replyTo.id);
-    });
-    row.appendChild(quote);
-  }
-
-  if (!msg.mine) {
-    const who = document.createElement('span');
-    who.className = 'who';
-    who.textContent = msg.from;
-    row.appendChild(who);
-  }
-
-  let mentionsMe = false;
-  if (msg.text) {
-    const text = document.createElement('span');
-    text.className = 'text';
-    mentionsMe = renderText(text, msg.text);
-    row.appendChild(text);
-  }
-
-  if (msg.attachments?.length) row.appendChild(attachments.render(msg.attachments));
-
-  const meta = document.createElement('span');
-  meta.className = 'meta';
-  meta.textContent = (msg.edited ? 'изм. · ' : '') + timeLabel(msg.ts);
-  row.appendChild(meta);
-
-  row.classList.toggle('mention', mentionsMe && !msg.mine);
-
-  const actions = document.createElement('span');
-  actions.className = 'row-actions';
-  const reply = document.createElement('button');
-  reply.type = 'button';
-  reply.title = 'Ответить';
-  reply.appendChild(icon('reply', 14));
-  reply.addEventListener('click', (e) => {
-    e.stopPropagation();
-    setReply(msg);
-  });
-  actions.appendChild(reply);
-  const react = document.createElement('button');
-  react.type = 'button';
-  react.title = 'Реакция';
-  react.appendChild(icon('smiley', 14));
-  react.addEventListener('click', (e) => {
-    e.stopPropagation();
-    reactions.open(react, msg);
-  });
-  actions.appendChild(react);
-
-  if (msg.mine) {
-    const edit = document.createElement('button');
-    edit.type = 'button';
-    edit.title = 'Изменить';
-    edit.appendChild(icon('pencil', 14));
-    edit.addEventListener('click', (e) => {
-      e.stopPropagation();
-      startEdit(row, msg);
-    });
-    const del = document.createElement('button');
-    del.type = 'button';
-    del.title = 'Удалить';
-    del.appendChild(icon('trash', 14));
-    del.addEventListener('click', (e) => {
-      e.stopPropagation();
-      if (confirm('Удалить сообщение?')) wsSend({ type: 'delete', id: msg.id });
-    });
-    actions.append(edit, del);
-  }
-  row.appendChild(actions);
-
-  reactions.render(row, msg);
-}
-
-function createRow(msg) {
-  const row = document.createElement('div');
-  if (msg.system) {
-    row.className = 'row system';
-    row.textContent = msg.text;
-    return row;
-  }
-  msg.mine = msg.from === myNick;
-  row.className = msg.mine ? 'row mine' : 'row';
-  row.dataset.id = String(msg.id);
-  fillRow(row, msg);
-  return row;
-}
-
-function startEdit(row, msg) {
-  row.replaceChildren();
-  const input = document.createElement('input');
-  input.className = 'edit-input';
-  input.value = msg.text;
-  input.maxLength = 2000;
-  row.appendChild(input);
-  input.focus();
-  const commit = () => {
-    const value = input.value.trim();
-    if (value && value !== msg.text) wsSend({ type: 'edit', id: msg.id, text: value });
-    else fillRow(row, msg);
-  };
-  input.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      commit();
-    } else if (e.key === 'Escape') {
-      fillRow(row, msg);
-    }
-  });
-  input.addEventListener('blur', () => fillRow(row, msg));
-}
-
-const BOTTOM_SLACK_PX = 80;
-
-function atBottom() {
-  return logEl.scrollHeight - logEl.scrollTop - logEl.clientHeight <= BOTTOM_SLACK_PX;
-}
-
-function scrollToBottom() {
-  logEl.scrollTop = logEl.scrollHeight;
-  missedBelow = 0;
-  renderJumpNew();
-  markActiveRead();
-}
-
-// Прочитанным считается то, что ты видел: разговор открыт и ты внизу. Отметка
-// только растёт, поэтому лишних сообщений на сервер не уходит.
-function markActiveRead() {
-  const key = activeKey();
-  const list = conversations.get(key);
-  const newest = list?.length ? list[list.length - 1].id : 0;
-  if (!newest || (readMarks.get(key) ?? 0) >= newest) return;
-  readMarks.set(key, newest);
-  unread.set(key, 0);
-  wsSend(active.kind === 'channel' ? { type: 'read', channel: active.id, id: newest } : { type: 'read', to: active.id, id: newest });
-}
-
-function renderJumpNew() {
-  jumpNewBtn.hidden = missedBelow === 0;
-  if (missedBelow) jumpNewBtn.textContent = `↓ новых: ${missedBelow}`;
-}
-
-function appendRow(msg) {
-  const stick = atBottom() || msg.from === myNick || msg.system;
-  logEl.appendChild(createRow(msg));
-  if (stick) {
-    scrollToBottom();
-  } else {
-    missedBelow++;
-    renderJumpNew();
-  }
-}
-
-function renderLog() {
-  logAnimation.disable();
-  logEl.replaceChildren();
-  for (const msg of convOf(activeKey())) logEl.appendChild(createRow(msg));
-  missedBelow = 0;
-  scrollToBottom();
-  applyMotionState();
-  search.flushJump();
 }
 
 function renderTyping(nicks) {
@@ -962,115 +567,12 @@ function renderTyping(nicks) {
   typingEl.appendChild(dots);
 }
 
-function renderVoice(state) {
-  voiceChannel = state.channel;
-  voiceStatus.hidden = !state.channel;
-  if (state.channel) {
-    voiceConn.replaceChildren(icon('sound-on', 14));
-    const label = document.createElement('span');
-    label.textContent = state.channel;
-    voiceConn.appendChild(label);
-    // Заглушка выключает и микрофон, поэтому кнопка не должна выглядеть живой.
-    const micOff = state.muted || state.deafened;
-    setButton(voiceMuteBtn, micOff ? 'mic-off' : 'microphone');
-    voiceMuteBtn.classList.toggle('muted', micOff);
-    setButton(voiceDeafenBtn, state.deafened ? 'sound-off' : 'sound-on');
-    voiceDeafenBtn.classList.toggle('muted', state.deafened);
-  }
-  renderVoiceChannels();
-}
-
-function renderVoiceChannels() {
-  voiceListEl.replaceChildren();
-  for (const name of voiceChannels) {
-    const li = document.createElement('li');
-    li.className = 'voice-chan';
-
-    const head = document.createElement('div');
-    head.className = name === voiceChannel ? 'channel voice-chan-head active' : 'channel voice-chan-head';
-    head.appendChild(icon('sound-on', 14));
-    const label = document.createElement('span');
-    label.textContent = name;
-    head.appendChild(label);
-    head.addEventListener('click', () => {
-      if (voiceChannel === name) voice.leave();
-      else voice.join(name);
-    });
-    head.appendChild(deleteButton(`Удалить голосовой канал ${name}?`, () => wsSend({ type: 'voice-channel-delete', name })));
-    li.appendChild(head);
-
-    const members = voicePresence[name] ?? [];
-    if (members.length) {
-      const ul = document.createElement('ul');
-      ul.className = 'voice-members';
-      for (const nick of members) {
-        const m = document.createElement('li');
-        const label = document.createElement('span');
-        label.textContent = nick === myNick ? `${nick} (вы)` : nick;
-        m.appendChild(label);
-        // Про мут известно только по своему каналу: сервер рассылает его тем,
-        // кто рядом, и знать про соседние комнаты незачем.
-        if (name === voiceChannel && voice.isMuted(nick)) {
-          m.classList.add('muted');
-          m.title = 'Микрофон выключен';
-          m.appendChild(icon('mic-off', 13));
-        }
-        ul.appendChild(m);
-      }
-      li.appendChild(ul);
-    }
-    voiceListEl.appendChild(li);
-  }
-}
-
-function renderCall(state) {
-  callPhase = state.phase;
-  const inCall = state.phase === 'outgoing' || state.phase === 'active';
-
-  callIncoming.hidden = state.phase !== 'incoming';
-  if (state.phase === 'incoming') callIncomingText.textContent = `${state.peer} звонит…`;
-
-  callPanel.hidden = !inCall;
-  if (inCall) {
-    peerName.textContent = state.peer ?? '';
-    callStatus.textContent = state.phase === 'outgoing' ? 'Звоним…' : 'На связи';
-    callMute.hidden = state.phase !== 'active';
-    setButton(callMute, state.muted ? 'sound-off' : 'microphone', state.muted ? 'Выкл' : 'Микро');
-    callMute.classList.toggle('muted', state.muted);
-    renderStats(state.stats);
-  } else {
-    setMeter(partyMe, 0, false);
-    setMeter(partyPeer, 0, false);
-  }
-
-  updateCallButton();
-}
-
-function renderStats(stats) {
-  callStats.replaceChildren();
-  if (!stats) return;
-  const dot = document.createElement('span');
-  dot.className = `q-dot ${stats.quality}`;
-  const text = document.createElement('span');
-  text.textContent = formatStats(stats);
-  callStats.append(dot, text);
-}
-
-function setMeter(party, level, speaking) {
-  party.querySelector('.meter > i').style.width = `${Math.min(100, Math.round(level * 140))}%`;
-  party.querySelector('.ring').classList.toggle('speaking', speaking);
-}
-
-function renderLevels(levels) {
-  setMeter(partyMe, levels.local, levels.localSpeaking);
-  setMeter(partyPeer, levels.remote, levels.remoteSpeaking);
-}
-
 function openSidebar() {
   if (isNarrow()) closeRightPanels();
   sidebar.classList.add('open');
   backdrop.hidden = false;
 }
+
 function closeSidebar() {
   sidebar.classList.remove('open');
   backdrop.hidden = true;
@@ -1082,52 +584,11 @@ function closeRightPanels() {
   membersBtn.classList.remove('active');
 }
 
-function scrollToMessage(id) {
-  const row = logEl.querySelector(`[data-id="${id}"]`);
-  if (!row) return;
-  row.scrollIntoView({ behavior: 'smooth', block: 'center' });
-  row.classList.remove('flash');
-  void row.offsetWidth;
-  row.classList.add('flash');
-}
-
-function setReply(msg) {
-  replyingTo = { id: msg.id, from: msg.from, text: msg.text || 'вложение' };
-  renderReplyBar();
-  textInput.focus();
-}
-
-function cancelReply() {
-  replyingTo = null;
-  renderReplyBar();
-}
-
-function renderReplyBar() {
-  replyBar.replaceChildren();
-  if (!replyingTo) {
-    replyBar.hidden = true;
-    return;
-  }
-  replyBar.hidden = false;
-  const label = document.createElement('span');
-  label.className = 'reply-bar-text';
-  const who = document.createElement('b');
-  who.textContent = replyingTo.from;
-  label.append('Ответ ', who, `: ${replyingTo.text.slice(0, 80)}`);
-  const cancel = document.createElement('button');
-  cancel.type = 'button';
-  cancel.className = 'reply-cancel';
-  cancel.appendChild(icon('cross', 14));
-  cancel.addEventListener('click', cancelReply);
-  replyBar.append(label, cancel);
-}
-
-
 logoutBtn.addEventListener('click', () => {
   const question = isGuest
     ? 'Выйти? Гостевая личность стирается: ник освободится, а все твои сообщения и вложения будут удалены безвозвратно.'
     : 'Выйти из аккаунта на этом устройстве?';
-  if (confirm(question)) wsSend({ type: 'logout' });
+  if (confirm(question)) send({ type: 'logout' });
 });
 
 composer.addEventListener('submit', (event) => {
@@ -1136,27 +597,23 @@ composer.addEventListener('submit', (event) => {
   const files = attachments.pending();
   if (!text && files.length === 0) return;
   const base = active.kind === 'channel' ? { channel: active.id } : { to: active.id };
-  sendMessage({
+  socket.sendMessage({
     type: 'message',
     ...base,
     text,
-    replyTo: replyingTo?.id,
+    replyTo: reply.id(),
     attachments: files.length ? files : undefined,
-    nonce: newNonce(),
+    nonce: socket.newNonce(),
   });
   textInput.value = '';
   attachments.clear();
-  cancelReply();
+  reply.clear();
 });
 
 attachBtn.addEventListener('click', () => fileInput.click());
 fileInput.addEventListener('change', () => {
   attachments.add([...fileInput.files]);
   fileInput.value = '';
-});
-
-textInput.addEventListener('keydown', (event) => {
-  if (event.key === 'Escape' && replyingTo) cancelReply();
 });
 
 textInput.addEventListener('input', () => {
@@ -1166,12 +623,12 @@ textInput.addEventListener('input', () => {
 channelAddBtn.addEventListener('click', () => {
   const name = prompt('Имя канала (латиница, цифры, дефис):');
   if (!name) return;
-  const slug = name.trim().toLowerCase();
-  if (!/^[a-z0-9-]{1,24}$/.test(slug)) {
-    systemLine('Недопустимое имя канала');
+  const slug = channelSlug(name);
+  if (!slug) {
+    log.system('Недопустимое имя канала');
     return;
   }
-  wsSend({ type: 'channel-create', name: slug });
+  send({ type: 'channel-create', name: slug });
 });
 
 menuBtn.addEventListener('click', () => {
@@ -1179,14 +636,6 @@ menuBtn.addEventListener('click', () => {
   else openSidebar();
 });
 backdrop.addEventListener('click', closeSidebar);
-
-jumpNewBtn.addEventListener('click', scrollToBottom);
-logEl.addEventListener('scroll', () => {
-  if (missedBelow && atBottom()) {
-    missedBelow = 0;
-    renderJumpNew();
-  }
-});
 
 membersBtn.addEventListener('click', () => {
   const open = membersPanel.hidden;
@@ -1232,54 +681,6 @@ document.addEventListener('keydown', (event) => {
   else if (drop.isOpen()) drop.setPanel(false);
 });
 
-voiceMuteBtn.addEventListener('click', () => voice.toggleMute());
-voiceDeafenBtn.addEventListener('click', () => voice.toggleDeafen());
-voiceLeaveBtn.addEventListener('click', () => voice.leave());
-voiceAddBtn.addEventListener('click', () => {
-  const name = prompt('Имя голосового канала (латиница, цифры, дефис):');
-  if (!name) return;
-  const slug = name.trim().toLowerCase();
-  if (!/^[a-z0-9-]{1,24}$/.test(slug)) {
-    systemLine('Недопустимое имя канала');
-    return;
-  }
-  wsSend({ type: 'voice-channel-create', name: slug });
-});
-callBtn.addEventListener('click', () => call.invite(active.id));
-callAccept.addEventListener('click', () => call.accept());
-callDecline.addEventListener('click', () => call.decline());
-callMute.addEventListener('click', () => call.toggleMute());
-callHangup.addEventListener('click', () => call.hangup());
-
-function makeDraggable(panel, handle) {
-  let dragging = false;
-  let offsetX = 0;
-  let offsetY = 0;
-
-  handle.addEventListener('pointerdown', (event) => {
-    dragging = true;
-    const rect = panel.getBoundingClientRect();
-    offsetX = event.clientX - rect.left;
-    offsetY = event.clientY - rect.top;
-    panel.style.right = 'auto';
-    panel.style.bottom = 'auto';
-    panel.style.left = `${rect.left}px`;
-    panel.style.top = `${rect.top}px`;
-    handle.setPointerCapture(event.pointerId);
-  });
-  handle.addEventListener('pointermove', (event) => {
-    if (!dragging) return;
-    const x = Math.max(0, Math.min(window.innerWidth - panel.offsetWidth, event.clientX - offsetX));
-    const y = Math.max(0, Math.min(window.innerHeight - panel.offsetHeight, event.clientY - offsetY));
-    panel.style.left = `${x}px`;
-    panel.style.top = `${y}px`;
-  });
-  handle.addEventListener('pointerup', (event) => {
-    dragging = false;
-    handle.releasePointerCapture(event.pointerId);
-  });
-}
-
 function initUI() {
   gate.warnIfInsecure();
   gate.setMode('guest');
@@ -1289,11 +690,6 @@ function initUI() {
   searchBtn.appendChild(icon('search', 18));
   searchCloseBtn.appendChild(icon('cross', 16));
   searchNote.textContent = search.hint;
-  setButton(voiceLeaveBtn, 'cross');
-  setButton(callBtn, 'phone', 'Позвонить');
-  setButton(callAccept, 'phone', 'Принять');
-  setButton(callDecline, 'cross', 'Отклонить');
-  setButton(callHangup, 'phone', 'Завершить');
   setButton(sendBtn, 'chevron-right');
   setButton(attachBtn, 'paperclip');
   channelAddBtn.appendChild(icon('plus', 16));
@@ -1305,23 +701,20 @@ function initUI() {
     canChangePassword: () => joined && !isGuest,
     onSessions: (render) => {
       sessionsNote = render;
-      wsSend({ type: 'sessions' });
+      send({ type: 'sessions' });
     },
-    onRevokeSession: (id) => wsSend({ type: 'session-revoke', id }),
+    onRevokeSession: (id) => send({ type: 'session-revoke', id }),
     onApproveLink: (code, done) => {
       linkNote = done;
-      wsSend({ type: 'link-approve', code });
+      send({ type: 'link-approve', code });
     },
     onChangePassword: (current, next, done) => {
       passwordNote = done;
-      wsSend({ type: 'change-password', current, next });
+      send({ type: 'change-password', current, next });
     },
-    onLogoutEverywhere: () => wsSend({ type: 'logout', everywhere: true }),
+    onLogoutEverywhere: () => send({ type: 'logout', everywhere: true }),
   });
   setButton(toggle, 'gear');
-  makeDraggable(callPanel, callGrip);
-  settings.onMotionChange(applyMotionState);
-  applyMotionState();
   membersPanel.hidden = window.innerWidth <= 720;
   membersBtn.classList.toggle('active', !membersPanel.hidden);
 
@@ -1332,7 +725,7 @@ function initUI() {
   }
   if (authToken) {
     gate.setBusy(true);
-    connect();
+    socket.connect();
   }
 }
 

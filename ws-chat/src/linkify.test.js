@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { splitText } from '../public/linkify.js';
+import { splitText, shortenUrl } from '../public/linkify.js';
 
 const kinds = (text) => splitText(text).map((p) => `${p.kind}:${p.value}`);
 
@@ -94,5 +94,21 @@ describe('splitText: мелочи', () => {
 
   it('пустой текст ничего не даёт', () => {
     expect(splitText('')).toEqual([]);
+  });
+});
+
+describe('shortenUrl', () => {
+  it('короткий адрес оставляет как есть', () => {
+    expect(shortenUrl('https://example.com/a')).toBe('https://example.com/a');
+    expect(shortenUrl('x'.repeat(60))).toBe('x'.repeat(60));
+  });
+
+  it('длинный сокращает, сохраняя начало и хвост', () => {
+    const url = `https://example.com/${'a'.repeat(80)}/tail.html`;
+    const short = shortenUrl(url);
+    expect(short.length).toBeLessThan(url.length);
+    expect(short.startsWith(url.slice(0, 45))).toBe(true);
+    expect(short.endsWith(url.slice(-12))).toBe(true);
+    expect(short).toContain('…');
   });
 });
