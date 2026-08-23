@@ -1,7 +1,7 @@
 import { readFileSync, renameSync } from 'node:fs';
 import { writeFileAtomic, writeJsonAtomic } from './jsonfile.ts';
 import { isSealed, openJson, sealJson } from './sealed.ts';
-import type { AttachmentRef, Reactions, ReplyRef, WireMessage } from './protocol.ts';
+import type { Attachment, AttachmentRef, Reactions, ReplyRef, WireMessage } from './protocol.ts';
 
 export const DEFAULT_CHANNELS = ['general', 'random'];
 export const DEFAULT_VOICE_CHANNELS = ['general', 'games'];
@@ -39,6 +39,10 @@ export function dmKey(a: string, b: string): string {
   return 'dm:' + [a.toLowerCase(), b.toLowerCase()].sort().join('|');
 }
 
+function toAttachment(ref: AttachmentRef): Attachment {
+  return { url: `/uploads/${ref.id}`, name: ref.name, size: ref.size, mime: ref.mime };
+}
+
 function toWire(message: StoredMessage): WireMessage {
   return {
     id: message.id,
@@ -51,12 +55,7 @@ function toWire(message: StoredMessage): WireMessage {
     reactions: message.reactions && Object.keys(message.reactions).length ? message.reactions : undefined,
     replyTo: message.replyTo,
     nonce: message.nonce,
-    attachments: message.attachments?.map((a) => ({
-      url: `/uploads/${a.id}`,
-      name: a.name,
-      size: a.size,
-      mime: a.mime,
-    })),
+    attachments: message.attachments?.map(toAttachment),
   };
 }
 
@@ -306,7 +305,13 @@ export class Store {
     if (replyTo === undefined) return undefined;
     const target = this.find(replyTo);
     if (!target || target.key !== key) return undefined;
-    return { id: target.id, from: target.from, text: target.text.slice(0, 120) };
+    const media = target.attachments?.[0];
+    return {
+      id: target.id,
+      from: target.from,
+      text: target.text.slice(0, 120),
+      media: media && toAttachment(media),
+    };
   }
 
   private canAccess(message: StoredMessage, nick: string): boolean {

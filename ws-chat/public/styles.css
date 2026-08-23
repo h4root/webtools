@@ -2121,30 +2121,61 @@ html.motion-off *::after {
 
 /* --- ответы и вложения --- */
 .reply-quote {
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 7px;
   max-width: 100%;
-  margin: 0 0 4px;
-  padding: 3px 8px;
+  margin: 0 0 5px;
+  padding: 3px 8px 3px 7px;
   border: none;
-  border-left: 2px solid var(--accent);
-  border-radius: 4px;
-  background: rgba(255, 255, 255, 0.03);
+  border-left: 3px solid var(--accent);
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: inherit;
+  font: inherit;
   text-align: left;
   cursor: pointer;
+  overflow: hidden;
+}
+
+.reply-quote:hover {
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
+}
+
+div.reply-quote {
+  cursor: default;
+}
+
+.rq-thumb {
+  flex: none;
+  width: 32px;
+  height: 32px;
+  border-radius: 4px;
+  object-fit: cover;
+}
+
+.rq-body {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  line-height: 1.35;
+}
+
+.rq-who {
+  color: var(--accent);
+  font-size: 11.5px;
+  font-weight: 700;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.reply-quote .rq-who {
-  color: var(--accent);
-  font-size: 11px;
-  margin-right: 6px;
-}
-
-.reply-quote .rq-text {
+.rq-text {
   color: var(--dim);
-  font-size: 11px;
+  font-size: 11.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .attachments {
@@ -2204,27 +2235,20 @@ html.motion-off *::after {
 .reply-bar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 8px;
-  padding: 6px 18px;
+  padding: 6px 18px 0;
   color: var(--dim);
-  font-size: 12px;
 }
 
-.reply-bar-text {
+.reply-bar .reply-quote {
+  flex: 1;
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.reply-bar-text b {
-  color: var(--accent);
-  font-weight: 600;
+  margin: 0;
 }
 
 .reply-cancel {
   display: inline-flex;
+  flex: none;
   padding: 4px;
   background: transparent;
   border: none;

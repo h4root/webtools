@@ -1,8 +1,8 @@
 import { icon } from './icons.js';
 import { formatSize } from './format.js';
+import { isImage } from './media.js';
 import { attachTray } from './dom.js';
 
-const INLINE_MIME = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/avif', 'image/bmp']);
 const ATTACH_MAX = 10;
 
 export function createAttachments({ getToken, onError }) {
@@ -17,7 +17,7 @@ export function createAttachments({ getToken, onError }) {
         att.url,
         fetch(att.url, { headers: { Authorization: `Bearer ${getToken()}` } })
           .then((res) => (res.ok ? res.blob() : Promise.reject(new Error(String(res.status)))))
-          .then((data) => URL.createObjectURL(new Blob([data], { type: INLINE_MIME.has(att.mime) ? att.mime : 'application/octet-stream' })))
+          .then((data) => URL.createObjectURL(new Blob([data], { type: isImage(att.mime) ? att.mime : 'application/octet-stream' })))
           .catch((error) => {
             blobUrls.delete(att.url);
             throw error;
@@ -84,7 +84,7 @@ export function createAttachments({ getToken, onError }) {
     const box = document.createElement('div');
     box.className = 'attachments';
     for (const att of attachments) {
-      box.appendChild(INLINE_MIME.has(att.mime) ? imageLink(att) : fileLink(att));
+      box.appendChild(isImage(att.mime) ? imageLink(att) : fileLink(att));
     }
     return box;
   }
@@ -139,6 +139,7 @@ export function createAttachments({ getToken, onError }) {
 
   return {
     render,
+    urlOf,
     releaseUrls,
     add,
     pending: () => pending,

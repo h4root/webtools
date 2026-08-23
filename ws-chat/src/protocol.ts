@@ -42,6 +42,8 @@ export interface ReplyRef {
   id: number;
   from: string;
   text: string;
+  // Первое вложение оригинала: цитате хватает его на миниатюру.
+  media?: Attachment;
 }
 
 export interface WireMessage {

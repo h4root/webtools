@@ -1,7 +1,7 @@
 import { icon } from './icons.js';
 import { replyBar, textInput } from './dom.js';
 
-export function createReply() {
+export function createReply({ quote }) {
   let target = null;
 
   function render() {
@@ -11,21 +11,19 @@ export function createReply() {
       return;
     }
     replyBar.hidden = false;
-    const label = document.createElement('span');
-    label.className = 'reply-bar-text';
-    const who = document.createElement('b');
-    who.textContent = target.from;
-    label.append('Ответ ', who, `: ${target.text.slice(0, 80)}`);
+    replyBar.appendChild(icon('reply', 16));
+    replyBar.appendChild(quote.render(target));
     const cancel = document.createElement('button');
     cancel.type = 'button';
     cancel.className = 'reply-cancel';
+    cancel.title = 'Отменить ответ';
     cancel.appendChild(icon('cross', 14));
     cancel.addEventListener('click', clear);
-    replyBar.append(label, cancel);
+    replyBar.appendChild(cancel);
   }
 
   function set(msg) {
-    target = { id: msg.id, from: msg.from, text: msg.text || 'вложение' };
+    target = { id: msg.id, from: msg.from, text: msg.text, media: msg.attachments?.[0] };
     render();
     textInput.focus();
   }

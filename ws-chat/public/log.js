@@ -8,7 +8,7 @@ import { logEl, jumpNewBtn } from './dom.js';
 const BOTTOM_SLACK_PX = 80;
 const EDIT_MAX = 2000;
 
-export function createLog({ getNick, send, attachments, reactions, onReply, getMessages, onSeen, onRendered }) {
+export function createLog({ getNick, send, attachments, reactions, quote, onReply, getMessages, onSeen, onRendered }) {
   const animation = autoAnimate(logEl, { duration: 180, disrespectUserMotionPreference: true });
   let missedBelow = 0;
 
@@ -47,24 +47,6 @@ export function createLog({ getNick, send, attachments, reactions, onReply, getM
       }
     }
     return mentionsMe;
-  }
-
-  function quoteOf(msg) {
-    const quote = document.createElement('button');
-    quote.type = 'button';
-    quote.className = 'reply-quote';
-    const who = document.createElement('span');
-    who.className = 'rq-who';
-    who.textContent = msg.replyTo.from;
-    const text = document.createElement('span');
-    text.className = 'rq-text';
-    text.textContent = msg.replyTo.text || 'вложение';
-    quote.append(who, text);
-    quote.addEventListener('click', (event) => {
-      event.stopPropagation();
-      scrollTo(msg.replyTo.id);
-    });
-    return quote;
   }
 
   function actionsOf(row, msg) {
@@ -115,7 +97,7 @@ export function createLog({ getNick, send, attachments, reactions, onReply, getM
 
   function fillRow(row, msg) {
     row.replaceChildren();
-    if (msg.replyTo) row.appendChild(quoteOf(msg));
+    if (msg.replyTo) row.appendChild(quote.render(msg.replyTo, scrollTo));
 
     if (!msg.mine) {
       const who = document.createElement('span');

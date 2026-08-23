@@ -63,6 +63,28 @@ describe('Store', () => {
     ]);
   });
 
+  it('в цитату попадает первое вложение оригинала — для миниатюры', () => {
+    const withPic = store.addChannelMessage('general', 'alice', '', {
+      attachments: [
+        { id: 'aa11223344556677889900aabbccddee', name: 'shot.png', size: 10, mime: 'image/png' },
+        { id: 'bb11223344556677889900aabbccddee', name: 'doc.pdf', size: 20, mime: 'application/pdf' },
+      ],
+    });
+    const answer = store.addChannelMessage('general', 'bob', 'красиво', { replyTo: withPic.id });
+    expect(answer.replyTo?.media).toEqual({
+      url: '/uploads/aa11223344556677889900aabbccddee',
+      name: 'shot.png',
+      size: 10,
+      mime: 'image/png',
+    });
+  });
+
+  it('у цитаты на обычный текст миниатюры нет', () => {
+    const plain = store.addChannelMessage('general', 'alice', 'просто текст');
+    const answer = store.addChannelMessage('general', 'bob', 'ага', { replyTo: plain.id });
+    expect(answer.replyTo?.media).toBeUndefined();
+  });
+
   it('игнорирует ответ на несуществующее сообщение', () => {
     const m = store.addChannelMessage('general', 'alice', 'x', { replyTo: 999 });
     expect(m.replyTo).toBeUndefined();

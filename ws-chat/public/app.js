@@ -43,6 +43,7 @@ import { createContextMenu } from './menu.js';
 import { createNav } from './nav.js';
 import { createLog } from './log.js';
 import { createReply } from './reply.js';
+import { createQuote } from './quote.js';
 import { createVoiceView } from './voiceview.js';
 import { createCallView } from './callview.js';
 import { keyOf, messageKey, channelSlug } from './keys.js';
@@ -146,6 +147,8 @@ const attachments = createAttachments({
   onError: (reason) => log.system(reason),
 });
 
+const quote = createQuote({ urlOf: (att) => attachments.urlOf(att) });
+
 const typing = createTyping({ send, onChange: renderTyping });
 const reactions = createReactions({ send, getNick: () => myNick, findMessage: (id) => findMessage(id) });
 const gate = createGate({ request: socket.request });
@@ -158,13 +161,14 @@ const nav = createNav({
   onOpen: (kind, id) => openConversation(kind, id),
 });
 
-const reply = createReply();
+const reply = createReply({ quote });
 
 const log = createLog({
   getNick: () => myNick,
   send,
   attachments,
   reactions,
+  quote,
   onReply: (msg) => reply.set(msg),
   getMessages: () => convOf(activeKey()),
   onSeen: () => markActiveRead(),
