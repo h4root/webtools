@@ -166,20 +166,31 @@ export function createLog({ getNick, send, attachments, reactions, onReply, getM
     input.maxLength = EDIT_MAX;
     row.appendChild(input);
     input.focus();
+    // Перерисовка убирает поле из строки, и оно на прощание шлёт blur. Если
+    // обработчик оставить висеть, отрисовка пойдёт по второму кругу изнутри
+    // самой себя, и браузер оборвёт её ошибкой.
+    const restore = () => {
+      input.removeEventListener('blur', restore);
+      fillRow(row, msg);
+    };
     const commit = () => {
       const value = input.value.trim();
-      if (value && value !== msg.text) send({ type: 'edit', id: msg.id, text: value });
-      else fillRow(row, msg);
+      if (value && value !== msg.text) {
+        input.removeEventListener('blur', restore);
+        send({ type: 'edit', id: msg.id, text: value });
+      } else {
+        restore();
+      }
     };
     input.addEventListener('keydown', (event) => {
       if (event.key === 'Enter') {
         event.preventDefault();
         commit();
       } else if (event.key === 'Escape') {
-        fillRow(row, msg);
+        restore();
       }
     });
-    input.addEventListener('blur', () => fillRow(row, msg));
+    input.addEventListener('blur', restore);
   }
 
   function atBottom() {
