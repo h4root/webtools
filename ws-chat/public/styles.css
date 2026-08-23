@@ -2393,3 +2393,87 @@ div.reply-quote {
   /* Плашка не должна перехватывать сам drop: события летят к документу. */
   pointer-events: none;
 }
+
+/* --- просмотр картинок --- */
+
+.lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.92);
+}
+
+.lb-image {
+  max-width: 92vw;
+  max-height: 84vh;
+  border-radius: 6px;
+  object-fit: contain;
+}
+
+.lb-caption {
+  position: absolute;
+  left: 50%;
+  bottom: 18px;
+  transform: translateX(-50%);
+  max-width: calc(100% - 32px);
+  padding: 5px 12px;
+  background: rgba(0, 0, 0, 0.55);
+  border-radius: 999px;
+  color: var(--fg);
+  font-size: 12px;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lb-close,
+.lb-arrow {
+  position: absolute;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px;
+  background: rgba(255, 255, 255, 0.08);
+  border: none;
+  border-radius: 50%;
+  color: var(--fg);
+  cursor: pointer;
+}
+
+.lb-close:hover,
+.lb-arrow:hover {
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.lb-close {
+  top: 16px;
+  right: 18px;
+}
+
+.lb-arrow {
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.lb-prev {
+  left: 16px;
+}
+
+.lb-next {
+  right: 16px;
+}
+
+@media (max-width: 720px) {
+  .lb-image {
+    max-width: 100vw;
+    border-radius: 0;
+  }
+
+  .lb-arrow {
+    padding: 6px;
+  }
+}

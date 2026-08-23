@@ -5,7 +5,7 @@ import { attachTray } from './dom.js';
 
 const ATTACH_MAX = 10;
 
-export function createAttachments({ getToken, onError }) {
+export function createAttachments({ getToken, onError, onOpenImage }) {
   const blobUrls = new Map();
   let pending = [];
 
@@ -52,6 +52,13 @@ export function createAttachments({ getToken, onError }) {
         link.classList.add('att-failed');
       },
     );
+    // Новая вкладка остаётся запасным путём: она сработает, если просмотрщик
+    // почему-то не открылся, и по ней же живёт «открыть в новой вкладке».
+    link.addEventListener('click', (event) => {
+      if (event.metaKey || event.ctrlKey || event.shiftKey || link.classList.contains('att-failed')) return;
+      event.preventDefault();
+      onOpenImage(att);
+    });
     link.appendChild(img);
     return link;
   }

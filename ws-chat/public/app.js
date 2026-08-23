@@ -44,6 +44,7 @@ import { createNav } from './nav.js';
 import { createLog } from './log.js';
 import { createReply } from './reply.js';
 import { createQuote } from './quote.js';
+import { createLightbox } from './lightbox.js';
 import { createVoiceView } from './voiceview.js';
 import { createCallView } from './callview.js';
 import { keyOf, messageKey, channelSlug } from './keys.js';
@@ -145,9 +146,15 @@ const voiceView = createVoiceView({
 const attachments = createAttachments({
   getToken: () => authToken,
   onError: (reason) => log.system(reason),
+  onOpenImage: (att) => lightbox.open(att),
 });
 
 const quote = createQuote({ urlOf: (att) => attachments.urlOf(att) });
+
+const lightbox = createLightbox({
+  getMessages: () => convOf(activeKey()),
+  urlOf: (att) => attachments.urlOf(att),
+});
 
 const typing = createTyping({ send, onChange: renderTyping });
 const reactions = createReactions({ send, getNick: () => myNick, findMessage: (id) => findMessage(id) });
@@ -401,6 +408,7 @@ function returnToGate(reason) {
   dmPartners = [];
   online = [];
   attachments.releaseUrls();
+  lightbox.close();
   log.clear();
   reply.clear();
   search.reset();
@@ -680,6 +688,7 @@ sidebarCloseBtn.addEventListener('click', closeSidebar);
 
 document.addEventListener('keydown', (event) => {
   if (event.key !== 'Escape') return;
+  if (lightbox.isOpen()) return;
   if (sidebar.classList.contains('open')) closeSidebar();
   else if (search.isOpen()) search.setPanel(false);
   else if (drop.isOpen()) drop.setPanel(false);

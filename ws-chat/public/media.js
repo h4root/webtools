@@ -11,3 +11,18 @@ export function replyPreview({ text, media }) {
   if (!media) return 'Сообщение';
   return isImage(media.mime) ? 'Фото' : 'Файл';
 }
+
+export function imagesOf(messages) {
+  const found = [];
+  for (const msg of messages) {
+    for (const att of msg.attachments ?? []) {
+      if (isImage(att.mime)) found.push({ att, from: msg.from, id: msg.id });
+    }
+  }
+  return found;
+}
+
+export function stepIndex(index, count, delta) {
+  if (count === 0) return 0;
+  return (index + delta + count) % count;
+}
