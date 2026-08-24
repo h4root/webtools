@@ -216,6 +216,11 @@ export function createLog({ getNick, send, attachments, reactions, quote, onRepl
     onRendered();
   }
 
+  function edit(msg) {
+    const row = rowOf(msg.id);
+    if (row) startEdit(row, msg);
+  }
+
   function rowOf(id) {
     return logEl.querySelector(`[data-id="${id}"]`);
   }
@@ -252,5 +257,5 @@ export function createLog({ getNick, send, attachments, reactions, quote, onRepl
   settings.onMotionChange(applyMotion);
   applyMotion();
 
-  return { render, append, system, update, remove, clear, scrollTo, rowOf };
+  return { render, append, system, update, remove, clear, scrollTo, rowOf, edit };
 }

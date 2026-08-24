@@ -1,17 +1,25 @@
+import { planMenu } from './menuplan.js';
+import { secureContext } from './format.js';
+
 const EDGE = 8;
 
-// Заготовка: меню открывается и закрывается по-настоящему, пункты пока
-// неактивны. Набор пунктов будет зависеть от того, по чему кликнули.
-const PLACEHOLDER = [
-  { label: 'Ответить' },
-  { label: 'Копировать текст' },
-  { label: 'Копировать ссылку' },
-  { separator: true },
-  { label: 'Изменить' },
-  { label: 'Удалить', danger: true },
-];
+// Буфер обмена живёт только в защищённом контексте: по http с телефона его
+// просто нет. Пункт, который молча не сработает, хуже отсутствующего.
+function canCopy() {
+  return secureContext() && Boolean(navigator.clipboard);
+}
 
-export function createContextMenu() {
+function nickAt(node) {
+  const member = node.closest('.member');
+  if (member?.dataset.name) return member.dataset.name;
+  const who = node.closest('.who, .rq-who');
+  if (who) return who.textContent;
+  const mention = node.closest('.mention');
+  if (mention) return mention.textContent.replace(/^@/, '');
+  return null;
+}
+
+export function createContextMenu({ getNick, findMessage, actions }) {
   let node = null;
 
   function close() {
@@ -19,7 +27,7 @@ export function createContextMenu() {
     node = null;
   }
 
-  function build(items) {
+  function build(items, context) {
     const box = document.createElement('div');
     box.className = 'ctx-menu';
     for (const item of items) {
@@ -31,7 +39,10 @@ export function createContextMenu() {
       button.type = 'button';
       button.className = item.danger ? 'ctx-item danger' : 'ctx-item';
       button.textContent = item.label;
-      button.disabled = true;
+      button.addEventListener('click', () => {
+        close();
+        actions[item.id](context);
+      });
       box.appendChild(button);
     }
     return box;
@@ -47,19 +58,31 @@ export function createContextMenu() {
     box.style.top = `${top}px`;
   }
 
-  function open(x, y, items = PLACEHOLDER) {
+  function open(x, y, items, context) {
     close();
-    node = build(items);
+    node = build(items, context);
     document.body.appendChild(node);
     place(node, x, y);
   }
 
   document.addEventListener('contextmenu', (event) => {
     // Внутри полей ввода родное меню полезнее: там правка, вставка и проверка
-    // орфографии, которых у нас пока нет.
+    // орфографии, которых у нас нет.
     if (event.target.closest('input, textarea')) return;
+
+    const row = event.target.closest('.row[data-id]');
+    const context = {
+      message: row ? findMessage(Number(row.dataset.id)) : null,
+      nick: nickAt(event.target),
+      row,
+    };
+    const items = planMenu({ message: context.message, nick: context.nick, me: getNick(), canCopy: canCopy() });
+    if (items.length === 0) {
+      close();
+      return;
+    }
     event.preventDefault();
-    open(event.clientX, event.clientY);
+    open(event.clientX, event.clientY, items, context);
   });
 
   document.addEventListener('click', close);
@@ -69,5 +92,5 @@ export function createContextMenu() {
     if (event.key === 'Escape') close();
   });
 
-  return { open, close };
+  return { close, isOpen: () => Boolean(node) };
 }

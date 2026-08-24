@@ -48,6 +48,7 @@ import { createLightbox } from './lightbox.js';
 import { createVoiceView } from './voiceview.js';
 import { createCallView } from './callview.js';
 import { keyOf, messageKey, channelSlug } from './keys.js';
+import { appendMention } from './linkify.js';
 import { createTyping } from './typing.js';
 import { createReactions } from './reactions.js';
 import { createDropZone } from './dnd.js';
@@ -159,7 +160,34 @@ const lightbox = createLightbox({
 const typing = createTyping({ send, onChange: renderTyping });
 const reactions = createReactions({ send, getNick: () => myNick, findMessage: (id) => findMessage(id) });
 const gate = createGate({ request: socket.request });
-createContextMenu();
+
+function copy(text, done) {
+  navigator.clipboard.writeText(text).then(
+    () => log.system(done),
+    () => log.system('Не удалось скопировать'),
+  );
+}
+
+createContextMenu({
+  getNick: () => myNick,
+  findMessage: (id) => findMessage(id),
+  actions: {
+    reply: ({ message }) => reply.set(message),
+    react: ({ message, row }) => reactions.open(row, message),
+    'copy-text': ({ message }) => copy(message.text, 'Текст скопирован'),
+    jump: ({ message }) => log.scrollTo(message.replyTo.id),
+    edit: ({ message }) => log.edit(message),
+    delete: ({ message }) => {
+      if (confirm('Удалить сообщение?')) send({ type: 'delete', id: message.id });
+    },
+    dm: ({ nick }) => openConversation('dm', nick),
+    mention: ({ nick }) => {
+      textInput.value = appendMention(textInput.value, nick);
+      textInput.focus();
+    },
+    'copy-nick': ({ nick }) => copy(nick, 'Ник скопирован'),
+  },
+});
 createDropZone({ isReady: () => joined, onFiles: (files) => attachments.add(files) });
 
 const nav = createNav({

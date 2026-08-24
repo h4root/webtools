@@ -85,3 +85,8 @@ export function shortenUrl(url) {
   if (url.length <= 60) return url;
   return `${url.slice(0, 45)}…${url.slice(-12)}`;
 }
+
+export function appendMention(value, nick) {
+  const gap = value && !value.endsWith(' ') ? ' ' : '';
+  return `${value}${gap}@${nick} `;
+}

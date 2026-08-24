@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { splitText, shortenUrl } from '../public/linkify.js';
+import { splitText, shortenUrl, appendMention } from '../public/linkify.js';
 
 const kinds = (text) => splitText(text).map((p) => `${p.kind}:${p.value}`);
 
@@ -110,5 +110,19 @@ describe('shortenUrl', () => {
     expect(short.startsWith(url.slice(0, 45))).toBe(true);
     expect(short.endsWith(url.slice(-12))).toBe(true);
     expect(short).toContain('…');
+  });
+});
+
+describe('appendMention', () => {
+  it('в пустое поле кладёт упоминание с пробелом на конце', () => {
+    expect(appendMention('', 'bob')).toBe('@bob ');
+  });
+
+  it('к набранному тексту добавляет через пробел', () => {
+    expect(appendMention('привет', 'bob')).toBe('привет @bob ');
+  });
+
+  it('второго пробела не ставит', () => {
+    expect(appendMention('привет ', 'bob')).toBe('привет @bob ');
   });
 });

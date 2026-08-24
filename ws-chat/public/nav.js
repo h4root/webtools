@@ -64,6 +64,7 @@ export function createNav({ getState, send, onOpen }) {
     const row = document.createElement('div');
     row.className = 'member';
     row.dataset.nick = nick.toLowerCase();
+    row.dataset.name = nick;
     const av = document.createElement('span');
     av.className = 'm-avatar';
     av.textContent = nick.slice(0, 1).toUpperCase();
