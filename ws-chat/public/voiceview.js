@@ -46,6 +46,7 @@ export function createVoiceView({ voice, send, getState, onError }) {
     for (const name of voiceChannels) {
       const li = document.createElement('li');
       li.className = 'voice-chan';
+      li.dataset.voice = name;
 
       const head = document.createElement('div');
       head.className = name === joined ? 'channel voice-chan-head active' : 'channel voice-chan-head';
@@ -87,5 +88,5 @@ export function createVoiceView({ voice, send, getState, onError }) {
     send({ type: 'voice-channel-create', name: slug });
   });
 
-  return { render, renderChannels };
+  return { render, renderChannels, current: () => joined };
 }

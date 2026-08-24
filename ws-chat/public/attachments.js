@@ -39,6 +39,7 @@ export function createAttachments({ getToken, onError, onOpenImage }) {
     link.target = '_blank';
     link.rel = 'noopener';
     link.className = 'att-image';
+    link.dataset.url = att.url;
     const img = document.createElement('img');
     img.alt = att.name;
     img.loading = 'lazy';
@@ -67,6 +68,7 @@ export function createAttachments({ getToken, onError, onOpenImage }) {
     const link = document.createElement('a');
     link.download = att.name;
     link.className = 'att-file';
+    link.dataset.url = att.url;
     urlOf(att).then(
       (url) => {
         link.href = url;
@@ -85,6 +87,20 @@ export function createAttachments({ getToken, onError, onOpenImage }) {
     info.append(name, size);
     link.appendChild(info);
     return link;
+  }
+
+  // Ссылка на вложение живёт в blob: скачивание — это клик по временному
+  // якорю, а не переход по адресу с сервера.
+  function download(att) {
+    urlOf(att).then(
+      (url) => {
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = att.name;
+        link.click();
+      },
+      () => onError(`Не удалось загрузить ${att.name}`),
+    );
   }
 
   function render(attachments) {
@@ -147,6 +163,7 @@ export function createAttachments({ getToken, onError, onOpenImage }) {
   return {
     render,
     urlOf,
+    download,
     releaseUrls,
     add,
     pending: () => pending,

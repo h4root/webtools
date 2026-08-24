@@ -19,8 +19,25 @@ function nickAt(node) {
   return null;
 }
 
-export function createContextMenu({ getNick, findMessage, actions }) {
+export function createContextMenu({ getNick, findMessage, channelCount, voiceCurrent, actions }) {
   let node = null;
+
+  function targetAt(origin) {
+    const row = origin.closest('.row[data-id]');
+    const message = row ? findMessage(Number(row.dataset.id)) : null;
+    const media = origin.closest('.att-image, .att-file');
+    const attachment = message?.attachments?.find((att) => att.url === media?.dataset.url) ?? null;
+
+    const voiceEl = origin.closest('.voice-chan');
+    const voice = voiceEl ? { name: voiceEl.dataset.voice, joined: voiceEl.dataset.voice === voiceCurrent() } : null;
+
+    const item = origin.closest('.channel[data-kind]');
+    // Личная переписка в боковой панели — это про человека, а не про канал.
+    const nick = item?.dataset.kind === 'dm' ? item.dataset.name : nickAt(origin);
+    const channel = item?.dataset.kind === 'channel' ? { name: item.dataset.name, last: channelCount() <= 1 } : null;
+
+    return { message, attachment, nick, voice, channel, row };
+  }
 
   function close() {
     node?.remove();
@@ -70,13 +87,8 @@ export function createContextMenu({ getNick, findMessage, actions }) {
     // орфографии, которых у нас нет.
     if (event.target.closest('input, textarea')) return;
 
-    const row = event.target.closest('.row[data-id]');
-    const context = {
-      message: row ? findMessage(Number(row.dataset.id)) : null,
-      nick: nickAt(event.target),
-      row,
-    };
-    const items = planMenu({ message: context.message, nick: context.nick, me: getNick(), canCopy: canCopy() });
+    const context = targetAt(event.target);
+    const items = planMenu({ ...context, me: getNick(), canCopy: canCopy() });
     if (items.length === 0) {
       close();
       return;

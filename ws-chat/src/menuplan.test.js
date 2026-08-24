@@ -65,3 +65,56 @@ describe('planMenu: копирование', () => {
     expect(planMenu({ me: 'alice', canCopy: true })).toEqual([]);
   });
 });
+
+describe('planMenu: канал', () => {
+  it('текстовый канал открывают, копируют и удаляют', () => {
+    expect(ids(planMenu({ channel: { name: 'general', last: false }, me: 'alice', canCopy: true }))).toEqual([
+      'open-channel',
+      'copy-channel',
+      '—',
+      'delete-channel',
+    ]);
+  });
+
+  it('последний канал удалить не предлагают: чату нужен хотя бы один', () => {
+    expect(ids(planMenu({ channel: { name: 'general', last: true }, me: 'alice', canCopy: true }))).toEqual([
+      'open-channel',
+      'copy-channel',
+    ]);
+  });
+
+  it('голосовой зовёт войти, а тот, где ты сидишь, — выйти', () => {
+    const plan = planMenu({ voice: { name: 'games', joined: false }, me: 'alice', canCopy: true });
+    expect(ids(plan)).toEqual(['voice-toggle', '—', 'delete-voice']);
+    expect(plan[0].label).toBe('Войти');
+    expect(planMenu({ voice: { name: 'games', joined: true }, me: 'alice', canCopy: true })[0].label).toBe('Выйти');
+  });
+});
+
+describe('planMenu: вложение', () => {
+  const picture = { url: '/uploads/1', name: 'shot.png', mime: 'image/png' };
+  const file = { url: '/uploads/2', name: 'doc.pdf', mime: 'application/pdf' };
+
+  it('картинку открывают в просмотрщике и скачивают', () => {
+    expect(ids(planMenu({ attachment: picture, me: 'alice', canCopy: true }))).toEqual([
+      'open-image',
+      'download',
+      'copy-file',
+    ]);
+  });
+
+  it('у файла открывать нечего', () => {
+    expect(ids(planMenu({ attachment: file, me: 'alice', canCopy: true }))).toEqual(['download', 'copy-file']);
+  });
+
+  it('вложение важнее сообщения, в котором лежит', () => {
+    expect(ids(planMenu({ message: mine, attachment: file, me: 'alice', canCopy: true }))).toEqual([
+      'download',
+      'copy-file',
+    ]);
+  });
+
+  it('вне защищённого контекста имя не скопировать', () => {
+    expect(ids(planMenu({ attachment: file, me: 'alice', canCopy: false }))).toEqual(['download']);
+  });
+});

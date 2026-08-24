@@ -21,6 +21,8 @@ export function createNav({ getState, send, onOpen }) {
     const { active, unread, channels } = getState();
     const key = keyOf(kind, id);
     const item = document.createElement('li');
+    item.dataset.kind = kind;
+    item.dataset.name = id;
     const isActive = kind === active.kind && id.toLowerCase() === active.id.toLowerCase();
     item.className = isActive ? 'channel active' : 'channel';
     if (offline) item.classList.add('offline');

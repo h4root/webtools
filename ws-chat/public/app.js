@@ -171,6 +171,8 @@ function copy(text, done) {
 createContextMenu({
   getNick: () => myNick,
   findMessage: (id) => findMessage(id),
+  channelCount: () => channels.length,
+  voiceCurrent: () => voiceView.current(),
   actions: {
     reply: ({ message }) => reply.set(message),
     react: ({ message, row }) => reactions.open(row, message),
@@ -186,6 +188,21 @@ createContextMenu({
       textInput.focus();
     },
     'copy-nick': ({ nick }) => copy(nick, 'Ник скопирован'),
+    'open-image': ({ attachment }) => lightbox.open(attachment),
+    download: ({ attachment }) => attachments.download(attachment),
+    'copy-file': ({ attachment }) => copy(attachment.name, 'Имя файла скопировано'),
+    'open-channel': ({ channel }) => openConversation('channel', channel.name),
+    'copy-channel': ({ channel }) => copy(channel.name, 'Имя канала скопировано'),
+    'delete-channel': ({ channel }) => {
+      if (confirm(`Удалить канал #${channel.name} вместе с историей?`)) send({ type: 'channel-delete', name: channel.name });
+    },
+    'voice-toggle': ({ voice: target }) => {
+      if (target.joined) voice.leave();
+      else voice.join(target.name);
+    },
+    'delete-voice': ({ voice: target }) => {
+      if (confirm(`Удалить голосовой канал ${target.name}?`)) send({ type: 'voice-channel-delete', name: target.name });
+    },
   },
 });
 createDropZone({ isReady: () => joined, onFiles: (files) => attachments.add(files) });

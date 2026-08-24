@@ -1,3 +1,5 @@
+import { isImage } from './media.js';
+
 const SEPARATOR = { separator: true };
 
 function nickItems(nick, me, canCopy) {
@@ -23,10 +25,37 @@ function messageItems(message, me, canCopy) {
   return items;
 }
 
-// Ник важнее сообщения: щелчок по имени внутри строки — это про человека,
-// а не про то, что он написал.
-export function planMenu({ message, nick, me, canCopy }) {
+function attachmentItems(attachment, canCopy) {
+  const items = [];
+  if (isImage(attachment.mime)) items.push({ id: 'open-image', label: 'Открыть' });
+  items.push({ id: 'download', label: 'Скачать' });
+  if (canCopy) items.push({ id: 'copy-file', label: 'Копировать имя' });
+  return items;
+}
+
+function channelItems(channel, canCopy) {
+  const items = [{ id: 'open-channel', label: 'Открыть' }];
+  if (canCopy) items.push({ id: 'copy-channel', label: 'Копировать имя' });
+  // Последний канал не удаляем: чату нужен хотя бы один.
+  if (!channel.last) items.push(SEPARATOR, { id: 'delete-channel', label: 'Удалить канал', danger: true });
+  return items;
+}
+
+function voiceItems(voice) {
+  return [
+    { id: 'voice-toggle', label: voice.joined ? 'Выйти' : 'Войти' },
+    SEPARATOR,
+    { id: 'delete-voice', label: 'Удалить канал', danger: true },
+  ];
+}
+
+// Порядок проверок — от частного к общему: щелчок по вложению или по имени
+// внутри строки говорит о них, а не о самом сообщении.
+export function planMenu({ attachment, nick, message, voice, channel, me, canCopy }) {
+  if (attachment) return attachmentItems(attachment, canCopy);
   if (nick) return nickItems(nick, me, canCopy);
   if (message) return messageItems(message, me, canCopy);
+  if (voice) return voiceItems(voice);
+  if (channel) return channelItems(channel, canCopy);
   return [];
 }
