@@ -3,6 +3,7 @@ import { icon } from './icons.js';
 import { settings } from './settings.js';
 import { splitText, shortenUrl } from './linkify.js';
 import { timeLabel } from './format.js';
+import { sameDay, dayLabel } from './days.js';
 import { logEl, jumpNewBtn } from './dom.js';
 
 const BOTTOM_SLACK_PX = 80;
@@ -11,6 +12,9 @@ const EDIT_MAX = 2000;
 export function createLog({ getNick, send, attachments, reactions, quote, onReply, getMessages, onSeen, onRendered }) {
   const animation = autoAnimate(logEl, { duration: 180, disrespectUserMotionPreference: true });
   let missedBelow = 0;
+  // Метка времени последней нарисованной строки: по ней видно, что следующая
+  // пришла уже в другой день.
+  let lastTs = null;
 
   function applyMotion() {
     if (settings.animationsEnabled()) animation.enable();
@@ -126,6 +130,32 @@ export function createLog({ getNick, send, attachments, reactions, quote, onRepl
     reactions.render(row, msg);
   }
 
+  function daySeparator(ts) {
+    const line = document.createElement('div');
+    line.className = 'day-sep';
+    line.dataset.ts = String(ts);
+    const label = document.createElement('span');
+    label.textContent = dayLabel(ts, Date.now());
+    line.appendChild(label);
+    return line;
+  }
+
+  // Вкладку не закрывают неделями: с наступлением полуночи вчерашние плашки
+  // обязаны перестать говорить «Сегодня».
+  function relabelDays() {
+    const now = Date.now();
+    for (const line of logEl.querySelectorAll('.day-sep')) {
+      line.firstChild.textContent = dayLabel(Number(line.dataset.ts), now);
+    }
+  }
+
+  // Системные строки живут только до перезагрузки и своей даты не имеют:
+  // разделитель из-за них появляться не должен.
+  function opensNewDay(msg) {
+    if (msg.system) return false;
+    return lastTs === null || !sameDay(lastTs, msg.ts);
+  }
+
   function createRow(msg) {
     const row = document.createElement('div');
     if (msg.system) {
@@ -193,6 +223,11 @@ export function createLog({ getNick, send, attachments, reactions, quote, onRepl
 
   function append(msg) {
     const stick = atBottom() || msg.from === getNick() || msg.system;
+    if (opensNewDay(msg)) {
+      relabelDays();
+      logEl.appendChild(daySeparator(msg.ts));
+      lastTs = msg.ts;
+    }
     logEl.appendChild(createRow(msg));
     if (stick) {
       scrollToBottom();
@@ -209,7 +244,14 @@ export function createLog({ getNick, send, attachments, reactions, quote, onRepl
   function render() {
     animation.disable();
     logEl.replaceChildren();
-    for (const msg of getMessages()) logEl.appendChild(createRow(msg));
+    lastTs = null;
+    for (const msg of getMessages()) {
+      if (opensNewDay(msg)) {
+        logEl.appendChild(daySeparator(msg.ts));
+        lastTs = msg.ts;
+      }
+      logEl.appendChild(createRow(msg));
+    }
     missedBelow = 0;
     scrollToBottom();
     applyMotion();
@@ -236,6 +278,7 @@ export function createLog({ getNick, send, attachments, reactions, quote, onRepl
 
   function clear() {
     logEl.replaceChildren();
+    lastTs = null;
   }
 
   function scrollTo(id) {

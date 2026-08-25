@@ -816,6 +816,27 @@ button {
   font-size: 12px;
 }
 
+/* Плашка с датой держится у верхнего края, пока листаешь этот день:
+   иначе, уехав вглубь истории, перестаёшь понимать, где находишься. */
+.day-sep {
+  align-self: center;
+  position: sticky;
+  top: 4px;
+  z-index: 3;
+  margin: 6px 0 2px;
+  pointer-events: none;
+}
+
+.day-sep span {
+  display: inline-block;
+  padding: 3px 11px;
+  background: color-mix(in srgb, var(--panel) 90%, transparent);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--dim);
+  font-size: 11px;
+}
+
 .who {
   display: block;
   margin-bottom: 2px;
