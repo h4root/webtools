@@ -149,3 +149,6 @@ deploy/k8s/secret.yaml
 # ws-chat persistence
 data/
 store.json
+
+# Rust build artifacts (десктопный клиент)
+target/

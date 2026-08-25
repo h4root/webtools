@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ws-chat</title>
+<link rel="stylesheet" href="connect.css">
+</head>
+<body>
+  <main class="gate">
+    <h1>ws-chat</h1>
+    <p class="lede">Клиент подключается к серверу в твоей сети. Введи адрес — тот, что сервер напечатал при запуске.</p>
+
+    <form id="form" autocomplete="off">
+      <label class="field">
+        <span>Адрес сервера</span>
+        <input id="address" type="text" placeholder="192.168.1.10:3000" spellcheck="false" autocapitalize="off">
+      </label>
+      <button id="connect" type="submit">Подключиться</button>
+    </form>
+
+    <p id="note" class="note" hidden></p>
+
+    <section id="recent-box" class="recent" hidden>
+      <h2>Недавние</h2>
+      <ul id="recent"></ul>
+    </section>
+  </main>
+
+  <script type="module" src="connect.js"></script>
+</body>
+</html>

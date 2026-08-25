@@ -1,0 +1,15 @@
+{
+  "name": "ws-chat-desktop",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Десктопный клиент ws-chat: окно к серверу в локальной сети",
+  "scripts": {
+    "dev": "tauri dev",
+    "build": "tauri build",
+    "tauri": "tauri"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.1.0"
+  }
+}
