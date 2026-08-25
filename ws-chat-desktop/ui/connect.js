@@ -1,4 +1,4 @@
-import { normalizeAddress, addressLabel, rememberAddress } from './address.js';
+import { normalizeAddress, addressLabel, rememberAddress, downgraded } from './address.js';
 
 const STORE_KEY = 'ws-chat-servers';
 const PROBE_MS = 4000;
@@ -65,13 +65,23 @@ async function go(raw) {
     return;
   }
 
+  if (downgraded(readRecent(), origin)) {
+    say('Раньше этот сервер отвечал по https, а сейчас предлагает открытое соединение. Пароль по нему уйдёт незашифрованным — проверь, что происходит, прежде чем входить.');
+    return;
+  }
+
   busy(true);
   say('');
   const result = await probe(origin);
   busy(false);
 
   if (!result.ok) {
-    say(result.reason);
+    // Самоподписанный сертификат системный webview просто отвергает, и со
+    // стороны это выглядит как «сервер не отвечает».
+    const hint = origin.startsWith('https:')
+      ? ' Если сертификат самоподписанный, система его не примет — добавь его в доверенные.'
+      : '';
+    say(result.reason + hint);
     return;
   }
 

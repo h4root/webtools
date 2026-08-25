@@ -28,3 +28,19 @@ export function addressLabel(origin) {
 export function rememberAddress(list, origin, limit = 5) {
   return [origin, ...list.filter((item) => item !== origin)].slice(0, limit);
 }
+
+// К этому серверу уже ходили по https, а теперь предлагают простой http.
+// Само по себе так не бывает: либо сервер переставили, либо кто-то в сети
+// уводит соединение туда, где пароль виден целиком.
+export function downgraded(list, origin) {
+  const now = new URL(origin);
+  if (now.protocol !== 'http:') return false;
+  return list.some((known) => {
+    try {
+      const seen = new URL(known);
+      return seen.protocol === 'https:' && seen.host === now.host;
+    } catch {
+      return false;
+    }
+  });
+}
