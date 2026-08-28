@@ -300,5 +300,5 @@ export function createLog({ getNick, send, attachments, reactions, quote, onRepl
   settings.onMotionChange(applyMotion);
   applyMotion();
 
-  return { render, append, system, update, remove, clear, scrollTo, rowOf, edit };
+  return { render, append, system, update, remove, clear, scrollTo, scrollToBottom, rowOf, edit };
 }

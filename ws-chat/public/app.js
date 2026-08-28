@@ -188,6 +188,11 @@ createContextMenu({
       textInput.focus();
     },
     'copy-nick': ({ nick }) => copy(nick, 'Ник скопирован'),
+    'open-link': ({ link }) => window.open(link, '_blank', 'noopener,noreferrer'),
+    'copy-link': ({ link }) => copy(link, 'Адрес скопирован'),
+    'mark-read': () => markActiveRead(),
+    find: () => search.setPanel(true),
+    'to-bottom': () => log.scrollToBottom(),
     'open-image': ({ attachment }) => lightbox.open(attachment),
     download: ({ attachment }) => attachments.download(attachment),
     'copy-file': ({ attachment }) => copy(attachment.name, 'Имя файла скопировано'),

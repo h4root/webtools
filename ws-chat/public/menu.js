@@ -27,6 +27,7 @@ export function createContextMenu({ getNick, findMessage, channelCount, voiceCur
     const message = row ? findMessage(Number(row.dataset.id)) : null;
     const media = origin.closest('.att-image, .att-file');
     const attachment = message?.attachments?.find((att) => att.url === media?.dataset.url) ?? null;
+    const link = origin.closest('a.msg-link')?.href ?? null;
 
     const voiceEl = origin.closest('.voice-chan');
     const voice = voiceEl ? { name: voiceEl.dataset.voice, joined: voiceEl.dataset.voice === voiceCurrent() } : null;
@@ -36,7 +37,11 @@ export function createContextMenu({ getNick, findMessage, channelCount, voiceCur
     const nick = item?.dataset.kind === 'dm' ? item.dataset.name : nickAt(origin);
     const channel = item?.dataset.kind === 'channel' ? { name: item.dataset.name, last: channelCount() <= 1 } : null;
 
-    return { message, attachment, nick, voice, channel, row };
+    // Лента идёт последней: щелчок по строке — про сообщение, и только мимо
+    // строк остаётся сам разговор.
+    const log = Boolean(origin.closest('#log'));
+
+    return { message, attachment, link, nick, voice, channel, log, row };
   }
 
   function close() {

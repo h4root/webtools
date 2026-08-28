@@ -33,6 +33,21 @@ function attachmentItems(attachment, canCopy) {
   return items;
 }
 
+function linkItems(canCopy) {
+  const items = [{ id: 'open-link', label: 'Открыть в браузере' }];
+  if (canCopy) items.push({ id: 'copy-link', label: 'Копировать адрес' });
+  return items;
+}
+
+// Щелчок мимо сообщений — про разговор целиком, а не про какую-то строку.
+function logItems() {
+  return [
+    { id: 'mark-read', label: 'Отметить прочитанным' },
+    { id: 'find', label: 'Найти сообщение' },
+    { id: 'to-bottom', label: 'В конец ленты' },
+  ];
+}
+
 function channelItems(channel, canCopy) {
   const items = [{ id: 'open-channel', label: 'Открыть' }];
   if (canCopy) items.push({ id: 'copy-channel', label: 'Копировать имя' });
@@ -51,11 +66,13 @@ function voiceItems(voice) {
 
 // Порядок проверок — от частного к общему: щелчок по вложению или по имени
 // внутри строки говорит о них, а не о самом сообщении.
-export function planMenu({ attachment, nick, message, voice, channel, me, canCopy }) {
+export function planMenu({ attachment, link, nick, message, voice, channel, log, me, canCopy }) {
   if (attachment) return attachmentItems(attachment, canCopy);
+  if (link) return linkItems(canCopy);
   if (nick) return nickItems(nick, me, canCopy);
   if (message) return messageItems(message, me, canCopy);
   if (voice) return voiceItems(voice);
   if (channel) return channelItems(channel, canCopy);
+  if (log) return logItems();
   return [];
 }

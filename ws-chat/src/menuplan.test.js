@@ -118,3 +118,33 @@ describe('planMenu: вложение', () => {
     expect(ids(planMenu({ attachment: file, me: 'alice', canCopy: false }))).toEqual(['download']);
   });
 });
+
+describe('planMenu: ссылка', () => {
+  const link = 'https://example.com/статья';
+
+  it('ссылку открывают и копируют', () => {
+    expect(ids(planMenu({ link, me: 'alice', canCopy: true }))).toEqual(['open-link', 'copy-link']);
+  });
+
+  it('вне защищённого контекста остаётся только открыть', () => {
+    expect(ids(planMenu({ link, me: 'alice', canCopy: false }))).toEqual(['open-link']);
+  });
+
+  it('ссылка важнее сообщения, в котором она написана', () => {
+    expect(ids(planMenu({ message: mine, link, me: 'alice', canCopy: true }))).toEqual(['open-link', 'copy-link']);
+  });
+});
+
+describe('planMenu: пустое место ленты', () => {
+  it('предлагает то, что относится ко всему разговору', () => {
+    expect(ids(planMenu({ log: true, me: 'alice', canCopy: true }))).toEqual(['mark-read', 'find', 'to-bottom']);
+  });
+
+  it('на сообщении лента уступает: щёлкнули по строке, а не мимо', () => {
+    expect(ids(planMenu({ log: true, message: theirs, me: 'alice', canCopy: true }))).toEqual([
+      'reply',
+      'react',
+      'copy-text',
+    ]);
+  });
+});
