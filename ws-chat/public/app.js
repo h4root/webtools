@@ -28,6 +28,8 @@ import {
   connBanner,
   searchBtn,
   searchInput,
+  headerSearch,
+  searchHead,
   searchCloseBtn,
   searchNote,
   dropBtn,
@@ -49,6 +51,7 @@ import { createVoiceView } from './voiceview.js';
 import { createCallView } from './callview.js';
 import { keyOf, messageKey, channelSlug } from './keys.js';
 import { appendMention } from './linkify.js';
+import { avatarHue } from './grouping.js';
 import { createTyping } from './typing.js';
 import { createReactions } from './reactions.js';
 import { createDropZone } from './dnd.js';
@@ -191,7 +194,7 @@ createContextMenu({
     'open-link': ({ link }) => window.open(link, '_blank', 'noopener,noreferrer'),
     'copy-link': ({ link }) => copy(link, 'Адрес скопирован'),
     'mark-read': () => markActiveRead(),
-    find: () => search.setPanel(true),
+    find: () => showPanel('search'),
     'to-bottom': () => log.scrollToBottom(),
     'open-image': ({ attachment }) => lightbox.open(attachment),
     download: ({ attachment }) => attachments.download(attachment),
@@ -502,6 +505,7 @@ function enterApp() {
   appEl.hidden = false;
   const avatar = document.createElement('span');
   avatar.className = 'avatar';
+  avatar.style.setProperty('--hue', avatarHue(myNick));
   avatar.textContent = myNick.slice(0, 1).toUpperCase();
   const name = document.createElement('span');
   name.className = isGuest ? 'me-name guest' : 'me-name';
@@ -641,9 +645,7 @@ function closeSidebar() {
 }
 
 function closeRightPanels() {
-  drop.setPanel(false);
-  membersPanel.hidden = true;
-  membersBtn.classList.remove('active');
+  showPanel(null);
 }
 
 logoutBtn.addEventListener('click', () => {
@@ -699,40 +701,52 @@ menuBtn.addEventListener('click', () => {
 });
 backdrop.addEventListener('click', closeSidebar);
 
-membersBtn.addEventListener('click', () => {
-  const open = membersPanel.hidden;
-  if (open && isNarrow()) {
-    closeSidebar();
-    drop.setPanel(false);
+// Поле поиска одно на весь чат, но живёт в двух местах: на широком экране
+// стоит в шапке на виду, на узком там нет места — и оно переезжает в саму
+// панель, иначе искать было бы нечем.
+const wide = window.matchMedia('(min-width: 721px)');
+
+function placeSearchField() {
+  const home = wide.matches ? headerSearch : searchHead;
+  if (searchInput.parentElement !== home) {
+    if (home === searchHead) home.insertBefore(searchInput, searchCloseBtn);
+    else home.appendChild(searchInput);
   }
-  membersPanel.hidden = !open;
-  membersBtn.classList.toggle('active', open);
+}
+
+wide.addEventListener('change', placeSearchField);
+
+// Правых панелей три, а места под них — одно: открытая вытесняет соседнюю.
+// Иначе на нешироком окне третья уезжает под боковую панель.
+function showPanel(name) {
+  membersPanel.hidden = name !== 'members';
+  membersBtn.classList.toggle('active', name === 'members');
+  drop.setPanel(name === 'drop');
+  search.setPanel(name === 'search');
+  if (name && isNarrow()) closeSidebar();
+}
+
+membersBtn.addEventListener('click', () => {
+  showPanel(membersPanel.hidden ? 'members' : null);
 });
 
 dropBtn.addEventListener('click', () => {
-  const open = !drop.isOpen();
-  if (open && isNarrow()) {
-    closeSidebar();
-    membersPanel.hidden = true;
-    membersBtn.classList.remove('active');
-  }
-  drop.setPanel(open);
+  showPanel(drop.isOpen() ? null : 'drop');
 });
 
 searchBtn.addEventListener('click', () => {
-  const open = !search.isOpen();
-  if (open && isNarrow()) {
-    closeSidebar();
-    drop.setPanel(false);
-    membersPanel.hidden = true;
-    membersBtn.classList.remove('active');
-  }
-  search.setPanel(open);
+  showPanel(search.isOpen() ? null : 'search');
 });
 
-searchInput.addEventListener('input', () => search.schedule());
+searchInput.addEventListener('input', () => {
+  // Панель поднимается сама, как только есть что искать: лишний клик по лупе
+  // на широком экране не нужен.
+  if (searchInput.value.trim()) showPanel('search');
+  else search.setPanel(false);
+  search.schedule();
+});
 
-searchCloseBtn.addEventListener('click', () => search.setPanel(false));
+searchCloseBtn.addEventListener('click', () => search.clear());
 dropCloseBtn.addEventListener('click', () => drop.setPanel(false));
 sidebarCloseBtn.addEventListener('click', closeSidebar);
 
@@ -740,11 +754,12 @@ document.addEventListener('keydown', (event) => {
   if (event.key !== 'Escape') return;
   if (lightbox.isOpen()) return;
   if (sidebar.classList.contains('open')) closeSidebar();
-  else if (search.isOpen()) search.setPanel(false);
+  else if (search.isOpen()) search.clear();
   else if (drop.isOpen()) drop.setPanel(false);
 });
 
 function initUI() {
+  placeSearchField();
   gate.warnIfInsecure();
   gate.setMode('guest');
   logoutBtn.appendChild(icon('sign-out', 16));

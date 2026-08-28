@@ -16,6 +16,15 @@ export function createSearch({ send, getNick, openConversation, activeKey, findR
     if (open) searchInput.focus();
   }
 
+  // Панель закрывается и когда открыли соседнюю — набранное при этом стирать
+  // нельзя. Чистит только явный отказ от поиска.
+  function clear() {
+    searchInput.value = '';
+    query = '';
+    searchResults.replaceChildren();
+    setPanel(false);
+  }
+
   function isOpen() {
     return !searchPanel.hidden;
   }
@@ -105,5 +114,5 @@ export function createSearch({ send, getNick, openConversation, activeKey, findR
     setPanel(false);
   }
 
-  return { setPanel, isOpen, schedule, renderResults, flushJump, reset, hint: HINT };
+  return { setPanel, clear, isOpen, schedule, renderResults, flushJump, reset, hint: HINT };
 }

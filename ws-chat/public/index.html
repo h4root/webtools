@@ -82,6 +82,7 @@
       <header class="chat-header">
         <button type="button" class="menu-btn" id="menu-btn" title="Меню"></button>
         <span id="chat-title"># general</span>
+        <div class="header-search" id="header-search"></div>
         <div class="chat-actions">
           <button type="button" class="call-btn" id="call-btn" hidden></button>
           <button type="button" class="hbtn" id="search-btn" title="Поиск по истории"></button>
@@ -108,7 +109,8 @@
     </aside>
 
     <aside class="search-panel" id="search-panel" hidden>
-      <div class="search-head">
+      <div class="search-head" id="search-head">
+        <span class="search-title">Поиск</span>
         <input id="search-input" placeholder="искать в сообщениях…" maxlength="100" autocomplete="off">
         <button type="button" class="hbtn" id="search-close" title="Закрыть"></button>
       </div>

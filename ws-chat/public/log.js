@@ -4,6 +4,7 @@ import { settings } from './settings.js';
 import { splitText, shortenUrl } from './linkify.js';
 import { timeLabel } from './format.js';
 import { sameDay, dayLabel } from './days.js';
+import { sameGroup, avatarHue } from './grouping.js';
 import { logEl, jumpNewBtn } from './dom.js';
 
 const BOTTOM_SLACK_PX = 80;
@@ -15,6 +16,9 @@ export function createLog({ getNick, send, attachments, reactions, quote, onRepl
   // Метка времени последней нарисованной строки: по ней видно, что следующая
   // пришла уже в другой день.
   let lastTs = null;
+  // Последнее нарисованное сообщение: по нему видно, продолжает ли следующее
+  // ту же реплику или начинает новую.
+  let lastMsg = null;
 
   function applyMotion() {
     if (settings.animationsEnabled()) animation.enable();
@@ -53,7 +57,7 @@ export function createLog({ getNick, send, attachments, reactions, quote, onRepl
     return mentionsMe;
   }
 
-  function actionsOf(row, msg) {
+  function actionsOf(msg) {
     const actions = document.createElement('span');
     actions.className = 'row-actions';
 
@@ -77,25 +81,6 @@ export function createLog({ getNick, send, attachments, reactions, quote, onRepl
     });
     actions.appendChild(react);
 
-    if (!msg.mine) return actions;
-
-    const edit = document.createElement('button');
-    edit.type = 'button';
-    edit.title = 'Изменить';
-    edit.appendChild(icon('pencil', 14));
-    edit.addEventListener('click', (event) => {
-      event.stopPropagation();
-      startEdit(row, msg);
-    });
-    const del = document.createElement('button');
-    del.type = 'button';
-    del.title = 'Удалить';
-    del.appendChild(icon('trash', 14));
-    del.addEventListener('click', (event) => {
-      event.stopPropagation();
-      if (confirm('Удалить сообщение?')) send({ type: 'delete', id: msg.id });
-    });
-    actions.append(edit, del);
     return actions;
   }
 
@@ -103,9 +88,10 @@ export function createLog({ getNick, send, attachments, reactions, quote, onRepl
     row.replaceChildren();
     if (msg.replyTo) row.appendChild(quote.render(msg.replyTo, scrollTo));
 
-    if (!msg.mine) {
+    if (!msg.mine && !msg.grouped) {
       const who = document.createElement('span');
       who.className = 'who';
+      who.style.color = `hsl(${avatarHue(msg.from)} 55% 68%)`;
       who.textContent = msg.from;
       row.appendChild(who);
     }
@@ -126,7 +112,7 @@ export function createLog({ getNick, send, attachments, reactions, quote, onRepl
     row.appendChild(meta);
 
     row.classList.toggle('mention', mentionsMe && !msg.mine);
-    row.appendChild(actionsOf(row, msg));
+    row.appendChild(actionsOf(msg));
     reactions.render(row, msg);
   }
 
@@ -165,6 +151,7 @@ export function createLog({ getNick, send, attachments, reactions, quote, onRepl
     }
     msg.mine = msg.from === getNick();
     row.className = msg.mine ? 'row mine' : 'row';
+    if (msg.grouped) row.classList.add('grouped');
     row.dataset.id = String(msg.id);
     fillRow(row, msg);
     return row;
@@ -223,11 +210,15 @@ export function createLog({ getNick, send, attachments, reactions, quote, onRepl
 
   function append(msg) {
     const stick = atBottom() || msg.from === getNick() || msg.system;
-    if (opensNewDay(msg)) {
+    const opensDay = opensNewDay(msg);
+    if (opensDay) {
       relabelDays();
       logEl.appendChild(daySeparator(msg.ts));
       lastTs = msg.ts;
     }
+    // Разделитель дня обрывает группу: под ним реплика начинается заново.
+    msg.grouped = !opensDay && sameGroup(lastMsg, msg);
+    if (!msg.system) lastMsg = msg;
     logEl.appendChild(createRow(msg));
     if (stick) {
       scrollToBottom();
@@ -245,11 +236,15 @@ export function createLog({ getNick, send, attachments, reactions, quote, onRepl
     animation.disable();
     logEl.replaceChildren();
     lastTs = null;
+    lastMsg = null;
     for (const msg of getMessages()) {
-      if (opensNewDay(msg)) {
+      const opensDay = opensNewDay(msg);
+      if (opensDay) {
         logEl.appendChild(daySeparator(msg.ts));
         lastTs = msg.ts;
       }
+      msg.grouped = !opensDay && sameGroup(lastMsg, msg);
+      lastMsg = msg;
       logEl.appendChild(createRow(msg));
     }
     missedBelow = 0;
@@ -279,6 +274,7 @@ export function createLog({ getNick, send, attachments, reactions, quote, onRepl
   function clear() {
     logEl.replaceChildren();
     lastTs = null;
+    lastMsg = null;
   }
 
   function scrollTo(id) {

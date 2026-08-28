@@ -1,6 +1,7 @@
 import { icon } from './icons.js';
 import { keyOf } from './keys.js';
 import { isOnline, orderDms } from './roster.js';
+import { avatarHue } from './grouping.js';
 import { channelListEl, dmListEl, membersListEl } from './dom.js';
 
 export function deleteButton(question, onConfirm) {
@@ -69,6 +70,7 @@ export function createNav({ getState, send, onOpen }) {
     row.dataset.name = nick;
     const av = document.createElement('span');
     av.className = 'm-avatar';
+    av.style.setProperty('--hue', avatarHue(nick));
     av.textContent = nick.slice(0, 1).toUpperCase();
     const name = document.createElement('span');
     name.className = 'm-name';
