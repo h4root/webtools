@@ -1,0 +1,103 @@
+name: desktop
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'ws-chat-desktop/**'
+      - '.github/workflows/desktop.yml'
+    tags: ['client-v*']
+  pull_request:
+    paths:
+      - 'ws-chat-desktop/**'
+      - '.github/workflows/desktop.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Разбор адреса и проверка понижения до http — чистая логика, ей хватает
+  # обычного бегунка без Rust и без webview.
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: ws-chat-desktop/package-lock.json
+
+      - run: npm ci
+        working-directory: ws-chat-desktop
+
+      - run: npm test
+        working-directory: ws-chat-desktop
+
+  build:
+    needs: check
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: ws-chat-desktop/package-lock.json
+
+      # Rust на бегунке уже стоит: своя установка добавила бы минуты и ещё
+      # одно стороннее действие в цепочку сборки.
+      - run: rustc --version && cargo --version
+
+      # Кэшируем только скачанные исходники зависимостей. Каталог сборки
+      # весит под два гигабайта — таскать его туда-сюда дороже, чем заново
+      # скомпилировать.
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: cargo-${{ runner.os }}-${{ hashFiles('ws-chat-desktop/src-tauri/Cargo.lock') }}
+          restore-keys: cargo-${{ runner.os }}-
+
+      - run: npm ci
+        working-directory: ws-chat-desktop
+
+      - run: npm run build
+        working-directory: ws-chat-desktop
+
+      - name: собрать имя сборки
+        id: name
+        run: echo "dmg=$(ls ws-chat-desktop/src-tauri/target/release/bundle/dmg/*.dmg | head -1)" >> "$GITHUB_OUTPUT"
+
+      # Приложение не подписано: на чужой машине macOS запустит его только
+      # через «Открыть» в контекстном меню. Подпись — отдельный разговор,
+      # ей нужен платный сертификат разработчика.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ws-chat-macos-aarch64
+          path: ${{ steps.name.outputs.dmg }}
+          if-no-files-found: error
+
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/client-v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: ws-chat-macos-aarch64
+          path: dist
+
+      - name: приложить сборку к релизу
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release create "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --title "$GITHUB_REF_NAME" --generate-notes || gh release upload "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --clobber
