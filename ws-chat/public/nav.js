@@ -2,6 +2,7 @@ import { icon } from './icons.js';
 import { keyOf } from './keys.js';
 import { isOnline, orderDms } from './roster.js';
 import { avatarHue } from './grouping.js';
+import { NO_DMS } from './empty.js';
 import { channelListEl, dmListEl, membersListEl } from './dom.js';
 
 export function deleteButton(question, onConfirm) {
@@ -57,7 +58,14 @@ export function createNav({ getState, send, onOpen }) {
       channelListEl.appendChild(navItem('channel', name, `# ${name}`));
     }
     dmListEl.replaceChildren();
-    for (const nick of orderDms(state)) {
+    const partners = orderDms(state);
+    if (partners.length === 0) {
+      const note = document.createElement('li');
+      note.className = 'nav-empty';
+      note.textContent = NO_DMS;
+      dmListEl.appendChild(note);
+    }
+    for (const nick of partners) {
       dmListEl.appendChild(navItem('dm', nick, `@ ${nick}`, !isOnline(nick, state)));
     }
   }

@@ -5,12 +5,12 @@ import { splitText, shortenUrl } from './linkify.js';
 import { timeLabel } from './format.js';
 import { sameDay, dayLabel } from './days.js';
 import { sameGroup, avatarHue } from './grouping.js';
-import { logEl, jumpNewBtn } from './dom.js';
+import { logEl, logEmpty, jumpNewBtn } from './dom.js';
 
 const BOTTOM_SLACK_PX = 80;
 const EDIT_MAX = 2000;
 
-export function createLog({ getNick, send, attachments, reactions, quote, onReply, getMessages, onSeen, onRendered }) {
+export function createLog({ getNick, send, attachments, reactions, quote, onReply, getMessages, emptyText, onSeen, onRendered }) {
   const animation = autoAnimate(logEl, { duration: 180, disrespectUserMotionPreference: true });
   let missedBelow = 0;
   // Метка времени последней нарисованной строки: по ней видно, что следующая
@@ -209,6 +209,7 @@ export function createLog({ getNick, send, attachments, reactions, quote, onRepl
   }
 
   function append(msg) {
+    showEmpty(false);
     const stick = atBottom() || msg.from === getNick() || msg.system;
     const opensDay = opensNewDay(msg);
     if (opensDay) {
@@ -232,12 +233,21 @@ export function createLog({ getNick, send, attachments, reactions, quote, onRepl
     append({ id: 0, from: '', text, ts: Date.now(), edited: false, system: true });
   }
 
+  // Заглушка живёт рядом с лентой, а не внутри: анимация списка перехватывала
+  // её удаление и оставляла призрак поверх пришедших сообщений.
+  function showEmpty(on) {
+    logEmpty.hidden = !on;
+    if (on) logEmpty.textContent = emptyText();
+  }
+
   function render() {
     animation.disable();
     logEl.replaceChildren();
     lastTs = null;
     lastMsg = null;
-    for (const msg of getMessages()) {
+    const messages = getMessages();
+    showEmpty(messages.length === 0);
+    for (const msg of messages) {
       const opensDay = opensNewDay(msg);
       if (opensDay) {
         logEl.appendChild(daySeparator(msg.ts));
@@ -272,6 +282,7 @@ export function createLog({ getNick, send, attachments, reactions, quote, onRepl
   }
 
   function clear() {
+    showEmpty(false);
     logEl.replaceChildren();
     lastTs = null;
     lastMsg = null;

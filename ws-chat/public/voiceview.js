@@ -1,6 +1,7 @@
 import { icon, setButton } from './icons.js';
 import { channelSlug } from './keys.js';
 import { deleteButton } from './nav.js';
+import { NO_VOICE } from './empty.js';
 import { voiceListEl, voiceAddBtn, voiceStatus, voiceConn, voiceMuteBtn, voiceDeafenBtn, voiceLeaveBtn } from './dom.js';
 
 export function createVoiceView({ voice, send, getState, onError }) {
@@ -43,6 +44,12 @@ export function createVoiceView({ voice, send, getState, onError }) {
   function renderChannels() {
     const { voiceChannels, voicePresence } = getState();
     voiceListEl.replaceChildren();
+    if (voiceChannels.length === 0) {
+      const note = document.createElement('li');
+      note.className = 'nav-empty';
+      note.textContent = NO_VOICE;
+      voiceListEl.appendChild(note);
+    }
     for (const name of voiceChannels) {
       const li = document.createElement('li');
       li.className = 'voice-chan';

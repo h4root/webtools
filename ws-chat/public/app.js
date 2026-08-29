@@ -52,6 +52,7 @@ import { createCallView } from './callview.js';
 import { keyOf, messageKey, channelSlug } from './keys.js';
 import { appendMention } from './linkify.js';
 import { avatarHue } from './grouping.js';
+import { emptyLogText } from './empty.js';
 import { createTyping } from './typing.js';
 import { createReactions } from './reactions.js';
 import { createDropZone } from './dnd.js';
@@ -157,6 +158,7 @@ const quote = createQuote({ urlOf: (att) => attachments.urlOf(att) });
 
 const lightbox = createLightbox({
   getMessages: () => convOf(activeKey()),
+  emptyText: () => emptyLogText(active),
   urlOf: (att) => attachments.urlOf(att),
 });
 
@@ -231,6 +233,7 @@ const log = createLog({
   quote,
   onReply: (msg) => reply.set(msg),
   getMessages: () => convOf(activeKey()),
+  emptyText: () => emptyLogText(active),
   onSeen: () => markActiveRead(),
   onRendered: () => search.flushJump(),
 });

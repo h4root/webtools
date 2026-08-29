@@ -19,6 +19,7 @@ export const channelListEl = document.getElementById('channel-list');
 export const dmListEl = document.getElementById('dm-list');
 export const channelAddBtn = document.getElementById('channel-add');
 export const chatTitle = document.getElementById('chat-title');
+export const logEmpty = document.getElementById('log-empty');
 export const logEl = document.getElementById('log');
 export const typingEl = document.getElementById('typing');
 export const composer = document.getElementById('composer');
