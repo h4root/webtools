@@ -935,11 +935,16 @@ button {
   border-top-right-radius: 6px;
 }
 
+/* Ответ, вложения и поле — один блок, и черта идёт над всем блоком. Раньше
+   она проходила между цитатой и полем, и карточка упиралась в линию. */
+.composer-area {
+  border-top: 1px solid var(--line);
+}
+
 .composer {
   display: flex;
   gap: 8px;
   padding: 12px 18px;
-  border-top: 1px solid var(--line);
 }
 
 .composer input {
@@ -2354,7 +2359,7 @@ div.reply-quote {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 18px 0;
+  padding: 12px 18px 10px;
   color: var(--dim);
 }
 
@@ -2382,7 +2387,11 @@ div.reply-quote {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  padding: 6px 18px 0;
+  padding: 10px 18px 0;
+}
+
+.attach-tray:empty {
+  padding: 0;
 }
 
 .attach-tray:empty {
