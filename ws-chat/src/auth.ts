@@ -40,6 +40,9 @@ export interface Account {
 }
 
 interface Session {
+  // Открытый ключ устройства для сквозного шифрования. Живёт ровно столько,
+  // сколько сессия: вышел с устройства — писать в него больше нечем.
+  key?: string;
   // Публичный идентификатор: по нему сессию отзывают из интерфейса. Хэш токена
   // наружу не отдаём — он хоть и необратим, но клиенту знать о нём незачем.
   id: string;
@@ -50,6 +53,12 @@ interface Session {
   expiresAt: number;
   issuedAt: number;
   lastSeenAt: number;
+}
+
+export interface DeviceKey {
+  id: string;
+  device: string;
+  key: string;
 }
 
 export interface SessionInfo {
@@ -349,6 +358,23 @@ export class Auth {
     const account = this.find(nick);
     if (!account || account.guest) return null;
     return this.issue(account, device);
+  }
+
+  setDeviceKey(token: string, key: string): boolean {
+    const session = this.sessions.get(sha256(token));
+    if (!session) return false;
+    session.key = key;
+    this.saveSessions();
+    return true;
+  }
+
+  // Устройства без ключа в выдачу не попадают: зашифровать для них нечем, и
+  // отправителю о них знать незачем.
+  deviceKeys(nick: string): DeviceKey[] {
+    const lower = nick.toLowerCase();
+    return [...this.sessions.values()]
+      .filter((session) => session.nick.toLowerCase() === lower && session.key)
+      .map((session) => ({ id: session.id, device: session.device, key: session.key! }));
   }
 
   listSessions(nick: string, currentToken?: string): SessionInfo[] {

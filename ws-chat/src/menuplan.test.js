@@ -39,11 +39,15 @@ describe('planMenu: сообщение', () => {
 
 describe('planMenu: ник', () => {
   it('чужой ник открывает переписку и упоминание', () => {
-    expect(ids(planMenu({ nick: 'bob', me: 'alice', canCopy: true }))).toEqual(['dm', 'mention', 'copy-nick']);
+    expect(ids(planMenu({ nick: 'bob', me: 'alice', canCopy: true }))).toEqual(['dm', 'mention', 'copy-nick', 'keys']);
+  });
+
+  it('ключи спрашивают у любого, включая себя: сверять надо обе стороны', () => {
+    expect(ids(planMenu({ nick: 'Alice', me: 'alice', canCopy: true }))).toContain('keys');
   });
 
   it('на себе писать самому себе не предлагает', () => {
-    expect(ids(planMenu({ nick: 'Alice', me: 'alice', canCopy: true }))).toEqual(['copy-nick']);
+    expect(ids(planMenu({ nick: 'Alice', me: 'alice', canCopy: true }))).toEqual(['copy-nick', 'keys']);
   });
 
   it('ник важнее сообщения: щёлкнули по имени внутри строки', () => {
@@ -51,6 +55,7 @@ describe('planMenu: ник', () => {
       'dm',
       'mention',
       'copy-nick',
+      'keys',
     ]);
   });
 });
@@ -58,7 +63,7 @@ describe('planMenu: ник', () => {
 describe('planMenu: копирование', () => {
   it('вне защищённого контекста пунктов копирования нет', () => {
     expect(ids(planMenu({ message: mine, me: 'alice', canCopy: false }))).toEqual(['reply', 'react', '—', 'edit', 'delete']);
-    expect(ids(planMenu({ nick: 'bob', me: 'alice', canCopy: false }))).toEqual(['dm', 'mention']);
+    expect(ids(planMenu({ nick: 'bob', me: 'alice', canCopy: false }))).toEqual(['dm', 'mention', 'keys']);
   });
 
   it('пустая цель меню не открывает', () => {

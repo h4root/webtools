@@ -375,3 +375,76 @@ describe('Auth', () => {
     expect((await restarted.login('alice', 'правильный-пароль')).ok).toBe(true);
   });
 });
+
+describe('Auth: ключи устройств', () => {
+  let dir: string;
+  let auth: Auth;
+
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), 'ws-chat-keys-'));
+    auth = new Auth(dir);
+  });
+
+  afterEach(() => rmSync(dir, { recursive: true, force: true }));
+
+  const KEY_A = 'A'.repeat(88);
+  const KEY_B = 'B'.repeat(88);
+
+  it('ключ живёт на сессии и выдаётся по нику', async () => {
+    const alice = await auth.registerGuest('alice', 'Mac');
+    expect(auth.setDeviceKey(alice.token!, KEY_A)).toBe(true);
+
+    expect(auth.deviceKeys('alice')).toEqual([{ id: expect.any(String), device: 'Mac', key: KEY_A }]);
+  });
+
+  it('ник в запросе регистр не различает', async () => {
+    const alice = await auth.registerGuest('Alice', 'Mac');
+    auth.setDeviceKey(alice.token!, KEY_A);
+    expect(auth.deviceKeys('ALICE')).toHaveLength(1);
+  });
+
+  it('у каждого устройства свой ключ', async () => {
+    const first = await auth.register('bob', 'пароль подлиннее', 'Mac');
+    const second = await auth.login('bob', 'пароль подлиннее', 'Телефон');
+    auth.setDeviceKey(first.token!, KEY_A);
+    auth.setDeviceKey(second.token!, KEY_B);
+
+    const keys = auth.deviceKeys('bob');
+    expect(keys).toHaveLength(2);
+    expect(keys.map((k) => k.key).sort()).toEqual([KEY_A, KEY_B]);
+  });
+
+  it('без ключа устройство в выдачу не попадает: писать в него нечем', async () => {
+    const carol = await auth.register('carol', 'пароль подлиннее', 'Mac');
+    await auth.login('carol', 'пароль подлиннее', 'Второй');
+    auth.setDeviceKey(carol.token!, KEY_A);
+
+    expect(auth.deviceKeys('carol')).toHaveLength(1);
+  });
+
+  it('чужой токен ключ не проставляет', () => {
+    expect(auth.setDeviceKey('чужой-токен', KEY_A)).toBe(false);
+  });
+
+  it('ключ уходит вместе с сессией', async () => {
+    const dave = await auth.registerGuest('dave', 'Mac');
+    auth.setDeviceKey(dave.token!, KEY_A);
+    auth.revoke(dave.token!);
+    expect(auth.deviceKeys('dave')).toEqual([]);
+  });
+
+  it('переизданный ключ вытесняет прежний, а не копится', async () => {
+    const eve = await auth.registerGuest('eve', 'Mac');
+    auth.setDeviceKey(eve.token!, KEY_A);
+    auth.setDeviceKey(eve.token!, KEY_B);
+    expect(auth.deviceKeys('eve')).toEqual([{ id: expect.any(String), device: 'Mac', key: KEY_B }]);
+  });
+
+  it('ключи переживают перезапуск сервера', async () => {
+    const frank = await auth.registerGuest('frank', 'Mac');
+    auth.setDeviceKey(frank.token!, KEY_A);
+
+    const restarted = new Auth(dir);
+    expect(restarted.deviceKeys('frank')).toEqual([{ id: expect.any(String), device: 'Mac', key: KEY_A }]);
+  });
+});

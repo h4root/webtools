@@ -52,6 +52,7 @@ import { createCallView } from './callview.js';
 import { keyOf, messageKey, channelSlug } from './keys.js';
 import { appendMention } from './linkify.js';
 import { avatarHue } from './grouping.js';
+import { deviceKey, keyFingerprint } from './devicekey.js';
 import { emptyLogText } from './empty.js';
 import { createTyping } from './typing.js';
 import { createReactions } from './reactions.js';
@@ -79,6 +80,7 @@ let voiceChannels = [];
 let voicePresence = {};
 let callPhase = 'idle';
 let staleClient = false;
+let myKey = null;
 
 const conversations = new Map();
 const loaded = new Set();
@@ -193,6 +195,7 @@ createContextMenu({
       textInput.focus();
     },
     'copy-nick': ({ nick }) => copy(nick, 'Ник скопирован'),
+    keys: ({ nick }) => send({ type: 'keys', nick }),
     'open-link': ({ link }) => window.open(link, '_blank', 'noopener,noreferrer'),
     'copy-link': ({ link }) => copy(link, 'Адрес скопирован'),
     'mark-read': () => markActiveRead(),
@@ -291,6 +294,33 @@ function handleAuthError(message) {
   gate.setBusy(false);
 }
 
+// Ключ устройства нужен для сквозного шифрования личных переписок. Пока он
+// только заводится и публикуется: шифровать им начнём следующим шагом.
+async function publishKey() {
+  try {
+    myKey = await deviceKey();
+    send({ type: 'key-publish', key: myKey.published });
+  } catch (error) {
+    // Без ключа чат работает как прежде, поэтому не пугаем и не мешаем.
+    console.warn('ключ устройства не завёлся:', error);
+  }
+}
+
+async function showKeys({ nick, devices }) {
+  if (devices.length === 0) {
+    log.system(`У ${nick} пока нет устройств с ключами.`);
+    return;
+  }
+  const lines = await Promise.all(
+    devices.map(async (item) => {
+      const print = await keyFingerprint(item.key);
+      const mine = print === myKey?.fingerprint ? ' — это устройство' : '';
+      return `${item.device || 'без имени'}: ${print}${mine}`;
+    }),
+  );
+  log.system(`Ключи ${nick} — ${lines.join(' · ')}`);
+}
+
 function forgetToken() {
   authToken = '';
   try {
@@ -316,6 +346,7 @@ function handleServer(message) {
       if (!joined) enterApp();
       renderConnState();
       socket.flush();
+      void publishKey();
       break;
     case 'channels':
       channels = message.list;
@@ -386,6 +417,9 @@ function handleServer(message) {
       break;
     case 'sessions':
       sessionsNote?.(message.list);
+      break;
+    case 'keys':
+      void showKeys(message);
       break;
     case 'link-code':
       gate.showLinkCode(message.code, message.expiresAt);

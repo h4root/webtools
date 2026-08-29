@@ -14,6 +14,10 @@ export const NONCE_MAX = 64;
 
 const ATTACH_ID = /^[a-f0-9]{32}$/;
 const NONCE = /^[A-Za-z0-9_-]{1,64}$/;
+// Открытый ключ устройства приходит от клиента в base64. Разбирать его здесь
+// нечем и незачем — сервер ключи только раздаёт, — но пускать под этим именем
+// что попало нельзя.
+const DEVICE_KEY = /^[A-Za-z0-9+/]{40,200}={0,2}$/;
 
 export const REACTIONS = ['👍', '❤️', '😂', '🔥', '🎉', '😮', '😢', '👀'];
 
@@ -75,6 +79,12 @@ export interface VoiceMember {
   muted: boolean;
 }
 
+export interface DeviceKeyInfo {
+  id: string;
+  device: string;
+  key: string;
+}
+
 export interface SessionInfo {
   id: string;
   device: string;
@@ -94,6 +104,8 @@ export type ClientMessage =
   | { type: 'channel-create'; name: string }
   | { type: 'channel-delete'; name: string }
   | { type: 'voice-channel-delete'; name: string }
+  | { type: 'key-publish'; key: string }
+  | { type: 'keys'; nick: string }
   | { type: 'message'; channel?: string; to?: string; text: string; replyTo?: number; attachments?: AttachmentRef[]; nonce?: string }
   | { type: 'history'; channel?: string; to?: string }
   | { type: 'search'; query: string }
@@ -119,6 +131,7 @@ export type ServerMessage =
   | { type: 'logged-out'; reason?: string }
   | { type: 'password-changed' }
   | { type: 'sessions'; list: SessionInfo[] }
+  | { type: 'keys'; nick: string; devices: DeviceKeyInfo[] }
   | { type: 'link-code'; code: string; expiresAt: number }
   | { type: 'link-approved'; device: string }
   | { type: 'purged'; nick: string }
@@ -218,6 +231,13 @@ export function parseClientMessage(raw: string): ClientMessage | null {
       return typeof data.code === 'string' && data.code.length <= 32 ? { type: 'link-approve', code: data.code } : null;
     case 'sessions':
       return { type: 'sessions' };
+    case 'key-publish':
+      return typeof data.key === 'string' && DEVICE_KEY.test(data.key) ? { type: 'key-publish', key: data.key } : null;
+    case 'keys': {
+      const nick = typeof data.nick === 'string' ? data.nick.trim() : '';
+      if (!nick || nick.length > NICK_MAX || !NICK_PATTERN.test(nick)) return null;
+      return { type: 'keys', nick };
+    }
     case 'session-revoke':
       return typeof data.id === 'string' && data.id.length <= 64 ? { type: 'session-revoke', id: data.id } : null;
     case 'change-password': {

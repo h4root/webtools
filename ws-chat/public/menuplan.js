@@ -9,6 +9,8 @@ function nickItems(nick, me, canCopy) {
     items.push({ id: 'mention', label: 'Упомянуть' });
   }
   if (canCopy) items.push({ id: 'copy-nick', label: 'Копировать ник' });
+  // Ключи спрашивают и у себя тоже: сверяют их вдвоём, каждый со своей стороны.
+  items.push({ id: 'keys', label: 'Ключи устройств' });
   return items;
 }
 

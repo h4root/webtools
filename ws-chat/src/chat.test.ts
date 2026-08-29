@@ -1606,3 +1606,77 @@ describe('Hub private call', () => {
     expect(a.inbox.at(-1)).toEqual({ type: 'call-decline', from: 'bob', reason: 'busy' });
   });
 });
+
+describe('Hub: ключи устройств', () => {
+  let dir: string;
+  let hub: Hub;
+  const KEY = 'A'.repeat(88);
+  const OTHER = 'B'.repeat(88);
+
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), 'ws-chat-hub-keys-'));
+    hub = new Hub(new Store(), undefined, new Auth(dir));
+  });
+
+  afterEach(() => rmSync(dir, { recursive: true, force: true }));
+
+  async function enter(client: TestClient, nick: string, device = 'Mac'): Promise<void> {
+    hub.handle(client, JSON.stringify({ type: 'auth', mode: 'guest', nick, device }));
+    await vi.waitFor(() => {
+      expect(client.inbox.some((m) => m.type === 'welcome')).toBe(true);
+    });
+  }
+
+  function keysOf(client: TestClient) {
+    for (let i = client.inbox.length - 1; i >= 0; i--) {
+      const m = client.inbox[i];
+      if (m.type === 'keys') return m;
+    }
+    return undefined;
+  }
+
+  it('опубликованный ключ выдаётся собеседнику', async () => {
+    const alice = makeClient('a');
+    const bob = makeClient('b');
+    await enter(alice, 'alice');
+    await enter(bob, 'bob');
+
+    hub.handle(alice, JSON.stringify({ type: 'key-publish', key: KEY }));
+    hub.handle(bob, JSON.stringify({ type: 'keys', nick: 'alice' }));
+
+    const answer = keysOf(bob);
+    expect(answer?.nick).toBe('alice');
+    expect(answer?.devices).toEqual([{ id: expect.any(String), device: 'Mac', key: KEY }]);
+  });
+
+  it('у кого ключей нет, тот отвечает пустым списком, а не молчанием', async () => {
+    const alice = makeClient('a');
+    await enter(alice, 'alice');
+
+    hub.handle(alice, JSON.stringify({ type: 'keys', nick: 'никого' }));
+    expect(keysOf(alice)).toEqual({ type: 'keys', nick: 'никого', devices: [] });
+  });
+
+  it('ключ привязан к устройству, а не к нику: у двух устройств два ключа', async () => {
+    const laptop = makeClient('a');
+    const phone = makeClient('b');
+    hub.handle(laptop, JSON.stringify({ type: 'auth', mode: 'register', nick: 'alice', password: 'пароль подлиннее', device: 'Mac' }));
+    await vi.waitFor(() => expect(laptop.inbox.some((m) => m.type === 'welcome')).toBe(true));
+    hub.handle(phone, JSON.stringify({ type: 'auth', mode: 'login', nick: 'alice', password: 'пароль подлиннее', device: 'Телефон' }));
+    await vi.waitFor(() => expect(phone.inbox.some((m) => m.type === 'welcome')).toBe(true));
+
+    hub.handle(laptop, JSON.stringify({ type: 'key-publish', key: KEY }));
+    hub.handle(phone, JSON.stringify({ type: 'key-publish', key: OTHER }));
+    hub.handle(laptop, JSON.stringify({ type: 'keys', nick: 'alice' }));
+
+    const devices = keysOf(laptop)?.devices ?? [];
+    expect(devices.map((d) => d.device).sort()).toEqual(['Mac', 'Телефон']);
+  });
+
+  it('без входа ключи не публикуются и не выдаются', () => {
+    const stranger = makeClient('x');
+    hub.handle(stranger, JSON.stringify({ type: 'key-publish', key: KEY }));
+    hub.handle(stranger, JSON.stringify({ type: 'keys', nick: 'alice' }));
+    expect(keysOf(stranger)).toBeUndefined();
+  });
+});

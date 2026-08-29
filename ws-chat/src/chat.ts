@@ -378,6 +378,18 @@ export class Hub {
       return;
     }
 
+    // Ключи устройств — публичная часть: по ним пишут этому человеку, и знать
+    // их должен любой, кто собирается ему написать.
+    if (message.type === 'key-publish') {
+      if (client.token) this.auth?.setDeviceKey(client.token, message.key);
+      return;
+    }
+
+    if (message.type === 'keys') {
+      client.send({ type: 'keys', nick: message.nick, devices: this.auth?.deviceKeys(message.nick) ?? [] });
+      return;
+    }
+
     if (message.type === 'session-revoke') {
       this.revokeSession(client, message.id);
       return;
