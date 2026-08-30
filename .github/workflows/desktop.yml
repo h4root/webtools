@@ -116,7 +116,9 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: ws-chat-windows-x64-untested
-          path: ws-chat-desktop/src-tauri/target/release/bundle/msi/*.msi
+          path: |
+            ws-chat-desktop/src-tauri/target/release/bundle/msi/*.msi
+            ws-chat-desktop/src-tauri/target/release/bundle/nsis/*.exe
           if-no-files-found: error
 
   release:
