@@ -39,7 +39,7 @@ jobs:
       - run: npm test
         working-directory: ws-chat-desktop
 
-  build:
+  macos:
     needs: check
     runs-on: macos-latest
     steps:
@@ -72,21 +72,55 @@ jobs:
       - run: npm run build
         working-directory: ws-chat-desktop
 
-      - name: собрать имя сборки
-        id: name
-        run: echo "dmg=$(ls ws-chat-desktop/src-tauri/target/release/bundle/dmg/*.dmg | head -1)" >> "$GITHUB_OUTPUT"
-
       # Приложение не подписано: на чужой машине macOS запустит его только
       # через «Открыть» в контекстном меню. Подпись — отдельный разговор,
       # ей нужен платный сертификат разработчика.
       - uses: actions/upload-artifact@v4
         with:
           name: ws-chat-macos-aarch64
-          path: ${{ steps.name.outputs.dmg }}
+          path: ws-chat-desktop/src-tauri/target/release/bundle/dmg/*.dmg
+          if-no-files-found: error
+
+  # Отвечает ровно на один вопрос: собирается ли клиент под Windows. Как он
+  # там выглядит и пускает ли микрофон, бегунок без экрана и звука не скажет,
+  # поэтому сборка остаётся в прогоне и в релиз не идёт, пока её не запустит
+  # живой человек.
+  windows:
+    needs: check
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: ws-chat-desktop/package-lock.json
+
+      - run: rustc --version && cargo --version
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: cargo-${{ runner.os }}-${{ hashFiles('ws-chat-desktop/src-tauri/Cargo.lock') }}
+          restore-keys: cargo-${{ runner.os }}-
+
+      - run: npm ci
+        working-directory: ws-chat-desktop
+
+      - run: npm run build
+        working-directory: ws-chat-desktop
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ws-chat-windows-x64-untested
+          path: ws-chat-desktop/src-tauri/target/release/bundle/msi/*.msi
           if-no-files-found: error
 
   release:
-    needs: build
+    needs: macos
     if: startsWith(github.ref, 'refs/tags/client-v')
     runs-on: ubuntu-latest
     permissions:
