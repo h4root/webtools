@@ -142,7 +142,7 @@ export function mountSettings(root, account = {}) {
     popup.append(section('Шрифт', fontSelect()));
     popup.append(section('Анимации', motionSelect()));
     if (account.canChangePassword?.()) popup.append(section('Пароль', passwordForm()));
-    if (account.onSessions) popup.append(section('Устройства', linkForm(), deviceList()));
+    if (account.onSessions) popup.append(section('Устройства', fingerprintRow(), linkForm(), deviceList()));
     if (account.onLogoutEverywhere) popup.append(section('Сессии', logoutEverywhere()));
   }
 
@@ -208,6 +208,36 @@ export function mountSettings(root, account = {}) {
       });
     });
     return form;
+  }
+
+  // Отпечаток ключа этого устройства. Сверяют его вслух или перепиской по
+  // другому каналу: совпал у обоих — значит между вами никто не встал.
+  function fingerprintRow() {
+    const wrap = document.createElement('div');
+    wrap.className = 'settings-fingerprint';
+
+    const label = document.createElement('span');
+    label.className = 'fp-label';
+    label.textContent = 'Отпечаток этого устройства';
+
+    const value = document.createElement('code');
+    value.className = 'fp-value';
+    value.textContent = '…';
+
+    const note = document.createElement('p');
+    note.className = 'settings-note';
+    note.textContent = 'Сверь его с собеседником другим способом — тогда видно, что переписку никто не подменяет.';
+
+    wrap.append(label, value, note);
+    account.fingerprint().then(
+      (print) => {
+        value.textContent = print || 'не завёлся';
+      },
+      () => {
+        value.textContent = 'не завёлся';
+      },
+    );
+    return wrap;
   }
 
   function deviceList() {

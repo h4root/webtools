@@ -510,6 +510,29 @@ button {
   background: color-mix(in srgb, var(--accent) 10%, transparent);
 }
 
+.settings-fingerprint {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-bottom: 10px;
+  margin-bottom: 10px;
+  border-bottom: 1px solid var(--line);
+}
+
+.fp-label {
+  color: var(--dim);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+}
+
+.fp-value {
+  font-size: 12.5px;
+  letter-spacing: 0.5px;
+  color: var(--accent);
+  overflow-wrap: anywhere;
+}
+
 .settings-devices {
   display: flex;
   flex-direction: column;

@@ -814,6 +814,7 @@ function initUI() {
   dropBtn.appendChild(icon('paperclip', 18));
   const { toggle } = mountSettings(settingsEl, {
     canChangePassword: () => joined && !isGuest,
+    fingerprint: async () => (myKey ?? (await deviceKey())).fingerprint,
     onSessions: (render) => {
       sessionsNote = render;
       send({ type: 'sessions' });
