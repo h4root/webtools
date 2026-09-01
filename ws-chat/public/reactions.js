@@ -1,7 +1,6 @@
 import { settings } from './settings.js';
 import { logEl } from './dom.js';
-
-export const EMOJI = ['👍', '❤️', '😂', '🔥', '🎉', '😮', '😢', '👀'];
+import { EMOJI } from './emoji.js';
 
 const BURST_COUNT = 6;
 const BURST_MS = 1150;
