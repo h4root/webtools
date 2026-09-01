@@ -1,6 +1,6 @@
 const STORE_KEY = 'ws-chat-settings';
 
-export const FONTS = {
+const FONTS = {
   jetbrains: { label: 'JetBrains Mono', stack: "'JetBrains Mono', monospace" },
   victor: { label: 'Victor Mono', stack: "'Victor Mono', monospace" },
   plex: { label: 'IBM Plex Mono', stack: "'IBM Plex Mono', monospace" },
@@ -17,7 +17,7 @@ const DEFAULTS = {
   motion: 'system',
 };
 
-export const MOTIONS = {
+const MOTIONS = {
   system: 'Система',
   on: 'Вкл',
   off: 'Выкл',
