@@ -25,9 +25,9 @@ jobs:
   check:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: '22'
           cache: npm
@@ -43,9 +43,9 @@ jobs:
     needs: check
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: '22'
           cache: npm
@@ -58,7 +58,7 @@ jobs:
       # Кэшируем только скачанные исходники зависимостей. Каталог сборки
       # весит под два гигабайта — таскать его туда-сюда дороже, чем заново
       # скомпилировать.
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: |
             ~/.cargo/registry
@@ -75,7 +75,7 @@ jobs:
       # Приложение не подписано: на чужой машине macOS запустит его только
       # через «Открыть» в контекстном меню. Подпись — отдельный разговор,
       # ей нужен платный сертификат разработчика.
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: ws-chat-macos-aarch64
           path: ws-chat-desktop/src-tauri/target/release/bundle/dmg/*.dmg
@@ -89,9 +89,9 @@ jobs:
     needs: check
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: '22'
           cache: npm
@@ -99,7 +99,7 @@ jobs:
 
       - run: rustc --version && cargo --version
 
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: |
             ~/.cargo/registry
@@ -113,7 +113,7 @@ jobs:
       - run: npm run build
         working-directory: ws-chat-desktop
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: ws-chat-windows-x64-untested
           path: |
@@ -128,7 +128,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: ws-chat-macos-aarch64
           path: dist
