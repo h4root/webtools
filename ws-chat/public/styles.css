@@ -62,6 +62,7 @@
   --grain: 0;
   --lb-btn: rgba(255, 255, 255, 0.08);
   --lb-btn-hover: rgba(255, 255, 255, 0.18);
+  --control: var(--bg);
   --scroll-thumb: rgba(215, 226, 217, 0.16);
   --scroll-thumb-hover: rgba(215, 226, 217, 0.32);
 }
@@ -88,6 +89,7 @@
   --glass-edge: rgba(255, 255, 255, 0.16);
   --glass-sheen: inset 0 1px 0 rgba(255, 255, 255, 0.12);
   --grain: 0.05;
+  --control: rgba(255, 255, 255, 0.08);
   --scroll-thumb: rgba(255, 255, 255, 0.22);
   --scroll-thumb-hover: rgba(255, 255, 255, 0.4);
 }
@@ -114,6 +116,7 @@
   --glass-edge: rgba(15, 35, 26, 0.08);
   --glass-sheen: inset 0 1px 0 rgba(255, 255, 255, 0.65);
   --grain: 0.06;
+  --control: rgba(255, 255, 255, 0.45);
   --scroll-thumb: rgba(15, 35, 26, 0.22);
   --scroll-thumb-hover: rgba(15, 35, 26, 0.4);
   --lb-btn: rgba(255, 255, 255, 0.16);
@@ -600,7 +603,7 @@ button {
   padding: 6px 8px;
   border: 1px solid var(--line);
   border-radius: 6px;
-  background: var(--bg);
+  background: var(--control);
   color: var(--fg);
   font-family: var(--font);
   font-size: 12px;
@@ -815,7 +818,7 @@ button {
 .header-search input {
   width: 100%;
   padding: 6px 11px;
-  background: var(--bg);
+  background: var(--control);
   border: 1px solid var(--line);
   border-radius: 999px;
   color: var(--fg);
@@ -1249,7 +1252,7 @@ button {
 .settings-popup select {
   width: 100%;
   padding: 6px;
-  background: var(--bg);
+  background: var(--control);
   color: var(--fg);
   border: 1px solid var(--line);
   border-radius: 6px;
@@ -1279,7 +1282,7 @@ button {
 .settings-themes button {
   padding: 8px;
   text-align: left;
-  background: var(--bg);
+  background: var(--control);
   color: var(--fg);
   border: 1px solid var(--line);
   border-radius: 6px;
@@ -1294,7 +1297,7 @@ button {
 .settings-fonts button {
   padding: 8px;
   text-align: left;
-  background: var(--bg);
+  background: var(--control);
   color: var(--fg);
   border: 1px solid var(--line);
   border-radius: 6px;
@@ -1633,7 +1636,7 @@ html.motion-off *::after {
 .edit-input {
   width: min(60vw, 360px);
   padding: 4px 8px;
-  background: var(--bg);
+  background: var(--control);
   border: 1px solid var(--accent);
   border-radius: 6px;
   color: var(--fg);
@@ -1719,7 +1722,7 @@ html.motion-off *::after {
   align-items: center;
   gap: 4px;
   padding: 1px 7px;
-  background: var(--bg);
+  background: var(--control);
   border: 1px solid var(--line);
   border-radius: 12px;
   color: var(--fg);
@@ -1909,7 +1912,7 @@ html.motion-off *::after {
   justify-content: space-between;
   gap: 8px;
   padding: 6px 8px;
-  background: var(--bg);
+  background: var(--control);
   border-radius: 6px;
 }
 
@@ -2076,14 +2079,14 @@ html.motion-off *::after {
   flex: 1;
   min-width: 0;
   padding: 7px 10px;
-  background: var(--bg);
+  background: var(--control);
   border-radius: 999px;
   color: var(--fg);
   font: inherit;
   font-size: 12.5px;
   border: 1px solid var(--line);
   border-radius: var(--radius-item);
-  background: var(--bg);
+  background: var(--control);
   color: var(--fg);
 }
 
@@ -2541,7 +2544,7 @@ div.reply-quote {
   gap: 8px;
   max-width: 240px;
   padding: 8px 10px;
-  background: var(--bg);
+  background: var(--control);
   border: 1px solid var(--line);
   border-radius: 8px;
   color: var(--fg);
