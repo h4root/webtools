@@ -36,16 +36,10 @@ const SWEEP_MS = 60000;
 const ACCOUNT_SWEEP_MS = 5 * 60 * 1000;
 const UPLOAD_GRACE_MS = 30 * 60 * 1000;
 const UPLOADS_PER_MIN = 30;
-// Соединений на один адрес и всего. На локальную сеть с запасом, но потолок
-// есть: без него сокеты копятся, пока не кончится память.
 const CONNS_PER_SOURCE = Number(process.env.CONNS_PER_SOURCE ?? 24);
 const CONNS_TOTAL = Number(process.env.CONNS_TOTAL ?? 256);
-// Сколько сокет может молчать, не представившись.
 const AUTH_GRACE_MS = Number(process.env.AUTH_GRACE_MS ?? 30000);
 
-// Блобы шифруются мастер-ключом напрямую — так сложилось, и менять это нельзя,
-// иначе уже загруженные вложения перестанут открываться. Истории даём отдельный
-// производный ключ: одна утечка не раскрывает второе хранилище.
 const masterKey = loadKey(dataDir, process.env.UPLOAD_KEY);
 const store = new Store(join(dataDir, 'store.json'), deriveKey(masterKey, 'store'));
 const blobs = new BlobStore(uploadsDir, masterKey);
@@ -54,9 +48,6 @@ const hub = new Hub(store, blobs, auth);
 
 const dropClientDir = join(dirname(fileURLToPath(import.meta.resolve('lan-drop/client'))));
 
-// Страница вендорит всё локально и наружу не ходит, поэтому политику можно
-// затянуть до предела. blob: нужен картинкам и файлам: вложения скачиваются
-// по токену и показываются из локальных blob-ссылок, а не по адресу сервера.
 const CSP = [
   "default-src 'self'",
   "img-src 'self' blob: data:",
@@ -81,8 +72,6 @@ app.use((_req, res, next) => {
   if (useTls) res.setHeader('Strict-Transport-Security', 'max-age=31536000');
   next();
 });
-// Живёт до входа: следит за тем, что процесс не просто поднят, а способен
-// сохранять. Наружу не отдаёт ничего о том, кто в чате.
 app.get('/health', (_req, res) => {
   const persists = store.canPersist();
   res.setHeader('Cache-Control', 'no-store');
@@ -93,9 +82,6 @@ app.get('/health', (_req, res) => {
   });
 });
 
-// Шрифты и вендор не меняются от правки к правке, код приложения меняется
-// постоянно. Без хеша в имени вечный кэш опасен, поэтому срок ограничен
-// неделей: обновление доедет само, а лишний обход за 304 уходит.
 const STATIC_WEEK = 'public, max-age=604800';
 
 function cacheByPath(res: Response, file: string): void {
@@ -122,8 +108,6 @@ app.post('/upload', express.raw({ type: () => true, limit: ATTACH_SIZE_MAX }), (
     res.status(401).json({ error: 'unauthorized' });
     return;
   }
-  // Считаем на аккаунт, а не на сессию: иначе десять устройств дают
-  // десятикратную норму, а новый вход — свежую.
   if (!uploadQuota.allow(client.nick.toLowerCase())) {
     res.status(429).json({ error: 'too-many-uploads' });
     return;
@@ -168,8 +152,6 @@ app.get('/uploads/:id', (req, res) => {
   res.send(blob!.data);
 });
 
-// Всё, что не нашлось, и всё, что упало, наружу выглядит одинаково скупо:
-// стандартный обработчик express отдавал клиенту стек с путями до файлов.
 app.use((_req, res) => {
   res.status(404).json({ error: 'not-found' });
 });
@@ -203,10 +185,6 @@ attachSignaling(dropWss, {
   },
 });
 
-// WebSocket не подчиняется правилу общего источника: любая открытая страница
-// может соединиться с чатом браузером своего читателя, прочитать историю
-// каналов и писать от чужого имени. Сверяем источник с тем, кто нас отдал.
-// Пустой Origin — это не браузер: свой клиент, приложение, тесты.
 function sameOrigin(request: IncomingMessage): boolean {
   const origin = request.headers.origin;
   if (!origin) return true;
@@ -227,7 +205,6 @@ server.on('upgrade', (request, socket, head) => {
     socket.destroy();
     return;
   }
-  // Считаем до рукопожатия: отказ не должен стоить дороже отказа.
   if (!connections.allow(sourceOf(request))) {
     socket.write('HTTP/1.1 503 Service Unavailable\r\n\r\n');
     socket.destroy();
@@ -241,9 +218,6 @@ server.on('upgrade', (request, socket, head) => {
 let nextId = 1;
 const alive = new WeakMap<WebSocket, boolean>();
 
-// За обратным прокси remoteAddress у всех одинаковый, и лимит по нему запер бы
-// всех разом. Но верить X-Forwarded-For по умолчанию нельзя — заголовок ставит
-// кто угодно, и лимит обходится подстановкой случайного адреса.
 const trustProxy = process.env.TRUST_PROXY === '1';
 
 function sourceOf(request: IncomingMessage): string {
@@ -326,8 +300,6 @@ sweepAccounts();
 server.listen(PORT, HOST, () => {
   const scheme = useTls ? 'https' : 'http';
   console.log(`chat server on ${scheme}://localhost:${PORT}`);
-  // 0.0.0.0 в адресной строке не набрать: печатаем то, что реально открывать
-  // с телефона.
   for (const address of hostAddresses(networkInterfaces())) {
     const host = address.includes(':') ? `[${address}]` : address;
     console.log(`  в сети: ${scheme}://${host}:${PORT}`);
@@ -351,9 +323,6 @@ function shutdown(): void {
 process.on('SIGINT', shutdown);
 process.on('SIGTERM', shutdown);
 
-// Один необработанный отказ не должен уносить чат у всех. Историю сбрасываем
-// на диск в любом случае: пусть лучше сервер уйдёт, чем останется в состоянии,
-// про которое мы ничего не знаем.
 process.on('unhandledRejection', (reason) => {
   console.error('необработанный отказ:', reason instanceof Error ? reason.message : reason);
 });

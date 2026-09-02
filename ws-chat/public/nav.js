@@ -38,7 +38,6 @@ export function createNav({ getState, send, onOpen }) {
       item.classList.add('unread');
       const badge = document.createElement('span');
       badge.className = 'badge';
-      // Четырёхзначный счётчик растянул бы строку и вытеснил имя канала.
       badge.textContent = count > 99 ? '99+' : String(count);
       item.appendChild(badge);
     }

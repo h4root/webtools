@@ -1,8 +1,6 @@
 const RECONNECT_MS = 2000;
 const RECONNECT_MAX_MS = 15000;
 
-// Что имеет смысл придержать до восстановления связи. Всё остальное
-// (история, набор текста, сигналинг) к моменту переподключения устареет.
 const QUEUEABLE = new Set(['message', 'edit', 'delete', 'react', 'channel-create', 'voice-channel-create']);
 
 const QUEUE_MAX = 100;
@@ -12,7 +10,6 @@ export function createSocket({ isJoined, hello, onMessage, onDown, onQueueChange
   let timer = null;
   let delay = RECONNECT_MS;
   let outbox = [];
-  // Отправленные, но ещё не вернувшиеся эхом: метка -> сообщение.
   const unsent = new Map();
 
   function url() {
@@ -67,8 +64,6 @@ export function createSocket({ isJoined, hello, onMessage, onDown, onQueueChange
     }
   }
 
-  // Форма входа шлёт либо в живой сокет, либо поднимает его: hello повторит
-  // запрос сам, как только соединение откроется.
   function request(message) {
     if (isOpen()) ws.send(JSON.stringify(message));
     else connect();
@@ -87,8 +82,6 @@ export function createSocket({ isJoined, hello, onMessage, onDown, onQueueChange
     const pending = outbox;
     outbox = [];
     for (const message of pending) send(message);
-    // Отправленное в уже мёртвый сокет не попадало в очередь и пропадало молча.
-    // Повторяем сами; сервер узнает повтор по метке и второй раз не создаст.
     for (const message of unsent.values()) send(message);
   }
 

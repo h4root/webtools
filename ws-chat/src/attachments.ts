@@ -1,8 +1,5 @@
 import type { AttachmentRef } from './protocol.ts';
 
-// Встроенно показываем только заведомо безопасные растровые форматы. svg — это
-// документ со скриптами, html тем более: отданные с исходным типом, они
-// исполнились бы в нашем origin.
 const INLINE_MIME = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/avif', 'image/bmp']);
 
 const NAME_MAX = 255;
@@ -49,7 +46,6 @@ export type DownloadPlan =
   | { status: 410; error: 'gone' }
   | { status: 200; contentType: string; disposition: string };
 
-// Тип берём у блоба, а не из записи в сообщении: в сообщении он от клиента.
 export function planDownload(attachment: AttachmentRef | null, blob: { mime: string } | null): DownloadPlan {
   if (!attachment) return { status: 404, error: 'not-found' };
   if (!blob) return { status: 410, error: 'gone' };
@@ -80,8 +76,6 @@ export class UploadQuota {
     return entry.count <= this.perWindow;
   }
 
-  // Счётчик живёт окном, а не подпиской: чистим протухшее сами, иначе карта
-  // растёт по числу тех, кто когда-либо грузил.
   private prune(now: number): void {
     for (const [key, entry] of this.counters) {
       if (entry.until < now) this.counters.delete(key);

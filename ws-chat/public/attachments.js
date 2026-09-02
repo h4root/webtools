@@ -9,8 +9,6 @@ export function createAttachments({ getToken, onError, onOpenImage }) {
   const blobUrls = new Map();
   let pending = [];
 
-  // Вложения отдаются только по сессии, поэтому картинку нельзя просто
-  // поставить в src: файл забирается фетчем с токеном и живёт как blob.
   function urlOf(att) {
     if (!blobUrls.has(att.url)) {
       blobUrls.set(
@@ -53,8 +51,6 @@ export function createAttachments({ getToken, onError, onOpenImage }) {
         link.classList.add('att-failed');
       },
     );
-    // Новая вкладка остаётся запасным путём: она сработает, если просмотрщик
-    // почему-то не открылся, и по ней же живёт «открыть в новой вкладке».
     link.addEventListener('click', (event) => {
       if (event.metaKey || event.ctrlKey || event.shiftKey || link.classList.contains('att-failed')) return;
       event.preventDefault();
@@ -89,8 +85,6 @@ export function createAttachments({ getToken, onError, onOpenImage }) {
     return link;
   }
 
-  // Ссылка на вложение живёт в blob: скачивание — это клик по временному
-  // якорю, а не переход по адресу с сервера.
   function download(att) {
     urlOf(att).then(
       (url) => {
@@ -167,8 +161,6 @@ export function createAttachments({ getToken, onError, onOpenImage }) {
     releaseUrls,
     add,
     pending: () => pending,
-    // Отправленный массив может ждать в очереди при обрыве связи, поэтому
-    // заводим новый, а не чистим прежний на месте.
     clear() {
       pending = [];
       renderTray();

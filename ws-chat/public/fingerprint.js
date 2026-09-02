@@ -1,5 +1,3 @@
-// Шестнадцати байт свёртки хватает: отпечаток сверяют вслух или глазами, и
-// длинную строку никто до конца не дочитает.
 export const FINGERPRINT_BYTES = 16;
 
 export function fingerprint(digest) {

@@ -1,10 +1,6 @@
 import { dropHint } from './dom.js';
 
-// Скриншот из буфера и файл, брошенный в окно, — два самых коротких пути
-// прикрепить что-то. Оба ведут туда же, куда и скрепка.
 export function createDropZone({ isReady, onFiles }) {
-  // dragenter и dragleave срабатывают и на дочерних элементах, поэтому считаем
-  // вход и выход: одного события хватило бы только на пустой странице.
   let depth = 0;
 
   function show(visible) {
@@ -30,7 +26,6 @@ export function createDropZone({ isReady, onFiles }) {
     show(true);
   });
 
-  // Без preventDefault браузер откроет файл вместо того, чтобы отдать его нам.
   document.addEventListener('dragover', (event) => {
     if (!isReady() || !hasFiles(event)) return;
     event.preventDefault();

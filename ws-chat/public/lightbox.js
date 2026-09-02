@@ -34,7 +34,6 @@ export function createLightbox({ getMessages, urlOf }) {
     picture.alt = att.name;
     urlOf(att).then(
       (url) => {
-        // Пока грузилась картинка, могли пролистнуть дальше.
         if (root && items[index]?.att === att) picture.src = url;
       },
       () => {
@@ -61,7 +60,6 @@ export function createLightbox({ getMessages, urlOf }) {
     close();
     items = imagesOf(getMessages());
     const start = items.findIndex((item) => item.att.url === att.url);
-    // Картинки может не быть в ленте: её могли открыть из поиска.
     if (start === -1) items = [{ att, from: '' }];
 
     root = document.createElement('div');
@@ -83,7 +81,6 @@ export function createLightbox({ getMessages, urlOf }) {
     root.append(picture, caption, shut);
     if (items.length > 1) root.append(arrow('prev', -1), arrow('next', 1));
 
-    // Клик по самой картинке не закрывает: по ней целятся, чтобы разглядеть.
     root.addEventListener('click', (event) => {
       if (event.target === root) close();
     });

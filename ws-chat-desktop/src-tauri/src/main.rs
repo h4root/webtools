@@ -1,5 +1,3 @@
-// Окно к серверу в локальной сети: интерфейс приходит с самого сервера,
-// поэтому родные возможности этому окну не выдаются.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use tauri::menu::{Menu, MenuItemBuilder, SubmenuBuilder};
@@ -8,9 +6,6 @@ use url::Url;
 
 const APP: &str = "ws-chat";
 
-// Пока окно на своей странице, адреса нет и показывать нечего. Как только оно
-// ушло на сервер — в заголовке видно, к какому именно и шифруется ли связь:
-// иначе подменённый сервер не отличить от своего.
 fn title_for(url: &Url) -> String {
     match url.scheme() {
         "https" => format!("{APP} — {} · зашифровано", host_of(url)),
@@ -29,13 +24,8 @@ fn host_of(url: &Url) -> String {
 
 fn main() {
     tauri::Builder::default()
-        // Проверка адреса идёт через нативную часть: у окна свой origin, и
-        // браузерная политика не пустила бы запрос к чужому серверу.
         .plugin(tauri_plugin_http::init())
         .setup(|app| {
-            // Без сочетаний клавиш: пока фокус в webview, macOS до меню их не
-            // доносит, а пункт с подписью, которая не срабатывает, хуже
-            // пункта без подписи.
             let switch = MenuItemBuilder::with_id("switch", "Сменить сервер").build(app)?;
             let reload = MenuItemBuilder::with_id("reload", "Обновить страницу").build(app)?;
             let server = SubmenuBuilder::new(app, "Сервер")
@@ -58,8 +48,6 @@ fn main() {
                 })
                 .build()?;
 
-            // Адрес своей страницы запоминаем сразу: по нему возвращаемся к
-            // выбору сервера, не перезапуская приложение.
             let home = window.url()?;
 
             app.on_menu_event(move |app, event| match event.id().as_ref() {

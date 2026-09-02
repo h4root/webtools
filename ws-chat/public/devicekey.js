@@ -4,9 +4,6 @@ const DB = 'ws-chat-keys';
 const STORE = 'device';
 const RECORD = 'current';
 
-// Пара живёт в браузере и наружу не выходит: закрытый ключ помечен
-// неизвлекаемым, поэтому даже свой же код не сможет его прочитать — только
-// попросить браузер посчитать общий секрет.
 const ALGORITHM = { name: 'ECDH', namedCurve: 'P-256' };
 
 function open() {
@@ -44,8 +41,6 @@ function toBase64(buffer) {
   return btoa(String.fromCharCode(...new Uint8Array(buffer)));
 }
 
-// Ключ у каждого устройства свой и заводится один раз: пересоздать его — то же
-// самое, что сменить устройство, и собеседникам придётся сверять заново.
 export async function deviceKey() {
   const db = await open();
   const record = (await load(db)) ?? (await create(db));
@@ -60,8 +55,6 @@ export async function deviceKey() {
   };
 }
 
-// Отпечаток чужого ключа считается по тем же правилам — иначе сверять было бы
-// нечего.
 export async function keyFingerprint(base64) {
   const raw = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
   return fingerprint(await crypto.subtle.digest('SHA-256', raw));

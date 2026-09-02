@@ -10,9 +10,6 @@ export interface Client {
   source?: string;
   guest?: boolean;
   authPending?: boolean;
-  // Срок, к которому сокет обязан представиться. Ставит его сервер, продлевает
-  // выдача кода привязки: такое устройство ждёт подтверждения на законных
-  // основаниях, иногда все две минуты.
   authDeadline?: number;
   send(message: ServerMessage): void;
   close?(): void;
@@ -38,8 +35,6 @@ const NAME_MAX = 255;
 
 export const RATE_WINDOW_MS = 10000;
 export const ACTIONS_PER_WINDOW = 30;
-// Сигналинг живёт по своему счёту: ICE-кандидаты валят пачками по два десятка
-// на соединение, и это законный трафик, а не флуд.
 export const SIGNALS_PER_WINDOW = 400;
 
 const SIGNAL_TYPES = new Set(['voice-signal', 'call-signal', 'call-invite', 'call-accept', 'call-decline', 'call-end']);
@@ -77,7 +72,6 @@ export class Hub {
   ) {}
 
   private async authenticate(client: Client, message: Extract<ClientMessage, { type: 'auth' }>): Promise<void> {
-    // Вход намеренно стоит до общего флуд-лимита: тот считает уже впущенных.
     if (!this.auth!.allowAttempt(client.source ?? 'неизвестно')) {
       client.send({ type: 'auth-error', reason: 'Слишком много попыток, подожди' });
       return;
@@ -123,8 +117,6 @@ export class Hub {
       client.send({ type: 'auth-error', reason: 'Недопустимый ник' });
       return;
     }
-    // Ник больше не эксклюзивен: второе устройство не выбивает первое. Сокет,
-    // зависший после обрыва, теперь ничему не мешает и уходит по хартбиту.
     const firstDevice = !this.findByNick(trimmed);
 
     client.nick = trimmed;
@@ -141,11 +133,7 @@ export class Hub {
     this.broadcastPresence();
   }
 
-  // Отметки заводятся при первом заходе в разговор, а не задним числом: иначе
-  // весь старый хвост свалился бы как непрочитанное.
   private readMarks(nick: string): ReadMark[] {
-    // Считаем один раз до обхода: первая же заведённая отметка сделала бы
-    // аккаунт «знакомым» для всех следующих разговоров.
     const known = this.store.knownReader(nick);
     const list: ReadMark[] = [];
     for (const channel of this.store.listChannels()) {
@@ -159,9 +147,6 @@ export class Hub {
     return list;
   }
 
-  // Впервые вошедшему весь старый хвост непрочитанным не считаем: истории
-  // чтения у него нет. А вот разговор, заведённый пока знакомый аккаунт был
-  // офлайн, он и правда не читал — такой отсчитывается с нуля.
   private markFor(nick: string, key: string, known: boolean): { id: number; unread: number } {
     const baseline = known ? 0 : (this.store.history(key, 1)[0]?.id ?? 0);
     this.store.ensureMark(nick, key, baseline);
@@ -171,7 +156,6 @@ export class Hub {
   private markRead(client: Client, message: Extract<ClientMessage, { type: 'read' }>): void {
     const key = message.channel ? channelKey(message.channel) : dmKey(client.nick!, message.to!);
     if (!this.store.markRead(client.nick!, key, message.id)) return;
-    // Прочитал на телефоне — на ноутбуке счётчик тоже должен погаснуть.
     const lower = client.nick!.toLowerCase();
     for (const peer of this.clients) {
       if (peer === client || peer.nick?.toLowerCase() !== lower) continue;
@@ -180,24 +164,16 @@ export class Hub {
   }
 
   private async changePassword(client: Client, message: Extract<ClientMessage, { type: 'change-password' }>): Promise<void> {
-    // Ник берём до ожидания: пока считается scrypt, клиент успевает выйти, и
-    // тогда его ник уже сброшен. Выбить остальные устройства всё равно надо —
-    // это и есть смысл смены пароля.
     const nick = client.nick!;
     const result = await this.auth!.changePassword(nick, message.current, message.next, client.token);
     if (!result.ok) {
       client.send({ type: 'error', reason: AUTH_ERRORS[result.error!] ?? 'Не удалось сменить пароль' });
       return;
     }
-    // Старый пароль мог утечь — значит и то, что открыто под ним на других
-    // устройствах, доверия больше не заслуживает.
     this.disconnectOthers(nick, client, 'Пароль изменён, войди заново');
     client.send({ type: 'password-changed' });
   }
 
-  // Код отдаёт не чужой аккаунт, а свой собственный чужому устройству, поэтому
-  // подтверждать может только владелец пароля: гостю нечего передавать, а
-  // спутать «подтверди код» с чем-то безобидным слишком легко.
   private approveLink(client: Client, code: string): void {
     if (client.guest) {
       client.send({ type: 'error', reason: 'Гость не может подключать устройства' });
@@ -229,7 +205,6 @@ export class Hub {
   }
 
   private revokeSession(client: Client, id: string): void {
-    // Ник передаём внутрь: иначе подобранный id гасил бы чужую сессию.
     if (!this.auth?.revokeSession(client.nick!, id)) return;
 
     for (const peer of [...this.clients]) {
@@ -270,8 +245,6 @@ export class Hub {
     if (guest) this.broadcast({ type: 'purged', nick });
   }
 
-  // Бюджет общий на аккаунт: иначе пять открытых вкладок дали бы пятикратную
-  // норму, и лимит перестал бы что-либо значить.
   private allow(client: Client, type: string): boolean {
     const key = client.nick!.toLowerCase();
     const now = Date.now();
@@ -290,7 +263,6 @@ export class Hub {
 
     if (signal ? entry.signals <= SIGNALS_PER_WINDOW : entry.actions <= ACTIONS_PER_WINDOW) return true;
 
-    // Ошибка раз за окно: иначе на флуд мы отвечаем таким же флудом.
     if (!entry.warned) {
       entry.warned = true;
       client.send({ type: 'error', reason: 'Слишком часто' });
@@ -303,7 +275,6 @@ export class Hub {
   }
 
   leave(client: Client): void {
-    // Код живёт ровно столько, сколько ждущее устройство: ушло — код мёртв.
     this.links.release(client);
     this.linkDevice.delete(client);
     if (!this.clients.delete(client)) return;
@@ -312,8 +283,6 @@ export class Hub {
     const nick = client.nick;
     client.nick = null;
     if (nick) {
-      // Закрытая вкладка на ноутбуке не значит, что человек ушёл: телефон может
-      // быть в сети. Прощаемся только с последним устройством.
       if (!this.findByNick(nick)) {
         this.rate.delete(nick.toLowerCase());
         this.broadcast({ type: 'system', text: `${nick} вышел` });
@@ -340,8 +309,6 @@ export class Hub {
       return;
     }
 
-    // Просить код может только не вошедший: это заявка на вход, а не действие
-    // внутри чата.
     if (message.type === 'link-request') {
       if (client.nick || !this.auth) return;
       if (!this.auth.allowAttempt(client.source ?? 'неизвестно')) {
@@ -361,8 +328,6 @@ export class Hub {
       return;
     }
 
-    // Подтверждение кода — путь в аккаунт, поэтому оно считается наравне с
-    // обычными действиями: иначе шесть символов можно подбирать без предела.
     if (message.type === 'link-approve') {
       if (this.allow(client, message.type)) this.approveLink(client, message.code);
       return;
@@ -378,8 +343,6 @@ export class Hub {
       return;
     }
 
-    // Ключи устройств — публичная часть: по ним пишут этому человеку, и знать
-    // их должен любой, кто собирается ему написать.
     if (message.type === 'key-publish') {
       if (client.token) this.auth?.setDeviceKey(client.token, message.key);
       return;
@@ -496,8 +459,6 @@ export class Hub {
       client.send({ type: 'error', reason: 'Канал не удалить' });
       return;
     }
-    // Сервер про них уже забыл, а у них микрофон включён и панель показывает
-    // канал, которого нет: без этого сообщения клиент об этом не узнает.
     for (const [peer, state] of [...this.voiceOf]) {
       if (state.channel !== name) continue;
       this.voiceOf.delete(peer);
@@ -520,8 +481,6 @@ export class Hub {
   }
 
   private sendMessage(client: Client, message: Extract<ClientMessage, { type: 'message' }>): void {
-    // Повтор после обрыва: сообщение уже принято, но эхо до автора не дошло.
-    // Возвращаем ему то же самое, остальным второй раз ничего не шлём.
     if (message.nonce) {
       const known = this.store.findByNonce(client.nick!, message.nonce);
       if (known) {
@@ -550,9 +509,6 @@ export class Hub {
       return;
     }
 
-    // Офлайн-адресат законен, несуществующий — нет: иначе любой вошедший
-    // заводит разговоры с выдуманными никами, а store переписывается целиком
-    // при каждом сохранении.
     const account = this.auth?.find(message.to!);
     if (this.auth && !account) {
       client.send({ type: 'error', reason: 'Нет такого собеседника' });
@@ -595,9 +551,6 @@ export class Hub {
     this.dispatch(recipientsOf(message), { type: 'reaction', id, reactions: message.reactions ?? {} });
   }
 
-  // Адресуем аккаунт, а не сокет. Пока ник был равен одному соединению,
-  // сравнения сокетов хватало; с несколькими устройствами оно и своё же
-  // второе окно считало посторонним, и до чужих доходило только до первого.
   private relayTyping(client: Client, message: Extract<ClientMessage, { type: 'typing' }>): void {
     const mine = client.nick!.toLowerCase();
     if (message.channel) {
@@ -607,8 +560,6 @@ export class Hub {
       }
       return;
     }
-    // Сообщения доходят до всех устройств собеседника — индикатор должен вести
-    // себя так же, а не выбирать первое попавшееся.
     const target = message.to!.toLowerCase();
     for (const peer of this.clients) {
       if (peer === client || peer.nick?.toLowerCase() !== target) continue;
@@ -633,8 +584,6 @@ export class Hub {
     return [...this.clients].find((c) => c.nick?.toLowerCase() === lower);
   }
 
-  // Звонок принадлежит соединениям, а не никам: у человека может быть открыто
-  // несколько устройств, звонить надо на все, а говорить — с тем, кто взял.
   private callInvite(client: Client, to: string): void {
     const lower = to.toLowerCase();
     if (lower === client.nick!.toLowerCase()) {
@@ -660,7 +609,6 @@ export class Hub {
     const caller = this.invitedBy.get(client);
     if (!caller) return;
 
-    // Остальные устройства перестают звонить: трубку уже взяли.
     for (const device of this.ringing.get(caller) ?? []) {
       this.invitedBy.delete(device);
       if (device !== client) device.send({ type: 'call-end', from: caller.nick!, reason: 'answered-elsewhere' });
@@ -676,7 +624,6 @@ export class Hub {
     const caller = this.invitedBy.get(client);
     if (!caller) return;
 
-    // Отказ на одном устройстве — отказ целиком: человек решил не брать.
     for (const device of this.ringing.get(caller) ?? []) {
       this.invitedBy.delete(device);
       if (device !== client) device.send({ type: 'call-end', from: caller.nick!, reason: 'answered-elsewhere' });
@@ -723,8 +670,6 @@ export class Hub {
     }
     if (this.voiceOf.get(client)?.channel === channel) return;
 
-    // Голос одноустройственный: два микрофона одного человека в канале дают
-    // эхо, а сигналинг адресуется по нику и не смог бы выбрать между ними.
     for (const [peer] of [...this.voiceOf]) {
       if (peer === client || peer.nick?.toLowerCase() !== client.nick!.toLowerCase()) continue;
       this.voiceOf.delete(peer);
@@ -736,8 +681,6 @@ export class Hub {
       .map(([c, state]) => ({ nick: c.nick!, muted: state.muted }))
       .sort((a, b) => a.nick.localeCompare(b.nick));
 
-    // Входим всегда с живым микрофоном: мут — состояние устройства, а не
-    // аккаунта, и наследовать его от прежнего входа неоткуда.
     this.voiceOf.set(client, { channel, muted: false });
     client.send({ type: 'voice-roster', channel, users: present });
     this.broadcastVoicePresence();
@@ -747,8 +690,6 @@ export class Hub {
     if (this.voiceOf.delete(client)) this.broadcastVoicePresence();
   }
 
-  // Себе не отвечаем: у клиента своё состояние микрофона первично, и эхо от
-  // сервера только спорило бы с ним.
   private voiceMute(client: Client, muted: boolean): void {
     const state = this.voiceOf.get(client);
     if (!state || state.muted === muted) return;
@@ -768,8 +709,6 @@ export class Hub {
     target?.send({ type: 'voice-signal', from: client.nick!, data });
   }
 
-  // Аккаунты, которые уборка сочла ушедшими: стираем их след так же, как при
-  // явном выходе, и говорим клиентам забыть их.
   purgeAccounts(nicks: string[]): void {
     for (const nick of nicks) {
       this.store.purgeUser(nick);

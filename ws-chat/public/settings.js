@@ -219,8 +219,6 @@ export function mountSettings(root, account = {}) {
     return form;
   }
 
-  // Разрешение спрашиваем здесь, по нажатию: браузер даёт его только в ответ
-  // на действие человека, а не при загрузке страницы.
   function notifyRow() {
     const wrap = document.createElement('div');
     wrap.className = 'settings-notify';
@@ -267,8 +265,6 @@ export function mountSettings(root, account = {}) {
     return wrap;
   }
 
-  // Отпечаток ключа этого устройства. Сверяют его вслух или перепиской по
-  // другому каналу: совпал у обоих — значит между вами никто не встал.
   function fingerprintRow() {
     const wrap = document.createElement('div');
     wrap.className = 'settings-fingerprint';

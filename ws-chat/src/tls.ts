@@ -5,8 +5,6 @@ const IPV6_LINK_LOCAL = /^fe80:/i;
 
 type Interfaces = NodeJS.Dict<NetworkInterfaceInfo[]>;
 
-// Петлевые адреса пропускаем: они попадают в сертификат всегда, отдельным
-// списком. Link-local IPv6 бесполезен за пределами своего сегмента.
 export function hostAddresses(interfaces: Interfaces): string[] {
   const found = new Set<string>();
   for (const entries of Object.values(interfaces)) {

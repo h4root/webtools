@@ -62,14 +62,10 @@ function toWire(message: StoredMessage): WireMessage {
 export class Store {
   private channels: string[];
   private voiceChannels: string[];
-  // Разговоры — основная структура: история читается срезом, а не фильтром по
-  // всему. byId и byBlob держат ссылки на те же объекты.
   private byKey = new Map<string, StoredMessage[]>();
   private byId = new Map<number, StoredMessage>();
   private byBlob = new Map<string, Set<number>>();
-  // Метка отправки автора -> id: по ней повтор узнаётся как тот же самый.
   private byNonce = new Map<string, number>();
-  // ник в нижнем регистре -> разговор -> id последнего прочитанного
   private reads = new Map<string, Map<string, number>>();
   private nextId = 1;
   private saveTimer: ReturnType<typeof setTimeout> | null = null;
@@ -96,8 +92,6 @@ export class Store {
       return;
     }
 
-    // Запечатанный файл, который не открывается, — это почти всегда не порча, а
-    // не тот ключ. Отодвигать его нельзя: с правильным ключом он ещё живой.
     if (isSealed(raw)) {
       if (!this.key) {
         this.persistBlocked = true;
@@ -115,7 +109,6 @@ export class Store {
 
     try {
       this.apply(JSON.parse(raw.toString('utf8')));
-      // Файл со старых времён: перезапечатается при первом же сохранении.
       if (this.key) this.dirty = true;
     } catch (error) {
       const backup = `${this.filePath}.corrupt-${Date.now()}`;
@@ -192,8 +185,6 @@ export class Store {
     }
   }
 
-  // Сервер может работать, но молча терять историю: не тот ключ, нет прав на
-  // запись. Наружу это видно только отсюда.
   canPersist(): boolean {
     return !this.persistBlocked;
   }
@@ -292,8 +283,6 @@ export class Store {
     const messages = this.conversation(message.key);
     messages.push(message);
     this.index(message);
-    // Вытесняем только из этого разговора: соседние трогать незачем, а раньше
-    // на каждой вставке просеивалась вся история целиком.
     if (messages.length > HISTORY_LIMIT) {
       for (const dropped of messages.splice(0, messages.length - HISTORY_LIMIT)) this.unindex(dropped);
     }
@@ -352,7 +341,6 @@ export class Store {
     });
   }
 
-  // Метка своя у каждого автора: чужую не подобрать и на чужую не наткнуться.
   findByNonce(from: string, nonce: string): WireMessage | null {
     const id = this.byNonce.get(this.nonceKey(from, nonce));
     const message = id === undefined ? undefined : this.byId.get(id);
@@ -471,8 +459,6 @@ export class Store {
     return null;
   }
 
-  // Доступ проверяется здесь, а не в интерфейсе: иначе поиск стал бы способом
-  // читать чужие личные сообщения в обход всех остальных проверок.
   search(nick: string, query: string, limit = SEARCH_LIMIT): WireMessage[] {
     const needle = query.trim().toLowerCase();
     if (!needle) return [];
@@ -491,8 +477,6 @@ export class Store {
       .map(toWire);
   }
 
-  // Отметка только растёт: два устройства читают вразнобой, и более старое
-  // «прочитано» не должно возвращать уже разобранные сообщения в непрочитанные.
   markRead(nick: string, key: string, id: number): boolean {
     const lower = nick.toLowerCase();
     const marks = this.reads.get(lower) ?? new Map<string, number>();
@@ -515,8 +499,6 @@ export class Store {
     return this.reads.get(nick.toLowerCase())?.has(key) ?? false;
   }
 
-  // Отметка на нуле — это не то же самое, что её отсутствие: разговор мог быть
-  // пуст в момент первого захода, и пришедшее потом обязано считаться новым.
   ensureMark(nick: string, key: string, id: number): void {
     if (this.hasMark(nick, key)) return;
     const lower = nick.toLowerCase();
@@ -526,8 +508,6 @@ export class Store {
     this.scheduleSave();
   }
 
-  // Без отметки считать нечего: истории чтения в этом разговоре ещё не было, и
-  // весь старый хвост не должен свалиться как непрочитанное.
   unreadCount(nick: string, key: string): number {
     if (!this.hasMark(nick, key)) return 0;
     const mark = this.readMark(nick, key);
@@ -539,9 +519,6 @@ export class Store {
     return count;
   }
 
-  // Отдаём столько же, сколько храним: при меньшем пределе вторая сотня
-  // сообщений лежала бы на сервере, но не показывалась бы никогда — ни в
-  // ленте, ни в просмотрщике картинок.
   history(key: string, limit = HISTORY_LIMIT): WireMessage[] {
     return (this.byKey.get(key) ?? []).slice(-limit).map(toWire);
   }

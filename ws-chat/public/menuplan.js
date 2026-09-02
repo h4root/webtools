@@ -9,7 +9,6 @@ function nickItems(nick, me, canCopy) {
     items.push({ id: 'mention', label: 'Упомянуть' });
   }
   if (canCopy) items.push({ id: 'copy-nick', label: 'Копировать ник' });
-  // Ключи спрашивают и у себя тоже: сверяют их вдвоём, каждый со своей стороны.
   items.push({ id: 'keys', label: 'Ключи устройств' });
   return items;
 }
@@ -41,7 +40,6 @@ function linkItems(canCopy) {
   return items;
 }
 
-// Щелчок мимо сообщений — про разговор целиком, а не про какую-то строку.
 function logItems() {
   return [
     { id: 'mark-read', label: 'Отметить прочитанным' },
@@ -53,7 +51,6 @@ function logItems() {
 function channelItems(channel, canCopy) {
   const items = [{ id: 'open-channel', label: 'Открыть' }];
   if (canCopy) items.push({ id: 'copy-channel', label: 'Копировать имя' });
-  // Последний канал не удаляем: чату нужен хотя бы один.
   if (!channel.last) items.push(SEPARATOR, { id: 'delete-channel', label: 'Удалить канал', danger: true });
   return items;
 }
@@ -66,8 +63,6 @@ function voiceItems(voice) {
   ];
 }
 
-// Порядок проверок — от частного к общему: щелчок по вложению или по имени
-// внутри строки говорит о них, а не о самом сообщении.
 export function planMenu({ attachment, link, nick, message, voice, channel, log, me, canCopy }) {
   if (attachment) return attachmentItems(attachment, canCopy);
   if (link) return linkItems(canCopy);

@@ -25,9 +25,7 @@ async function waitForServer(base: string): Promise<void> {
     try {
       const res = await fetch(base, { signal: AbortSignal.timeout(500) });
       if (res.ok) return;
-    } catch {
-      /* ещё не поднялся */
-    }
+    } catch {}
     await new Promise((r) => setTimeout(r, 100));
   }
   throw new Error('сервер не поднялся');
@@ -194,7 +192,6 @@ describe('HTTP-слой', () => {
     }
     expect(refused).toBe(true);
 
-    // Обрыв не должен возвращать право лить заново.
     peer.socket.close();
     await new Promise((r) => setTimeout(r, 300));
 

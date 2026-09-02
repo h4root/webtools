@@ -1,5 +1,3 @@
-// Растёт при несовместимом изменении формы сообщений. Клиент сверяет её с
-// той, с которой собран, и просит перезагрузку, если разошлись.
 export const PROTOCOL_VERSION = 1;
 
 export const NICK_MAX = 24;
@@ -14,16 +12,11 @@ export const NONCE_MAX = 64;
 
 const ATTACH_ID = /^[a-f0-9]{32}$/;
 const NONCE = /^[A-Za-z0-9_-]{1,64}$/;
-// Открытый ключ устройства приходит от клиента в base64. Разбирать его здесь
-// нечем и незачем — сервер ключи только раздаёт, — но пускать под этим именем
-// что попало нельзя.
 const DEVICE_KEY = /^[A-Za-z0-9+/]{40,200}={0,2}$/;
 
 export const REACTIONS = ['👍', '❤️', '😂', '🔥', '🎉', '😮', '😢', '👀'];
 
 const CHANNEL_PATTERN = /^[a-z0-9-]{1,24}$/;
-// Тот же набор, что при регистрации: адресат обязан выглядеть как настоящий
-// ник, иначе на границе проходит любая строка нужной длины.
 const NICK_PATTERN = /^[\p{L}\p{N} _.-]+$/u;
 
 export type Reactions = Record<string, string[]>;
@@ -46,7 +39,6 @@ export interface ReplyRef {
   id: number;
   from: string;
   text: string;
-  // Первое вложение оригинала: цитате хватает его на миниатюру.
   media?: Attachment;
 }
 
@@ -61,7 +53,6 @@ export interface WireMessage {
   reactions?: Reactions;
   replyTo?: ReplyRef;
   attachments?: Attachment[];
-  // Метка отправки: осмысленна только автору, остальным ни о чём не говорит.
   nonce?: string;
 }
 
@@ -152,8 +143,6 @@ export type ServerMessage =
   | { type: 'voice-channels'; list: string[] }
   | { type: 'voice-roster'; channel: string; users: VoiceMember[] }
   | { type: 'voice-mute'; nick: string; muted: boolean }
-  // Голос свернуть: переехал на другое устройство или канала больше нет.
-  // Причина необязательна — о том, что уже объявлено всем, не говорим дважды.
   | { type: 'voice-left'; reason?: string }
   | { type: 'voice-presence'; channels: Record<string, string[]> }
   | { type: 'voice-signal'; from: string; data: unknown }

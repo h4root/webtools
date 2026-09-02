@@ -15,7 +15,6 @@ export function createVoiceView({ voice, send, getState, onError }) {
       const label = document.createElement('span');
       label.textContent = state.channel;
       voiceConn.appendChild(label);
-      // Заглушка выключает и микрофон, поэтому кнопка не должна выглядеть живой.
       const micOff = state.muted || state.deafened;
       setButton(voiceMuteBtn, micOff ? 'mic-off' : 'microphone');
       voiceMuteBtn.classList.toggle('muted', micOff);
@@ -31,8 +30,6 @@ export function createVoiceView({ voice, send, getState, onError }) {
     const label = document.createElement('span');
     label.textContent = nick === me ? `${nick} (вы)` : nick;
     item.appendChild(label);
-    // Про мут известно только по своему каналу: сервер рассылает его тем, кто
-    // рядом, и знать про соседние комнаты незачем.
     if (channel === joined && voice.isMuted(nick)) {
       item.classList.add('muted');
       item.title = 'Микрофон выключен';

@@ -17,8 +17,6 @@ export function createDrop({ getToken, onPendingChange }) {
     onPendingChange();
   }
 
-  // Соединение живёт всё время, пока ты в чате. Иначе файл можно прислать
-  // только в ту минуту, когда панель открыта, — то есть практически никогда.
   function start() {
     if (client) return;
     const proto = location.protocol === 'https:' ? 'wss' : 'ws';

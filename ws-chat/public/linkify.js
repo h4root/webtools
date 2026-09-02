@@ -1,9 +1,5 @@
 const MENTION = /^[\p{L}\p{N}_.-]+/u;
-// Только явная схема: голый домен слишком легко спутать с обычным текстом,
-// а другие схемы (javascript:, data:) сюда не попадают по построению.
 const LINK_START = /https?:\/\//i;
-// Хвостовая пунктуация к адресу не относится: точка в конце предложения,
-// запятая в перечислении, скобка вокруг ссылки.
 const TRAILING = /[.,;:!?]+$/;
 
 function isAllowed(url) {
@@ -15,8 +11,6 @@ function isAllowed(url) {
   }
 }
 
-// Закрывающую скобку отдаём обратно тексту, только если внутри нет парной ей
-// открывающей: ссылки вида .../Кот_(значения) законны.
 function trimTail(raw) {
   let value = raw.replace(TRAILING, '');
   while (value.endsWith(')')) {
@@ -79,8 +73,6 @@ function isWordChar(char) {
   return char !== undefined && /[\p{L}\p{N}]/u.test(char);
 }
 
-// Длинный адрес разрывает ленту по ширине, поэтому в тексте показываем
-// укороченный, а полный оставляем в href и подсказке.
 export function shortenUrl(url) {
   if (url.length <= 60) return url;
   return `${url.slice(0, 45)}…${url.slice(-12)}`;

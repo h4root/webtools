@@ -37,8 +37,6 @@ export function deviceLabel() {
   return '';
 }
 
-// Микрофон, камера и setSinkId живут только в secure context, поэтому по
-// http с чужого устройства они молча не работают — об этом надо предупредить.
 export function secureContext() {
   return location.protocol === 'https:' || ['localhost', '127.0.0.1', '::1'].includes(location.hostname);
 }

@@ -18,8 +18,6 @@ export function createReactions({ send, getNick, findMessage }) {
     send({ type: 'react', id: msg.id, emoji });
   }
 
-  // Частицы живут вне ленты и сами себя убирают: внутри строки они ломали бы
-  // её высоту и уезжали вместе со скроллом.
   function burst(emoji, row) {
     if (!settings.animationsEnabled() || !row) return;
     const rect = row.getBoundingClientRect();
@@ -68,8 +66,6 @@ export function createReactions({ send, getNick, findMessage }) {
     row.appendChild(box);
   }
 
-  // Подсвечиваем только те эмодзи, у которых изменился счёт: иначе дёргалась бы
-  // вся строка на каждое чужое нажатие.
   function apply(id, reactions) {
     const msg = findMessage(id);
     if (!msg) return;
@@ -115,8 +111,6 @@ export function createReactions({ send, getNick, findMessage }) {
     document.body.appendChild(node);
     place(node, anchor);
     picker = node;
-    // Тот же клик, что открыл палитру, закрыл бы её сразу — вешаем на следующий
-    // оборот цикла событий.
     setTimeout(() => document.addEventListener('click', close, { once: true }), 0);
   }
 

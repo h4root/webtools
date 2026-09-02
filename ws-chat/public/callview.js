@@ -17,8 +17,6 @@ import {
   callGrip,
 } from './dom.js';
 
-// Панель звонка плавает поверх ленты, поэтому её дают сдвинуть: иначе она
-// закрывает как раз то сообщение, из-за которого звонят.
 function makeDraggable(panel, handle) {
   let dragging = false;
   let offsetX = 0;

@@ -101,7 +101,6 @@ body {
   flex-direction: column;
 }
 
-/* Сегменты вместо ссылок: это основной переключатель, а не сноска. */
 .gate-tabs {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -133,8 +132,6 @@ body {
   color: var(--accent);
 }
 
-/* Карточка прижата к верху, поэтому появление поля пароля не двигает ни
-   вкладки, ни ник — форма растёт вниз, а не прыгает целиком. */
 .gate-fields {
   display: flex;
   flex-direction: column;
@@ -397,7 +394,6 @@ button {
   border-bottom: 1px solid var(--line);
 }
 
-/* Плашка «новые сообщения»: висит над лентой, у самого поля ввода. */
 .jump-new {
   position: absolute;
   left: 50%;
@@ -631,8 +627,6 @@ button {
   min-width: 0;
 }
 
-/* Отпечаток собеседника стоит там, где с ним переписываются: сверять его
-   осмысленно перед разговором, а не в отдельном углу настроек. */
 .chat-keys {
   padding: 2px 8px;
   background: transparent;
@@ -656,8 +650,6 @@ button {
   }
 }
 
-/* Поиск стоит на виду: за лупой он открывался лишним кликом, а ищут в чате
-   часто. На узком экране места нет — там остаётся кнопка в шапке. */
 .header-search {
   flex: 1;
   min-width: 0;
@@ -935,7 +927,6 @@ button {
   font-size: 12px;
 }
 
-/* Пустой разговор: вместо черноты одна спокойная строка по центру. */
 .log-empty {
   position: absolute;
   left: 50%;
@@ -950,8 +941,6 @@ button {
   line-height: 1.7;
 }
 
-/* Пустой список в боковой панели: подсказка, а не элемент — по ней не кликают
-   и она не подсвечивается при наведении. */
 .nav-empty {
   padding: 4px 10px 6px;
   color: var(--dim);
@@ -960,8 +949,6 @@ button {
   cursor: default;
 }
 
-/* Плашка с датой держится у верхнего края, пока листаешь этот день:
-   иначе, уехав вглубь истории, перестаёшь понимать, где находишься. */
 .day-sep {
   align-self: center;
   position: sticky;
@@ -989,8 +976,6 @@ button {
   font-weight: 700;
 }
 
-/* Продолжение той же реплики: имя не повторяется, строки стоят вплотную, а
-   уголок пузыря скругляется — хвостик остаётся только у последней. */
 .row.grouped {
   margin-top: -4px;
   border-top-left-radius: 6px;
@@ -1001,8 +986,6 @@ button {
   border-top-right-radius: 6px;
 }
 
-/* Ответ, вложения и поле — один блок, и черта идёт над всем блоком. Раньше
-   она проходила между цитатой и полем, и карточка упиралась в линию. */
 .composer-area {
   border-top: 1px solid var(--line);
 }
@@ -1145,7 +1128,6 @@ button {
   color: var(--accent);
 }
 
-/* Auto-layout: flex-дети должны сжиматься и усекаться, а не вылезать за рамки */
 .chat {
   min-width: 0;
 }
@@ -1232,7 +1214,6 @@ button {
   max-width: calc(100vw - 32px);
 }
 
-/* Анимации и эффекты */
 @keyframes pop-in {
   from {
     opacity: 0;
@@ -1629,7 +1610,6 @@ html.motion-off *::after {
   transform: scale(1.25);
 }
 
-/* «Взрыв» реакции (свой эффект) */
 .reaction-burst {
   position: fixed;
   z-index: 40;
@@ -1652,7 +1632,6 @@ html.motion-off *::after {
   }
 }
 
-/* Анимированные точки typing-индикатора */
 .typing-dots {
   display: inline-flex;
   gap: 3px;
@@ -1721,8 +1700,6 @@ html.motion-off *::after {
   text-overflow: ellipsis;
 }
 
-/* Зелёная точка значит «слышно». У молчащего она гаснет, а рядом встаёт
-   перечёркнутый микрофон. */
 .voice-members li.muted::before {
   background: var(--dim);
 }
@@ -1825,7 +1802,7 @@ html.motion-off *::after {
   align-items: center;
   justify-content: center;
   border-radius: 50%;
-  /* Цвет приходит из ника: людей видно боковым зрением, не вчитываясь. */
+  
   background: hsl(var(--hue, 150) 40% 26%);
   color: hsl(var(--hue, 150) 65% 78%);
   font-weight: 600;
@@ -2522,7 +2499,7 @@ div.reply-quote {
   animation: row-flash 1s ease;
 }
 
-/* --- контекстное меню (заготовка) --- */
+/* --- контекстное меню --- */
 
 .ctx-menu {
   position: fixed;
@@ -2583,7 +2560,7 @@ div.reply-quote {
   border: 2px dashed var(--accent);
   color: var(--accent);
   font-size: 15px;
-  /* Плашка не должна перехватывать сам drop: события летят к документу. */
+  
   pointer-events: none;
 }
 

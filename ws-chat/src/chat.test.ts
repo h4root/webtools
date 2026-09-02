@@ -1065,8 +1065,6 @@ describe('Hub: вход и выход', () => {
     const again = makeClient('a2');
     await auth(again, { mode: 'resume', token });
     expect(again.nick).toBe('гость');
-    // Прошлое соединение живёт своей жизнью: одна сессия может быть открыта
-    // и в двух вкладках, и это больше никого не выбивает.
     expect(a.closed).toBe(false);
     expect(a.nick).toBe('гость');
 
@@ -1174,7 +1172,6 @@ describe('Hub: вход и выход', () => {
     expect(bob.closed).toBe(false);
     expect(bob.nick).toBe('bob');
 
-    // Ни одна сессия этого ника больше не поднимается, чужие не задеты.
     for (const token of [phoneToken, welcomeOf(laptop)!.token]) {
       const returning = makeClient(`r-${token.slice(0, 4)}`);
       await auth(returning, { mode: 'resume', token });
@@ -1381,7 +1378,6 @@ describe('Hub: вход и выход', () => {
     const token = welcomeOf(laptop)?.token as string;
     await auth(phone, { mode: 'resume', token });
 
-    // Оба сообщения в одном такте: выход попадает внутрь ожидания scrypt.
     hub.handle(laptop, JSON.stringify({ type: 'change-password', current: 'достаточно-длинный', next: 'новый-длинный-пароль' }));
     hub.handle(laptop, JSON.stringify({ type: 'logout' }));
 

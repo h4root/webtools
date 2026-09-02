@@ -13,11 +13,7 @@ const EDIT_MAX = 2000;
 export function createLog({ getNick, send, attachments, reactions, quote, onReply, getMessages, emptyText, onSeen, onRendered }) {
   const animation = autoAnimate(logEl, { duration: 180, disrespectUserMotionPreference: true });
   let missedBelow = 0;
-  // Метка времени последней нарисованной строки: по ней видно, что следующая
-  // пришла уже в другой день.
   let lastTs = null;
-  // Последнее нарисованное сообщение: по нему видно, продолжает ли следующее
-  // ту же реплику или начинает новую.
   let lastMsg = null;
 
   function applyMotion() {
@@ -40,12 +36,8 @@ export function createLog({ getNick, send, attachments, reactions, quote, onRepl
       } else if (part.kind === 'link') {
         const link = document.createElement('a');
         link.className = 'msg-link';
-        // href присваиваем свойством, а не разметкой, и схему уже проверил
-        // splitText — в DOM ничего исполняемого не попадает.
         link.href = part.value;
         link.target = '_blank';
-        // noopener обязателен: без него открытая вкладка получает window.opener
-        // и может увести исходную страницу куда угодно.
         link.rel = 'noopener noreferrer';
         link.textContent = shortenUrl(part.value);
         link.title = part.value;
@@ -126,8 +118,6 @@ export function createLog({ getNick, send, attachments, reactions, quote, onRepl
     return line;
   }
 
-  // Вкладку не закрывают неделями: с наступлением полуночи вчерашние плашки
-  // обязаны перестать говорить «Сегодня».
   function relabelDays() {
     const now = Date.now();
     for (const line of logEl.querySelectorAll('.day-sep')) {
@@ -135,8 +125,6 @@ export function createLog({ getNick, send, attachments, reactions, quote, onRepl
     }
   }
 
-  // Системные строки живут только до перезагрузки и своей даты не имеют:
-  // разделитель из-за них появляться не должен.
   function opensNewDay(msg) {
     if (msg.system) return false;
     return lastTs === null || !sameDay(lastTs, msg.ts);
@@ -165,9 +153,6 @@ export function createLog({ getNick, send, attachments, reactions, quote, onRepl
     input.maxLength = EDIT_MAX;
     row.appendChild(input);
     input.focus();
-    // Перерисовка убирает поле из строки, и оно на прощание шлёт blur. Если
-    // обработчик оставить висеть, отрисовка пойдёт по второму кругу изнутри
-    // самой себя, и браузер оборвёт её ошибкой.
     const restore = () => {
       input.removeEventListener('blur', restore);
       fillRow(row, msg);
@@ -217,7 +202,6 @@ export function createLog({ getNick, send, attachments, reactions, quote, onRepl
       logEl.appendChild(daySeparator(msg.ts));
       lastTs = msg.ts;
     }
-    // Разделитель дня обрывает группу: под ним реплика начинается заново.
     msg.grouped = !opensDay && sameGroup(lastMsg, msg);
     if (!msg.system) lastMsg = msg;
     logEl.appendChild(createRow(msg));
@@ -233,8 +217,6 @@ export function createLog({ getNick, send, attachments, reactions, quote, onRepl
     append({ id: 0, from: '', text, ts: Date.now(), edited: false, system: true });
   }
 
-  // Заглушка живёт рядом с лентой, а не внутри: анимация списка перехватывала
-  // её удаление и оставляла призрак поверх пришедших сообщений.
   function showEmpty(on) {
     logEmpty.hidden = !on;
     if (on) logEmpty.textContent = emptyText();

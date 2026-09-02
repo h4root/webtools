@@ -16,8 +16,6 @@ export function createSearch({ send, getNick, openConversation, activeKey, findR
     if (open) searchInput.focus();
   }
 
-  // Панель закрывается и когда открыли соседнюю — набранное при этом стирать
-  // нельзя. Чистит только явный отказ от поиска.
   function clear() {
     searchInput.value = '';
     query = '';
@@ -73,8 +71,6 @@ export function createSearch({ send, getNick, openConversation, activeKey, findR
     return li;
   }
 
-  // Ответы могут прийти не в том порядке, в каком набирали: показываем только
-  // тот, что отвечает нынешнему запросу.
   function renderResults(forQuery, messages) {
     if (forQuery !== query) return;
     searchResults.replaceChildren();
@@ -87,8 +83,6 @@ export function createSearch({ send, getNick, openConversation, activeKey, findR
     for (const msg of messages) searchResults.append(hitNode(msg));
   }
 
-  // Найденное может оказаться старше загруженного куска истории — тогда честнее
-  // сказать об этом, чем молча открыть разговор и ничего не подсветить.
   function flushJump() {
     if (!jump || jump.key !== activeKey()) return;
     if (findRow(jump.id)) {
@@ -96,8 +90,6 @@ export function createSearch({ send, getNick, openConversation, activeKey, findR
       jump = null;
       return;
     }
-    // Запрошенная история — ещё не пришедшая: сдаваться можно только после
-    // ответа сервера, иначе отказ вынесен до того, как смотреть было куда.
     if (historyArrived(jump.key)) {
       jump = null;
       searchNote.textContent = 'Разговор открыт, но сообщение старше загруженной истории.';

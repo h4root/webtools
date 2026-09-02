@@ -1,8 +1,5 @@
 const SCHEMES = new Set(['http:', 'https:']);
 
-// Адрес люди списывают с экрана сервера и набирают по-разному: с портом и
-// без, со схемой и без, иногда со слэшем на конце. Приводим к одному виду,
-// чтобы «недавние» не размножались на пять записей об одном сервере.
 export function normalizeAddress(raw) {
   const text = String(raw ?? '').trim();
   if (!text) return null;
@@ -29,9 +26,6 @@ export function rememberAddress(list, origin, limit = 5) {
   return [origin, ...list.filter((item) => item !== origin)].slice(0, limit);
 }
 
-// К этому серверу уже ходили по https, а теперь предлагают простой http.
-// Само по себе так не бывает: либо сервер переставили, либо кто-то в сети
-// уводит соединение туда, где пароль виден целиком.
 export function downgraded(list, origin) {
   const now = new URL(origin);
   if (now.protocol !== 'http:') return false;

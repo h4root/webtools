@@ -80,15 +80,11 @@ export function createGate({ request }) {
     (needsPassword && nickInput.value ? passwordInput : nickInput).focus();
   }
 
-  // Плашка уровня страницы, а не поля: иначе она то появлялась бы, то исчезала
-  // при переключении вкладок и дёргала высоту формы.
   function warnIfInsecure() {
     gateInsecure.hidden = secureContext();
     gateInsecure.textContent = 'Соединение не шифруется: в этой сети видно всё, включая пароль при входе.';
   }
 
-  // Отсчёт живёт в той же строке и переписывает её каждую секунду, поэтому
-  // сообщение не восстанавливаем по таймеру, а просто просим отсчёт помолчать.
   function flashNote(text) {
     flashUntil = Date.now() + FLASH_MS;
     linkExpiryEl.textContent = text;
@@ -148,8 +144,6 @@ export function createGate({ request }) {
     requestLinkCode();
   });
 
-  // Буфер обмена доступен только в защищённом контексте, а код чаще всего
-  // смотрят с телефона по http — поэтому есть запасной путь через выделение.
   linkCodeEl.addEventListener('click', async () => {
     const code = linkCodeEl.textContent.trim();
     if (!code || code === '…') return;

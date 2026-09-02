@@ -24,9 +24,6 @@ export function createTyping({ send, onChange }) {
     notify(key);
   }
 
-  // Сигнал приходит, пока человек печатает, и молча протухает, если он передумал
-  // и закрыл вкладку. Поэтому каждый новый сигнал сдвигает срок, а не копит
-  // второй таймер поверх первого.
   function receive(message) {
     const key = message.channel ? keyOf('channel', message.channel) : keyOf('dm', message.from);
     const map = byKey.get(key) ?? new Map();
@@ -44,8 +41,6 @@ export function createTyping({ send, onChange }) {
       watching = key;
       onChange(nicks(key));
     },
-    // Набор — поток событий, а не одно: без паузы каждое нажатие уходило бы
-    // отдельным сообщением.
     send(target) {
       const now = Date.now();
       if (now - lastSent < SEND_MS) return;

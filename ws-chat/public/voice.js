@@ -181,8 +181,6 @@ export function createVoice({ send, onState, onError, onSpeaking, getNick }) {
     emit();
   }
 
-  // Наружу уходит не сам мут, а то, слышно тебя или нет: заглушка выключает
-  // микрофон тоже, и для остальных это неотличимо.
   function announceMic() {
     send({ type: 'voice-mute', muted: muted || deafened });
   }

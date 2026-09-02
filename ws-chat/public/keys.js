@@ -1,11 +1,7 @@
-// Ключ разговора. Имя канала сервер различает по регистру, а ник — нет,
-// поэтому нижний регистр только у личной переписки.
 export function keyOf(kind, id) {
   return kind === 'channel' ? `ch:${id}` : `dm:${id.toLowerCase()}`;
 }
 
-// Разговор, к которому относится сообщение: для личного это собеседник, а не
-// отправитель, иначе своё же сообщение уехало бы в переписку с самим собой.
 export function targetOf(msg, myNick) {
   if (msg.channel) return { kind: 'channel', id: msg.channel };
   const mine = msg.from.toLowerCase() === myNick.toLowerCase();
@@ -17,8 +13,6 @@ export function messageKey(msg, myNick) {
   return keyOf(target.kind, target.id);
 }
 
-// Тот же набор символов, что принимает сервер: имя канала становится частью
-// имени файла с историей.
 const CHANNEL = /^[a-z0-9-]{1,24}$/;
 
 export function channelSlug(raw) {

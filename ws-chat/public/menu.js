@@ -3,8 +3,6 @@ import { secureContext } from './format.js';
 
 const EDGE = 8;
 
-// Буфер обмена живёт только в защищённом контексте: по http с телефона его
-// просто нет. Пункт, который молча не сработает, хуже отсутствующего.
 function canCopy() {
   return secureContext() && Boolean(navigator.clipboard);
 }
@@ -33,12 +31,9 @@ export function createContextMenu({ getNick, findMessage, channelCount, voiceCur
     const voice = voiceEl ? { name: voiceEl.dataset.voice, joined: voiceEl.dataset.voice === voiceCurrent() } : null;
 
     const item = origin.closest('.channel[data-kind]');
-    // Личная переписка в боковой панели — это про человека, а не про канал.
     const nick = item?.dataset.kind === 'dm' ? item.dataset.name : nickAt(origin);
     const channel = item?.dataset.kind === 'channel' ? { name: item.dataset.name, last: channelCount() <= 1 } : null;
 
-    // Лента идёт последней: щелчок по строке — про сообщение, и только мимо
-    // строк остаётся сам разговор.
     const log = Boolean(origin.closest('#log'));
 
     return { message, attachment, link, nick, voice, channel, log, row };
@@ -70,8 +65,6 @@ export function createContextMenu({ getNick, findMessage, channelCount, voiceCur
     return box;
   }
 
-  // Меню рисуется у курсора, но не вылезает за окно: у нижнего края
-  // разворачивается вверх, у правого — влево.
   function place(box, x, y) {
     const { width, height } = box.getBoundingClientRect();
     const left = x + width + EDGE > window.innerWidth ? Math.max(EDGE, x - width) : x;
@@ -88,8 +81,6 @@ export function createContextMenu({ getNick, findMessage, channelCount, voiceCur
   }
 
   document.addEventListener('contextmenu', (event) => {
-    // Внутри полей ввода родное меню полезнее: там правка, вставка и проверка
-    // орфографии, которых у нас нет.
     if (event.target.closest('input, textarea')) return;
 
     const context = targetAt(event.target);

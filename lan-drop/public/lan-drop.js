@@ -340,8 +340,6 @@ export function mountLanDrop(container, options = {}) {
         signal(from, { kind: 'decline', sid });
         return;
       }
-      // Пока шёл выбор папки, отправитель мог передумать: сессии уже нет,
-      // и принимать нечего.
       if (!asks.has(sid)) return;
       dropAsk(sid);
       prepareReceive(from, sid, total, openSink);
@@ -477,8 +475,6 @@ export function mountLanDrop(container, options = {}) {
     if (!session) return;
     session.cancelled = true;
     clearTimeout(session.dropTimer);
-    // Сигналинг, а не канал данных: канал может быть забит очередью чанков
-    // или уже мёртв, а отмену надо доставить именно сейчас.
     if (tellPeer) signal(session.peerId, { kind: 'cancel', sid });
     session.view.fail(reason);
     session.receiver?.abort();

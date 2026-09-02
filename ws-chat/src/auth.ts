@@ -40,11 +40,7 @@ export interface Account {
 }
 
 interface Session {
-  // Открытый ключ устройства для сквозного шифрования. Живёт ровно столько,
-  // сколько сессия: вышел с устройства — писать в него больше нечем.
   key?: string;
-  // Публичный идентификатор: по нему сессию отзывают из интерфейса. Хэш токена
-  // наружу не отдаём — он хоть и необратим, но клиенту знать о нём незачем.
   id: string;
   tokenHash: string;
   nick: string;
@@ -131,7 +127,6 @@ export class Auth {
       const now = Date.now();
       for (const session of readJson<Session[]>(this.sessionsFile) ?? []) {
         if (session.expiresAt <= now) continue;
-        // Сессии, выданные до появления списка устройств: доживают как есть.
         session.id ??= randomBytes(8).toString('hex');
         session.device ??= '';
         session.lastSeenAt ??= session.issuedAt ?? now;
@@ -238,8 +233,6 @@ export class Auth {
     }
   }
 
-  // Гостевой аккаунт заводится мгновенно и без пароля, так что без потолка
-  // достаточно открыть пачку сокетов, чтобы разобрать все ники разом.
   private guestCount(): number {
     let count = 0;
     for (const account of this.accounts.values()) if (account.guest) count++;
@@ -320,9 +313,6 @@ export class Auth {
     return { ok: true, nick: account.nick, guest: false, token: this.issue(account, device) };
   }
 
-  // Смена пароля обесценивает всё, что было выдано под старым: если его увели,
-  // чужие сессии переживут смену и толку от неё не будет. Текущую оставляем,
-  // иначе меняющий выбьет сам себя.
   async changePassword(nick: string, current: string, next: string, keepToken?: string): Promise<AuthResult> {
     const locked = this.lockState(nick);
     if (locked) return { ok: false, error: 'locked', retryAfterMs: locked };
@@ -352,8 +342,6 @@ export class Auth {
     return { ok: true, nick: account.nick, guest: false };
   }
 
-  // Выдать сессию уже подтверждённому аккаунту: пароль здесь заново не
-  // спрашивают, доверие подтвердило другое устройство.
   issueFor(nick: string, device = ''): string | null {
     const account = this.find(nick);
     if (!account || account.guest) return null;
@@ -368,8 +356,6 @@ export class Auth {
     return true;
   }
 
-  // Устройства без ключа в выдачу не попадают: зашифровать для них нечем, и
-  // отправителю о них знать незачем.
   deviceKeys(nick: string): DeviceKey[] {
     const lower = nick.toLowerCase();
     return [...this.sessions.values()]
@@ -392,7 +378,6 @@ export class Auth {
       }));
   }
 
-  // Ник обязателен: без него чужую сессию можно было бы погасить, подобрав id.
   revokeSession(nick: string, id: string): boolean {
     const lower = nick.toLowerCase();
     for (const [hash, session] of this.sessions) {
@@ -439,8 +424,6 @@ export class Auth {
 
     const ttl = this.ttlFor(session.guest);
     const now = Date.now();
-    // Пишем на диск не на каждое использование, а когда есть что заметить:
-    // иначе каждое переподключение стоило бы записи файла.
     if (session.expiresAt - now < ttl / 2 || now - session.lastSeenAt > LAST_SEEN_STEP_MS) {
       session.expiresAt = now + ttl;
       session.lastSeenAt = now;
@@ -449,9 +432,6 @@ export class Auth {
     return { nick: account.nick, guest: session.guest };
   }
 
-  // Гостевой аккаунт живёт, пока жива хоть одна его сессия. Вкладку закрывают
-  // куда чаще, чем жмут «Выйти», и без этой уборки ник оставался бы занятым
-  // навсегда, а accounts.json рос бы без предела.
   sweep(activeNicks: Iterable<string> = []): string[] {
     const now = Date.now();
     let changed = false;

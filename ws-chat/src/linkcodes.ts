@@ -1,6 +1,5 @@
 import { randomInt } from 'node:crypto';
 
-// Без нуля, единицы, I, L и O: код читают с чужого экрана и набирают руками.
 const ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 const CODE_LEN = 6;
 

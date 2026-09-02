@@ -10,8 +10,6 @@ export function sameDay(a, b) {
   return midnight(a) === midnight(b);
 }
 
-// «Вчера» — это про календарь, а не про сутки назад: в час ночи вчерашним
-// считается всё, что было до полуночи, хоть двадцать минут назад.
 export function dayLabel(ts, now) {
   const start = midnight(now);
   if (ts >= start) return 'Сегодня';

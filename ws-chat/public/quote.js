@@ -1,7 +1,5 @@
 import { isImage, replyPreview } from './media.js';
 
-// Цитата выглядит одинаково и в ленте, и над полем ввода: тонкая полоса цвета
-// акцента, имя автора строкой выше превью и миниатюра, если ответ на картинку.
 export function createQuote({ urlOf }) {
   function thumb(media) {
     const img = document.createElement('img');

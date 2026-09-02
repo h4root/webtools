@@ -3,8 +3,6 @@ export function isOnline(nick, { me, online }) {
   return nick === me || online.some((n) => n.toLowerCase() === lower);
 }
 
-// Свежие переписки сверху, как в мессенджерах. Ниже — те, кому ещё не писали:
-// они попадают в список просто потому, что сейчас в сети, и двигать их нечему.
 export function orderDms({ me, online, partners, active }) {
   const seen = new Map();
   for (const nick of online) if (nick !== me) seen.set(nick.toLowerCase(), nick);

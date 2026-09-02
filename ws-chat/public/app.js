@@ -61,8 +61,6 @@ import { createReactions } from './reactions.js';
 import { createDropZone } from './dnd.js';
 import { isNarrow, deviceLabel } from './format.js';
 
-// Держится вручную в согласии с PROTOCOL_VERSION на сервере: вкладка,
-// открытая до его обновления, узнаёт об этом по расхождению.
 const PROTOCOL_VERSION = 1;
 const TOKEN_KEY = 'ws-chat-token';
 const BASE_TITLE = document.title;
@@ -83,7 +81,6 @@ let voicePresence = {};
 let callPhase = 'idle';
 let staleClient = false;
 let myKey = null;
-// Ключи собеседника открытой переписки: показываем их прямо там, где пишут.
 let peerKeys = null;
 
 const conversations = new Map();
@@ -101,8 +98,6 @@ function convOf(key) {
   return conversations.get(key);
 }
 
-// Снимок для тех, кто только рисует: списки в боковой панели читают состояние,
-// но не меняют его.
 function snapshot() {
   return { me: myNick, channels, online, partners: dmPartners, active, unread, voiceChannels, voicePresence };
 }
@@ -274,8 +269,6 @@ function sendHello() {
 
 function renderConnState() {
   const live = socket.isOpen() && joined;
-  // Сервер обновился, а эта вкладка осталась на старом коде: дальше она может
-  // не понять новых сообщений, поэтому говорим об этом вместо молчания.
   if (staleClient) {
     connBanner.hidden = false;
     connBanner.textContent = 'Чат обновился — перезагрузи страницу';
@@ -304,14 +297,11 @@ function handleAuthError(message) {
   gate.setBusy(false);
 }
 
-// Ключ устройства нужен для сквозного шифрования личных переписок. Пока он
-// только заводится и публикуется: шифровать им начнём следующим шагом.
 async function publishKey() {
   try {
     myKey = await deviceKey();
     send({ type: 'key-publish', key: myKey.published });
   } catch (error) {
-    // Без ключа чат работает как прежде, поэтому не пугаем и не мешаем.
     console.warn('ключ устройства не завёлся:', error);
   }
 }
@@ -393,7 +383,6 @@ function handleServer(message) {
       }
       renderChannels();
       break;
-    // Прочитано на другом устройстве этого же аккаунта.
     case 'read': {
       const key = markKey(message);
       readMarks.set(key, Math.max(readMarks.get(key) ?? 0, message.id));
@@ -573,8 +562,6 @@ function receiveMessage(msg) {
   if (msg.nonce) socket.confirm(msg.nonce);
   const key = messageKey(msg, myNick);
   const list = convOf(key);
-  // Повтор после обрыва возвращает то же сообщение: показать его второй раз
-  // нельзя.
   if (list.some((known) => known.id === msg.id)) return;
   list.push(msg);
   typing.clear(key, msg.from);
@@ -620,8 +607,6 @@ function applyDelete(id) {
   log.remove(id);
 }
 
-// Прочитанным считается то, что ты видел: разговор открыт и ты внизу. Отметка
-// только растёт, поэтому лишних сообщений на сервер не уходит.
 function markActiveRead() {
   const key = activeKey();
   const list = conversations.get(key);
@@ -659,8 +644,6 @@ function updateTitle() {
   chatTitle.textContent = active.kind === 'channel' ? `# ${active.id}` : `@ ${active.id}`;
 }
 
-// В канале ключи не при чём: там переписка общая, и шифровать её сквозным
-// образом мы пока не умеем.
 async function renderPeerKeys() {
   if (active.kind !== 'dm' || !peerKeys) {
     chatKeys.hidden = true;
@@ -683,7 +666,6 @@ function updateCallButton() {
   callBtn.hidden = !canCall;
 }
 
-// Сообщение в фоновой вкладке иначе никак не заметить: сам чат не на виду.
 function renderDocumentTitle() {
   let total = drop.pending();
   for (const count of unread.values()) total += count;
@@ -779,9 +761,6 @@ menuBtn.addEventListener('click', () => {
 });
 backdrop.addEventListener('click', closeSidebar);
 
-// Поле поиска одно на весь чат, но живёт в двух местах: на широком экране
-// стоит в шапке на виду, на узком там нет места — и оно переезжает в саму
-// панель, иначе искать было бы нечем.
 const wide = window.matchMedia('(min-width: 721px)');
 
 function placeSearchField() {
@@ -794,8 +773,6 @@ function placeSearchField() {
 
 wide.addEventListener('change', placeSearchField);
 
-// Правых панелей три, а места под них — одно: открытая вытесняет соседнюю.
-// Иначе на нешироком окне третья уезжает под боковую панель.
 function showPanel(name) {
   membersPanel.hidden = name !== 'members';
   membersBtn.classList.toggle('active', name === 'members');
@@ -817,8 +794,6 @@ searchBtn.addEventListener('click', () => {
 });
 
 searchInput.addEventListener('input', () => {
-  // Панель поднимается сама, как только есть что искать: лишний клик по лупе
-  // на широком экране не нужен.
   if (searchInput.value.trim()) showPanel('search');
   else search.setPanel(false);
   search.schedule();
