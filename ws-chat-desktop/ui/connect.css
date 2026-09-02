@@ -13,6 +13,32 @@
 
 * {
   box-sizing: border-box;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(215, 226, 217, 0.16) transparent;
+}
+
+::-webkit-scrollbar {
+  width: 11px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(215, 226, 217, 0.16);
+  background-clip: padding-box;
+  border: 3px solid transparent;
+  border-radius: 999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(215, 226, 217, 0.32);
+  background-clip: padding-box;
+}
+
+[hidden] {
+  display: none !important;
 }
 
 body {

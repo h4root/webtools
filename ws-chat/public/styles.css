@@ -62,6 +62,8 @@
   --grain: 0;
   --lb-btn: rgba(255, 255, 255, 0.08);
   --lb-btn-hover: rgba(255, 255, 255, 0.18);
+  --scroll-thumb: rgba(215, 226, 217, 0.16);
+  --scroll-thumb-hover: rgba(215, 226, 217, 0.32);
 }
 
 [data-theme='glass-dark'] {
@@ -86,6 +88,8 @@
   --glass-edge: rgba(255, 255, 255, 0.16);
   --glass-sheen: inset 0 1px 0 rgba(255, 255, 255, 0.12);
   --grain: 0.05;
+  --scroll-thumb: rgba(255, 255, 255, 0.22);
+  --scroll-thumb-hover: rgba(255, 255, 255, 0.4);
 }
 
 [data-theme='glass-light'] {
@@ -110,6 +114,8 @@
   --glass-edge: rgba(15, 35, 26, 0.08);
   --glass-sheen: inset 0 1px 0 rgba(255, 255, 255, 0.65);
   --grain: 0.06;
+  --scroll-thumb: rgba(15, 35, 26, 0.22);
+  --scroll-thumb-hover: rgba(15, 35, 26, 0.4);
   --lb-btn: rgba(255, 255, 255, 0.16);
   --lb-btn-hover: rgba(255, 255, 255, 0.3);
 }
@@ -169,6 +175,30 @@
 
 * {
   box-sizing: border-box;
+  scrollbar-width: thin;
+  scrollbar-color: var(--scroll-thumb) transparent;
+}
+
+::-webkit-scrollbar {
+  width: 11px;
+  height: 11px;
+}
+
+::-webkit-scrollbar-track,
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--scroll-thumb);
+  background-clip: padding-box;
+  border: 3px solid transparent;
+  border-radius: 999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--scroll-thumb-hover);
+  background-clip: padding-box;
 }
 
 [hidden] {
