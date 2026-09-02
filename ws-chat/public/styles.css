@@ -1229,11 +1229,20 @@ button {
   max-height: calc(100vh - 32px);
   overflow-y: auto;
   overscroll-behavior: contain;
+  transform-origin: bottom left;
+  opacity: 0;
+  transform: translateY(10px) scale(0.98);
+  transition: opacity 0.16s ease, transform 0.16s ease;
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: 10px;
   box-shadow: var(--shadow-pop);
   z-index: 25;
+}
+
+.settings-popup.open {
+  opacity: 1;
+  transform: none;
 }
 
 .settings-section {

@@ -428,9 +428,37 @@ export function mountSettings(root, account = {}) {
     return wrap;
   }
 
-  toggle.addEventListener('click', async () => {
-    popup.hidden = !popup.hidden;
-    if (!popup.hidden) await render();
+  let closing = null;
+
+  async function openPopup() {
+    clearTimeout(closing);
+    popup.hidden = false;
+    await render();
+    requestAnimationFrame(() => popup.classList.add('open'));
+  }
+
+  function closePopup() {
+    if (popup.hidden) return;
+    popup.classList.remove('open');
+    clearTimeout(closing);
+    closing = setTimeout(() => {
+      popup.hidden = true;
+    }, 180);
+  }
+
+  toggle.addEventListener('click', () => {
+    if (popup.hidden) void openPopup();
+    else closePopup();
+  });
+
+  document.addEventListener('click', (event) => {
+    if (popup.hidden) return;
+    if (popup.contains(event.target) || toggle.contains(event.target)) return;
+    closePopup();
+  });
+
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') closePopup();
   });
 
   navigator.mediaDevices?.addEventListener?.('devicechange', () => {
