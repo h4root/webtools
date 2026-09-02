@@ -14,8 +14,15 @@ const DEFAULTS = {
   noiseSuppression: true,
   autoGainControl: true,
   font: 'jetbrains',
+  theme: 'og',
   motion: 'system',
   notifications: false,
+};
+
+const THEMES = {
+  og: 'OG',
+  'glass-light': 'Стекло · светлое',
+  'glass-dark': 'Стекло · тёмное',
 };
 
 const MOTIONS = {
@@ -69,6 +76,14 @@ export const settings = {
   onMotionChange(cb) {
     motionListeners.add(cb);
   },
+  theme() {
+    return state.theme;
+  },
+  applyTheme() {
+    const root = document.documentElement;
+    if (state.theme === 'og') delete root.dataset.theme;
+    else root.dataset.theme = state.theme;
+  },
   applyFont() {
     document.documentElement.style.setProperty('--font', FONTS[state.font].stack);
   },
@@ -94,6 +109,8 @@ export const settings = {
   },
 };
 
+settings.applyTheme();
+
 export function applySink(mediaEl) {
   if (state.outputId && typeof mediaEl.setSinkId === 'function') {
     mediaEl.setSinkId(state.outputId).catch(() => {});
@@ -115,6 +132,7 @@ async function listDevices() {
 export function mountSettings(root, account = {}) {
   settings.applyFont();
   settings.applyMotion();
+  settings.applyTheme();
 
   const toggle = document.createElement('button');
   toggle.type = 'button';
@@ -125,7 +143,8 @@ export function mountSettings(root, account = {}) {
   popup.className = 'settings-popup';
   popup.hidden = true;
 
-  root.append(toggle, popup);
+  root.append(toggle);
+  document.body.append(popup);
 
   const outputSupported = typeof HTMLMediaElement !== 'undefined' && 'setSinkId' in HTMLMediaElement.prototype;
 
@@ -147,6 +166,7 @@ export function mountSettings(root, account = {}) {
         checkbox('Автоусиление', state.autoGainControl, (v) => set('autoGainControl', v)),
       ),
     );
+    popup.append(section('Тема', themeSelect()));
     popup.append(section('Шрифт', fontSelect()));
     popup.append(section('Анимации', motionSelect()));
     if (account.canChangePassword?.()) popup.append(section('Пароль', passwordForm()));
@@ -367,6 +387,25 @@ export function mountSettings(root, account = {}) {
     state[key] = value;
     persist();
     notify();
+  }
+
+  function themeSelect() {
+    const wrap = document.createElement('div');
+    wrap.className = 'settings-themes';
+    for (const [key, label] of Object.entries(THEMES)) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = label;
+      b.className = key === state.theme ? 'active' : '';
+      b.addEventListener('click', () => {
+        state.theme = key;
+        persist();
+        settings.applyTheme();
+        render();
+      });
+      wrap.appendChild(b);
+    }
+    return wrap;
   }
 
   function fontSelect() {
