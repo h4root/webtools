@@ -499,3 +499,20 @@ describe('Store: персистентность', () => {
     expect(new Store(file).history(channelKey('general'))).toHaveLength(5);
   });
 });
+
+describe('Store: сколько истории отдаётся', () => {
+  it('по умолчанию отдаёт всё, что хранит: половина на сервере была бы невидимой', () => {
+    const store = new Store();
+    for (let i = 0; i < HISTORY_LIMIT + 20; i++) store.addChannelMessage('general', 'alice', `строка ${i}`);
+
+    const sent = store.history(channelKey('general'));
+    expect(sent).toHaveLength(HISTORY_LIMIT);
+    expect(sent.at(-1)?.text).toBe(`строка ${HISTORY_LIMIT + 19}`);
+  });
+
+  it('меньший кусок по-прежнему можно попросить явно', () => {
+    const store = new Store();
+    for (let i = 0; i < 10; i++) store.addChannelMessage('general', 'alice', `строка ${i}`);
+    expect(store.history(channelKey('general'), 3)).toHaveLength(3);
+  });
+});

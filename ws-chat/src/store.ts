@@ -539,7 +539,10 @@ export class Store {
     return count;
   }
 
-  history(key: string, limit = 100): WireMessage[] {
+  // Отдаём столько же, сколько храним: при меньшем пределе вторая сотня
+  // сообщений лежала бы на сервере, но не показывалась бы никогда — ни в
+  // ленте, ни в просмотрщике картинок.
+  history(key: string, limit = HISTORY_LIMIT): WireMessage[] {
     return (this.byKey.get(key) ?? []).slice(-limit).map(toWire);
   }
 }
