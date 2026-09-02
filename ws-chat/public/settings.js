@@ -15,6 +15,7 @@ const DEFAULTS = {
   autoGainControl: true,
   font: 'jetbrains',
   motion: 'system',
+  notifications: false,
 };
 
 const MOTIONS = {
@@ -73,6 +74,13 @@ export const settings = {
   },
   motion() {
     return state.motion;
+  },
+  notifications() {
+    return state.notifications;
+  },
+  setNotifications(on) {
+    state.notifications = on;
+    persist();
   },
   animationsEnabled() {
     if (state.motion === 'on') return true;
@@ -142,6 +150,7 @@ export function mountSettings(root, account = {}) {
     popup.append(section('Шрифт', fontSelect()));
     popup.append(section('Анимации', motionSelect()));
     if (account.canChangePassword?.()) popup.append(section('Пароль', passwordForm()));
+    popup.append(section('Уведомления', notifyRow()));
     if (account.onSessions) popup.append(section('Устройства', fingerprintRow(), linkForm(), deviceList()));
     if (account.onLogoutEverywhere) popup.append(section('Сессии', logoutEverywhere()));
   }
@@ -208,6 +217,54 @@ export function mountSettings(root, account = {}) {
       });
     });
     return form;
+  }
+
+  // Разрешение спрашиваем здесь, по нажатию: браузер даёт его только в ответ
+  // на действие человека, а не при загрузке страницы.
+  function notifyRow() {
+    const wrap = document.createElement('div');
+    wrap.className = 'settings-notify';
+
+    const button = document.createElement('button');
+    button.type = 'button';
+    const note = document.createElement('p');
+    note.className = 'settings-note';
+
+    const paint = () => {
+      const on = settings.notifications();
+      button.textContent = on ? 'Выключить' : 'Включить';
+      button.classList.toggle('active', on);
+      note.textContent = on
+        ? 'Приходят, когда окно свёрнуто: личные сообщения и упоминания. Остальное из каналов не тревожит.'
+        : 'Пока выключены. Включённые приходят только в свёрнутом окне и только на личное или упоминание.';
+    };
+
+    if (!account.notifications?.supported()) {
+      button.disabled = true;
+      button.textContent = 'Недоступны';
+      note.textContent = 'Браузер разрешает уведомления только по https или на самом localhost. С телефона по открытому адресу их не будет.';
+      wrap.append(button, note);
+      return wrap;
+    }
+
+    button.addEventListener('click', async () => {
+      if (settings.notifications()) {
+        settings.setNotifications(false);
+        paint();
+        return;
+      }
+      const answer = await account.notifications.ask();
+      if (answer !== 'granted') {
+        note.textContent = 'Браузер отказал. Разрешение выдаётся в настройках сайта, рядом с адресной строкой.';
+        return;
+      }
+      settings.setNotifications(true);
+      paint();
+    });
+
+    paint();
+    wrap.append(button, note);
+    return wrap;
   }
 
   // Отпечаток ключа этого устройства. Сверяют его вслух или перепиской по

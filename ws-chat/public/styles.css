@@ -510,6 +510,17 @@ button {
   background: color-mix(in srgb, var(--accent) 10%, transparent);
 }
 
+.settings-notify {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.settings-notify button.active {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
 .settings-fingerprint {
   display: flex;
   flex-direction: column;

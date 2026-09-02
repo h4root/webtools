@@ -1,7 +1,7 @@
 import { createVoice } from './voice.js';
 import { createCall } from './call.js';
 import { icon, setButton } from './icons.js';
-import { mountSettings } from './settings.js';
+import { mountSettings, settings } from './settings.js';
 
 import {
   gateScreen,
@@ -53,6 +53,7 @@ import { keyOf, messageKey, channelSlug } from './keys.js';
 import { appendMention } from './linkify.js';
 import { avatarHue } from './grouping.js';
 import { deviceKey, keyFingerprint } from './devicekey.js';
+import { createNotifier } from './notify.js';
 import { emptyLogText } from './empty.js';
 import { createTyping } from './typing.js';
 import { createReactions } from './reactions.js';
@@ -227,6 +228,12 @@ const nav = createNav({
 });
 
 const reply = createReply({ quote });
+
+const notifier = createNotifier({
+  getNick: () => myNick,
+  isEnabled: () => settings.notifications(),
+  onOpen: (msg) => openConversation(...(msg.to !== undefined ? ['dm', msg.from] : ['channel', msg.channel])),
+});
 
 const log = createLog({
   getNick: () => myNick,
@@ -570,6 +577,7 @@ function receiveMessage(msg) {
   } else {
     unread.set(key, (unread.get(key) ?? 0) + 1);
   }
+  notifier.show(msg);
   renderChannels();
 }
 
@@ -814,6 +822,7 @@ function initUI() {
   dropBtn.appendChild(icon('paperclip', 18));
   const { toggle } = mountSettings(settingsEl, {
     canChangePassword: () => joined && !isGuest,
+    notifications: notifier,
     fingerprint: async () => (myKey ?? (await deviceKey())).fingerprint,
     onSessions: (render) => {
       sessionsNote = render;

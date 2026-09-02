@@ -30,8 +30,6 @@ export class LinkCodes<T> {
     return code;
   }
 
-  // Один владелец — один живой код: иначе устройство, переспрашивая код,
-  // оставляло бы за собой шлейф действующих.
   create(value: T): { code: string; expiresAt: number } {
     this.release(value);
     this.sweep();
