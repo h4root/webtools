@@ -58,6 +58,8 @@
   --accent-ring: rgba(53, 208, 127, 0.35);
   --glass-blur: none;
   --glass-edge: transparent;
+  --glass-sheen: none;
+  --grain: 0;
   --lb-btn: rgba(255, 255, 255, 0.08);
   --lb-btn-hover: rgba(255, 255, 255, 0.18);
 }
@@ -80,14 +82,16 @@
   --accent-weak: rgba(78, 227, 154, 0.1);
   --accent-soft: rgba(78, 227, 154, 0.2);
   --accent-ring: rgba(78, 227, 154, 0.4);
-  --glass-blur: blur(22px) saturate(170%);
+  --glass-blur: blur(18px) saturate(175%);
   --glass-edge: rgba(255, 255, 255, 0.16);
+  --glass-sheen: inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  --grain: 0.05;
 }
 
 [data-theme='glass-light'] {
-  --bg: #eef3f1;
-  --panel: rgba(255, 255, 255, 0.6);
-  --line: rgba(16, 35, 26, 0.14);
+  --bg: #e7ece9;
+  --panel: rgba(242, 245, 243, 0.46);
+  --line: rgba(16, 35, 26, 0.12);
   --fg: #0f231a;
   --dim: rgba(15, 35, 26, 0.66);
   --accent: #0f9d58;
@@ -102,10 +106,22 @@
   --accent-weak: rgba(15, 157, 88, 0.08);
   --accent-soft: rgba(15, 157, 88, 0.16);
   --accent-ring: rgba(15, 157, 88, 0.3);
-  --glass-blur: blur(22px) saturate(150%);
-  --glass-edge: rgba(15, 35, 26, 0.09);
+  --glass-blur: blur(16px) saturate(185%);
+  --glass-edge: rgba(15, 35, 26, 0.08);
+  --glass-sheen: inset 0 1px 0 rgba(255, 255, 255, 0.65);
+  --grain: 0.06;
   --lb-btn: rgba(255, 255, 255, 0.16);
   --lb-btn-hover: rgba(255, 255, 255, 0.3);
+}
+
+[data-theme^='glass'] body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  pointer-events: none;
+  opacity: var(--grain);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)'/%3E%3C/svg%3E");
 }
 
 [data-theme^='glass'] body {
@@ -121,14 +137,22 @@
 }
 
 [data-theme='glass-light'] {
-  --aurora: radial-gradient(120% 80% at 10% 0%, #cfe9dd 0%, transparent 55%),
-    radial-gradient(90% 70% at 90% 5%, #d7e6f5 0%, transparent 60%),
-    radial-gradient(110% 90% at 50% 110%, #e8f2ea 0%, transparent 70%);
+  --aurora: radial-gradient(120% 80% at 8% 0%, #a8ddc6 0%, transparent 58%),
+    radial-gradient(95% 75% at 92% 4%, #b6d4f0 0%, transparent 62%),
+    radial-gradient(120% 95% at 55% 108%, #cfe6d6 0%, transparent 72%);
 }
 
 [data-theme^='glass'] :is(.sidebar, .members, .search-panel, .drop-panel, .settings-popup, .ctx-menu, .chat-header, .composer-area, .row, .call-panel, .call-incoming, .gate-card, .day-sep span, .voice-status) {
   backdrop-filter: var(--glass-blur);
   -webkit-backdrop-filter: var(--glass-blur);
+}
+
+[data-theme^='glass'] :is(.sidebar, .members, .search-panel, .drop-panel, .chat-header, .composer-area, .row, .gate-card, .day-sep span, .voice-status) {
+  box-shadow: var(--glass-sheen);
+}
+
+[data-theme^='glass'] :is(.settings-popup, .ctx-menu, .call-panel, .call-incoming) {
+  box-shadow: var(--glass-sheen), var(--shadow-pop);
 }
 
 [data-theme^='glass'] :is(.sidebar, .members, .search-panel, .drop-panel, .composer-area, .chat-header) {
