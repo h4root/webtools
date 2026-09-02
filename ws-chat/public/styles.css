@@ -624,6 +624,38 @@ button {
   color: var(--accent);
 }
 
+.chat-who {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+}
+
+/* Отпечаток собеседника стоит там, где с ним переписываются: сверять его
+   осмысленно перед разговором, а не в отдельном углу настроек. */
+.chat-keys {
+  padding: 2px 8px;
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--dim);
+  font: inherit;
+  font-size: 11px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.chat-keys:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+@media (max-width: 720px) {
+  .chat-keys {
+    display: none;
+  }
+}
+
 /* Поиск стоит на виду: за лупой он открывался лишним кликом, а ищут в чате
    часто. На узком экране места нет — там остаётся кнопка в шапке. */
 .header-search {

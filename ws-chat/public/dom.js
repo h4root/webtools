@@ -18,6 +18,7 @@ export const meEl = document.getElementById('me');
 export const channelListEl = document.getElementById('channel-list');
 export const dmListEl = document.getElementById('dm-list');
 export const channelAddBtn = document.getElementById('channel-add');
+export const chatKeys = document.getElementById('chat-keys');
 export const chatTitle = document.getElementById('chat-title');
 export const logEmpty = document.getElementById('log-empty');
 export const logEl = document.getElementById('log');

@@ -11,6 +11,7 @@ import {
   meEl,
   channelAddBtn,
   chatTitle,
+  chatKeys,
   typingEl,
   composer,
   textInput,
@@ -82,6 +83,8 @@ let voicePresence = {};
 let callPhase = 'idle';
 let staleClient = false;
 let myKey = null;
+// Ключи собеседника открытой переписки: показываем их прямо там, где пишут.
+let peerKeys = null;
 
 const conversations = new Map();
 const loaded = new Set();
@@ -427,6 +430,10 @@ function handleServer(message) {
       break;
     case 'keys':
       void showKeys(message);
+      if (active.kind === 'dm' && active.id.toLowerCase() === message.nick.toLowerCase()) {
+        peerKeys = message.devices;
+        void renderPeerKeys();
+      }
       break;
     case 'link-code':
       gate.showLinkCode(message.code, message.expiresAt);
@@ -627,6 +634,9 @@ function markActiveRead() {
 
 function openConversation(kind, id) {
   active = { kind, id };
+  peerKeys = null;
+  chatKeys.hidden = true;
+  if (kind === 'dm') send({ type: 'keys', nick: id });
   unread.set(activeKey(), 0);
   updateTitle();
   renderChannels();
@@ -647,6 +657,25 @@ function requestHistory(target) {
 
 function updateTitle() {
   chatTitle.textContent = active.kind === 'channel' ? `# ${active.id}` : `@ ${active.id}`;
+}
+
+// В канале ключи не при чём: там переписка общая, и шифровать её сквозным
+// образом мы пока не умеем.
+async function renderPeerKeys() {
+  if (active.kind !== 'dm' || !peerKeys) {
+    chatKeys.hidden = true;
+    return;
+  }
+  chatKeys.hidden = false;
+  if (peerKeys.length === 0) {
+    chatKeys.textContent = 'без ключей';
+    chatKeys.title = 'У собеседника нет устройств с ключами: сквозного шифрования с ним не будет.';
+    return;
+  }
+  const prints = await Promise.all(peerKeys.map((item) => keyFingerprint(item.key)));
+  const many = peerKeys.length > 1 ? ` · ещё ${peerKeys.length - 1}` : '';
+  chatKeys.textContent = `ключ ${prints[0].slice(0, 9)}…${many}`;
+  chatKeys.title = peerKeys.map((item, i) => `${item.device || 'без имени'}: ${prints[i]}`).join('\n');
 }
 
 function updateCallButton() {
@@ -692,6 +721,10 @@ function closeSidebar() {
 function closeRightPanels() {
   showPanel(null);
 }
+
+chatKeys.addEventListener('click', () => {
+  if (active.kind === 'dm') send({ type: 'keys', nick: active.id });
+});
 
 logoutBtn.addEventListener('click', () => {
   const question = isGuest
