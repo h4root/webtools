@@ -63,6 +63,9 @@
   --lb-btn: rgba(255, 255, 255, 0.08);
   --lb-btn-hover: rgba(255, 255, 255, 0.18);
   --control: var(--bg);
+  --danger: var(--danger);
+  --on-accent: #05130b;
+  --on-danger: #180605;
   --scroll-thumb: rgba(215, 226, 217, 0.16);
   --scroll-thumb-hover: rgba(215, 226, 217, 0.32);
 }
@@ -90,6 +93,10 @@
   --glass-sheen: inset 0 1px 0 rgba(255, 255, 255, 0.12);
   --grain: 0.05;
   --control: rgba(255, 255, 255, 0.08);
+  --panel-strong: rgba(18, 26, 28, 0.74);
+  --danger: #ff6b52;
+  --on-accent: #05130b;
+  --on-danger: #180605;
   --scroll-thumb: rgba(255, 255, 255, 0.22);
   --scroll-thumb-hover: rgba(255, 255, 255, 0.4);
 }
@@ -117,6 +124,10 @@
   --glass-sheen: inset 0 1px 0 rgba(255, 255, 255, 0.65);
   --grain: 0.06;
   --control: rgba(255, 255, 255, 0.45);
+  --panel-strong: rgba(250, 252, 251, 0.84);
+  --danger: #c0392b;
+  --on-accent: #ffffff;
+  --on-danger: #ffffff;
   --scroll-thumb: rgba(15, 35, 26, 0.22);
   --scroll-thumb-hover: rgba(15, 35, 26, 0.4);
   --lb-btn: rgba(255, 255, 255, 0.16);
@@ -162,6 +173,7 @@
 
 [data-theme^='glass'] :is(.settings-popup, .ctx-menu, .call-panel, .call-incoming) {
   box-shadow: var(--glass-sheen), var(--shadow-pop);
+  background: var(--panel-strong);
 }
 
 [data-theme^='glass'] :is(.sidebar, .members, .search-panel, .drop-panel, .composer-area, .chat-header) {
@@ -331,7 +343,7 @@ body {
 .gate-error {
   min-height: 18px;
   margin: 0;
-  color: #e5533c;
+  color: var(--danger);
   font-size: 12px;
 }
 
@@ -397,7 +409,7 @@ button {
   background: var(--accent);
   border: none;
   border-radius: 6px;
-  color: #05130b;
+  color: var(--on-accent);
   font-weight: 600;
   cursor: pointer;
 }
@@ -461,8 +473,8 @@ button {
 }
 
 .voice-mute.muted {
-  border-color: #e5533c;
-  color: #e5533c;
+  border-color: var(--danger);
+  color: var(--danger);
 }
 
 .voice-users {
@@ -524,7 +536,7 @@ button {
   padding: 0 5px;
   background: var(--accent);
   border-radius: 9px;
-  color: #05130b;
+  color: var(--on-accent);
   font-size: 11px;
   font-weight: 600;
   line-height: 18px;
@@ -901,7 +913,7 @@ button {
   background: var(--accent);
   border: none;
   border-radius: 6px;
-  color: #05130b;
+  color: var(--on-accent);
   font-weight: 600;
   cursor: pointer;
 }
@@ -909,9 +921,9 @@ button {
 .call-decline {
   padding: 6px 12px;
   background: transparent;
-  border: 1px solid #e5533c;
+  border: 1px solid var(--danger);
   border-radius: 6px;
-  color: #e5533c;
+  color: var(--danger);
   cursor: pointer;
 }
 
@@ -1006,11 +1018,11 @@ button {
 }
 
 .q-dot.ok {
-  background: #d8b13a;
+  background: var(--warn);
 }
 
 .q-dot.poor {
-  background: #e5533c;
+  background: var(--danger);
 }
 
 .call-actions {
@@ -1034,14 +1046,14 @@ button {
 }
 
 .call-mute.muted {
-  border-color: #e5533c;
-  color: #e5533c;
+  border-color: var(--danger);
+  color: var(--danger);
 }
 
 .call-hangup {
-  background: #e5533c;
+  background: var(--danger);
   border: none;
-  color: #180605;
+  color: var(--on-danger);
 }
 
 .log {
@@ -1442,7 +1454,7 @@ button {
     box-shadow: 0 0 0 2px var(--accent-ring);
   }
   50% {
-    box-shadow: 0 0 0 5px rgba(53, 208, 127, 0.12);
+    box-shadow: 0 0 0 5px transparent;
   }
 }
 
@@ -1964,8 +1976,8 @@ html.motion-off *::after {
 
 .vbtn.muted,
 .vbtn.danger:hover {
-  border-color: #e5533c;
-  color: #e5533c;
+  border-color: var(--danger);
+  color: var(--danger);
 }
 
 /* --- минималистичный сайдбар (по референсу, зелёный акцент) --- */
@@ -2278,8 +2290,8 @@ html.motion-off *::after {
 }
 
 .transfer-cancel:hover {
-  border-color: #e5533c;
-  color: #e5533c;
+  border-color: var(--danger);
+  color: var(--danger);
 }
 
 .transfer-cancel:disabled {
@@ -2302,7 +2314,7 @@ html.motion-off *::after {
 }
 
 .transfer.err .fill {
-  background: #e5533c;
+  background: var(--danger);
 }
 
 .me-row .sidebar-close {
@@ -2653,7 +2665,7 @@ div.reply-quote {
 }
 
 .attach-chip button:hover {
-  color: #e5533c;
+  color: var(--danger);
 }
 
 .attach-btn {
@@ -2723,7 +2735,7 @@ div.reply-quote {
 }
 
 .ctx-item.danger {
-  color: #e5533c;
+  color: var(--danger);
 }
 
 .ctx-item:disabled {
