@@ -581,7 +581,7 @@ function receiveMessage(msg) {
   if (msg.to !== undefined) rememberPartner(msg.from === myNick ? msg.to : msg.from, msg.ts);
   if (key === activeKey()) {
     log.append(msg);
-  } else {
+  } else if (msg.from !== myNick) {
     unread.set(key, (unread.get(key) ?? 0) + 1);
   }
   notifier.show(msg);
