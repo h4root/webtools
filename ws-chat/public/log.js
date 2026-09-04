@@ -241,7 +241,7 @@ export function createLog({ getNick, send, attachments, reactions, quote, onRepl
     }
     missedBelow = 0;
     scrollToBottom();
-    applyMotion();
+    setTimeout(applyMotion, 0);
     onRendered();
   }
 
