@@ -433,6 +433,13 @@ describe('Auth: ключи устройств', () => {
     expect(auth.deviceKeys('dave')).toEqual([]);
   });
 
+  it('повторная публикация того же ключа ничего не меняет и не пишет на диск', async () => {
+    const gina = await auth.registerGuest('gina', 'Mac');
+    expect(auth.setDeviceKey(gina.token!, KEY_A)).toBe(true);
+    expect(auth.setDeviceKey(gina.token!, KEY_A)).toBe(false);
+    expect(auth.deviceKeys('gina')).toHaveLength(1);
+  });
+
   it('переизданный ключ вытесняет прежний, а не копится', async () => {
     const eve = await auth.registerGuest('eve', 'Mac');
     auth.setDeviceKey(eve.token!, KEY_A);

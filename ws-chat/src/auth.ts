@@ -350,7 +350,7 @@ export class Auth {
 
   setDeviceKey(token: string, key: string): boolean {
     const session = this.sessions.get(sha256(token));
-    if (!session) return false;
+    if (!session || session.key === key) return false;
     session.key = key;
     this.saveSessions();
     return true;

@@ -1676,3 +1676,29 @@ describe('Hub: ключи устройств', () => {
     expect(keysOf(stranger)).toBeUndefined();
   });
 });
+
+describe('Hub: публикация ключей под лимитом', () => {
+  let dir: string;
+  let hub: Hub;
+
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), 'ws-chat-hub-keyrate-'));
+    hub = new Hub(new Store(), undefined, new Auth(dir));
+  });
+
+  afterEach(() => rmSync(dir, { recursive: true, force: true }));
+
+  it('поток публикаций упирается в тот же бюджет, что и остальные действия', async () => {
+    const a = makeClient('a');
+    hub.handle(a, JSON.stringify({ type: 'auth', mode: 'guest', nick: 'alice', device: 'Mac' }));
+    await vi.waitFor(() => expect(a.inbox.some((m) => m.type === 'welcome')).toBe(true));
+
+    // Каждая публикация переписывает файл сессий: без лимита это неограниченная
+    // запись на диск с одного сокета.
+    for (let i = 0; i < ACTIONS_PER_WINDOW + 5; i++) {
+      hub.handle(a, JSON.stringify({ type: 'key-publish', key: String(i).padStart(88, 'A') }));
+    }
+
+    expect(a.inbox.some((m) => m.type === 'error' && /слишком часто/i.test(m.reason))).toBe(true);
+  });
+});

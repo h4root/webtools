@@ -343,16 +343,6 @@ export class Hub {
       return;
     }
 
-    if (message.type === 'key-publish') {
-      if (client.token) this.auth?.setDeviceKey(client.token, message.key);
-      return;
-    }
-
-    if (message.type === 'keys') {
-      client.send({ type: 'keys', nick: message.nick, devices: this.auth?.deviceKeys(message.nick) ?? [] });
-      return;
-    }
-
     if (message.type === 'session-revoke') {
       this.revokeSession(client, message.id);
       return;
@@ -370,6 +360,12 @@ export class Hub {
     if (!this.allow(client, message.type)) return;
 
     switch (message.type) {
+      case 'key-publish':
+        if (client.token) this.auth?.setDeviceKey(client.token, message.key);
+        break;
+      case 'keys':
+        client.send({ type: 'keys', nick: message.nick, devices: this.auth?.deviceKeys(message.nick) ?? [] });
+        break;
       case 'channel-create':
         this.createChannel(client, message.name);
         break;
