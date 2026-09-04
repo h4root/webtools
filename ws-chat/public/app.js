@@ -348,13 +348,26 @@ function handleServer(message) {
       socket.flush();
       void publishKey();
       break;
-    case 'channels':
+    case 'channels': {
+      const gone = channels.filter((name) => !message.list.includes(name));
       channels = message.list;
-      if (!channels.includes(active.id) && active.kind === 'channel') active.id = channels[0] ?? 'general';
+      for (const name of gone) {
+        const key = keyOf('channel', name);
+        conversations.delete(key);
+        loaded.delete(key);
+        historyReady.delete(key);
+        unread.delete(key);
+        readMarks.delete(key);
+      }
+      if (active.kind === 'channel' && !channels.includes(active.id)) {
+        openConversation('channel', channels[0] ?? 'general');
+        break;
+      }
       typing.watch(activeKey());
       renderChannels();
       requestHistory(active);
       break;
+    }
     case 'presence':
       online = message.users.filter((nick) => nick !== myNick);
       renderChannels();
