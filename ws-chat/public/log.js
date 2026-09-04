@@ -259,8 +259,11 @@ export function createLog({ getNick, send, attachments, reactions, quote, onRepl
     if (row) fillRow(row, msg);
   }
 
-  function remove(id) {
-    rowOf(id)?.remove();
+  function refresh() {
+    const wasAtBottom = atBottom();
+    const top = logEl.scrollTop;
+    render();
+    if (!wasAtBottom) logEl.scrollTop = top;
   }
 
   function clear() {
@@ -289,5 +292,5 @@ export function createLog({ getNick, send, attachments, reactions, quote, onRepl
   settings.onMotionChange(applyMotion);
   applyMotion();
 
-  return { render, append, system, update, remove, clear, scrollTo, scrollToBottom, rowOf, edit };
+  return { render, refresh, append, system, update, clear, scrollTo, scrollToBottom, rowOf, edit };
 }

@@ -600,11 +600,12 @@ function applyEdit(id, text) {
 }
 
 function applyDelete(id) {
+  const onScreen = Boolean(log.rowOf(id));
   for (const list of conversations.values()) {
     const idx = list.findIndex((msg) => msg.id === id);
     if (idx !== -1) list.splice(idx, 1);
   }
-  log.remove(id);
+  if (onScreen) log.refresh();
 }
 
 function markActiveRead() {
