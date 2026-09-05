@@ -103,7 +103,9 @@ describe('HTTP-слой', () => {
     base = `http://127.0.0.1:${port}`;
     dataDir = mkdtempSync(join(tmpdir(), 'ws-chat-http-'));
 
-    child = spawn(join(projectDir, 'node_modules/.bin/tsx'), ['src/server.ts'], {
+    // .bin/tsx на Windows — это .cmd, который spawn без shell не запустит.
+    const tsx = join(projectDir, 'node_modules/tsx/dist/cli.mjs');
+    child = spawn(process.execPath, [tsx, 'src/server.ts'], {
       cwd: projectDir,
       env: { ...process.env, PORT: String(port), HOST: '127.0.0.1', DATA_DIR: dataDir },
       stdio: 'ignore',

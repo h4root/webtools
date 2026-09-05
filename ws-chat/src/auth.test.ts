@@ -47,6 +47,11 @@ describe('Auth', () => {
     expect(accounts).not.toContain('секретный-пароль');
     const sessions = readFileSync(join(dir, 'sessions.json'), 'utf8');
     expect(sessions).not.toContain(token);
+  });
+
+  // Windows не хранит POSIX-биты: chmod там умеет только снять флаг «только чтение».
+  it.skipIf(process.platform === 'win32')('кладёт файлы с правами только для владельца', async () => {
+    await auth.register('alice', 'секретный-пароль');
 
     expect(statSync(join(dir, 'accounts.json')).mode & 0o777).toBe(0o600);
     expect(statSync(join(dir, 'sessions.json')).mode & 0o777).toBe(0o600);

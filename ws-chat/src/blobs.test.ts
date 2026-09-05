@@ -130,6 +130,11 @@ describe('loadKey', () => {
   it('создаёт ключ один раз и переиспользует его', () => {
     const first = loadKey(dir);
     expect(loadKey(dir).equals(first)).toBe(true);
+  });
+
+  // Windows не хранит POSIX-биты: chmod там умеет только снять флаг «только чтение».
+  it.skipIf(process.platform === 'win32')('кладёт ключ с правами только для владельца', () => {
+    loadKey(dir);
     expect(statSync(join(dir, 'upload.key')).mode & 0o777).toBe(0o600);
   });
 
