@@ -831,6 +831,47 @@ describe('Hub', () => {
     expect(caller.inbox.at(-1)).toEqual({ type: 'call-end', from: 'призрак', reason: 'offline' });
   });
 
+  it('отмена дозвона гасит звонок у вызываемого', () => {
+    const caller = makeClient('caller');
+    const alice = makeClient('alice');
+    hub.join(caller, 'bob');
+    hub.join(alice, 'alice');
+
+    hub.handle(caller, JSON.stringify({ type: 'call-invite', to: 'alice' }));
+    hub.handle(caller, JSON.stringify({ type: 'call-end', to: 'alice' }));
+
+    expect(alice.inbox.some((m) => m.type === 'call-end' && m.from === 'bob')).toBe(true);
+  });
+
+  it('обрыв у звонящего гасит звонок у вызываемого', () => {
+    const caller = makeClient('caller');
+    const callerPhone = makeClient('caller-phone');
+    const alice = makeClient('alice');
+    hub.join(caller, 'bob');
+    hub.join(callerPhone, 'bob');
+    hub.join(alice, 'alice');
+
+    hub.handle(caller, JSON.stringify({ type: 'call-invite', to: 'alice' }));
+    hub.leave(caller);
+
+    expect(alice.inbox.some((m) => m.type === 'call-end' && m.from === 'bob')).toBe(true);
+  });
+
+  it('новый звонок гасит предыдущий дозвон', () => {
+    const caller = makeClient('caller');
+    const alice = makeClient('alice');
+    const carol = makeClient('carol');
+    hub.join(caller, 'bob');
+    hub.join(alice, 'alice');
+    hub.join(carol, 'carol');
+
+    hub.handle(caller, JSON.stringify({ type: 'call-invite', to: 'alice' }));
+    hub.handle(caller, JSON.stringify({ type: 'call-invite', to: 'carol' }));
+
+    expect(alice.inbox.some((m) => m.type === 'call-end' && m.from === 'bob')).toBe(true);
+    expect(carol.inbox.some((m) => m.type === 'call-invite' && m.from === 'bob')).toBe(true);
+  });
+
   it('уход собеседника завершает разговор у второго', () => {
     const caller = makeClient('caller');
     const alice = makeClient('alice');

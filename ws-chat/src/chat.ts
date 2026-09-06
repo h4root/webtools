@@ -640,7 +640,10 @@ export class Hub {
       this.talking.delete(peer);
       this.talking.delete(client);
     }
-    for (const device of this.ringing.get(client) ?? []) this.invitedBy.delete(device);
+    for (const device of this.ringing.get(client) ?? []) {
+      this.invitedBy.delete(device);
+      device.send({ type: 'call-end', from: client.nick! });
+    }
     this.ringing.delete(client);
 
     const caller = this.invitedBy.get(client);
