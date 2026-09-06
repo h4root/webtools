@@ -368,6 +368,9 @@ export class Store {
     const message = this.find(id);
     if (!message || !this.isAuthor(message, from)) return null;
     this.detach(message);
+    for (const other of this.byId.values()) {
+      if (other.replyTo?.id === id) delete other.replyTo;
+    }
     this.scheduleSave();
     return message;
   }

@@ -613,10 +613,15 @@ function applyEdit(id, text) {
 }
 
 function applyDelete(id) {
-  const onScreen = Boolean(log.rowOf(id));
+  let onScreen = Boolean(log.rowOf(id));
   for (const list of conversations.values()) {
     const idx = list.findIndex((msg) => msg.id === id);
     if (idx !== -1) list.splice(idx, 1);
+    for (const msg of list) {
+      if (msg.replyTo?.id !== id) continue;
+      delete msg.replyTo;
+      if (log.rowOf(msg.id)) onScreen = true;
+    }
   }
   if (onScreen) log.refresh();
 }

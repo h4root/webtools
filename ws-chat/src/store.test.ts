@@ -167,6 +167,17 @@ describe('Store', () => {
     expect(store.toggleReaction(first.id, 'bob', '🔥')).toBeNull();
   });
 
+  it('удаление сообщения уносит и его цитату из ответов', () => {
+    const original = store.addChannelMessage('general', 'alice', 'то, что я передумала говорить');
+    const answer = store.addChannelMessage('general', 'bob', 'согласен', { replyTo: original.id });
+    expect(answer.replyTo?.text).toBe('то, что я передумала говорить');
+
+    store.remove(original.id, 'alice');
+
+    const left = store.history(channelKey('general'));
+    expect(left.find((m) => m.id === answer.id)?.replyTo).toBeUndefined();
+  });
+
   it('purgeUser уносит сообщения, ЛС, реакции и цитаты ушедшего', () => {
     const guestMsg = store.addChannelMessage('general', 'гость', 'меня тут не было');
     store.addDirectMessage('гость', 'alice', 'личное');
