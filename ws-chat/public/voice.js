@@ -264,6 +264,7 @@ export function createVoice({ send, onState, onError, onSpeaking, getNick }) {
       }
       if (localStream) for (const t of localStream.getTracks()) t.stop();
       localStream = stream;
+      localAnalyser = makeAnalyser(localStream);
     } catch {
       onError?.('Не удалось сменить микрофон');
     }
