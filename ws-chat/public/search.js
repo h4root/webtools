@@ -2,7 +2,7 @@ import { timeLabel, isNarrow } from './format.js';
 import { keyOf, targetOf } from './keys.js';
 import { searchBtn, searchPanel, searchInput, searchNote, searchResults } from './dom.js';
 
-const HINT = 'Ищем только там, куда у тебя есть доступ: каналы и твои личные переписки.';
+const HINT = 'Каналы и личные переписки.';
 const DEBOUNCE_MS = 250;
 
 export function createSearch({ send, getNick, openConversation, activeKey, findRow, scrollToMessage, historyArrived }) {

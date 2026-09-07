@@ -837,7 +837,7 @@ function initUI() {
   voiceAddBtn.appendChild(icon('plus', 16));
   menuBtn.appendChild(icon('menu', 20));
   membersBtn.appendChild(icon('users', 18));
-  dropBtn.appendChild(icon('paperclip', 18));
+  dropBtn.appendChild(icon('transfer', 18));
   const { toggle } = mountSettings(settingsEl, {
     canChangePassword: () => joined && !isGuest,
     notifications: notifier,
