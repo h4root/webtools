@@ -6,7 +6,6 @@ import { mountSettings, settings } from './settings.js';
 import {
   gateScreen,
   nickInput,
-  logoutBtn,
   appEl,
   meEl,
   channelAddBtn,
@@ -727,13 +726,6 @@ chatKeys.addEventListener('click', () => {
   if (active.kind === 'dm') send({ type: 'keys', nick: active.id });
 });
 
-logoutBtn.addEventListener('click', () => {
-  const question = isGuest
-    ? 'Выйти? Гостевая личность стирается: ник освободится, а все твои сообщения и вложения будут удалены безвозвратно.'
-    : 'Выйти из аккаунта на этом устройстве?';
-  if (confirm(question)) send({ type: 'logout' });
-});
-
 composer.addEventListener('submit', (event) => {
   event.preventDefault();
   const text = textInput.value.trim();
@@ -834,7 +826,6 @@ function initUI() {
   placeSearchField();
   gate.warnIfInsecure();
   gate.setMode('guest');
-  logoutBtn.appendChild(icon('sign-out', 16));
   sidebarCloseBtn.appendChild(icon('cross', 18));
   dropCloseBtn.appendChild(icon('cross', 16));
   searchBtn.appendChild(icon('search', 18));
@@ -863,6 +854,12 @@ function initUI() {
     onChangePassword: (current, next, done) => {
       passwordNote = done;
       send({ type: 'change-password', current, next });
+    },
+    onLogout: () => {
+      const question = isGuest
+        ? 'Выйти? Гостевая личность стирается: ник освободится, сообщения и вложения будут удалены.'
+        : 'Выйти из аккаунта на этом устройстве?';
+      if (confirm(question)) send({ type: 'logout' });
     },
     onLogoutEverywhere: () => send({ type: 'logout', everywhere: true }),
   });

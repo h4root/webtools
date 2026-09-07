@@ -1257,6 +1257,42 @@ button {
   transform: none;
 }
 
+.settings-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--control);
+}
+
+.settings-tabs button {
+  flex: 1;
+  padding: 6px 8px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--dim);
+  font-family: var(--font);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.settings-tabs button:hover {
+  color: var(--fg);
+}
+
+.settings-tabs button.active {
+  background: var(--accent-weak);
+  color: var(--accent);
+}
+
+.settings-logout {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
 .settings-section {
   display: flex;
   flex-direction: column;

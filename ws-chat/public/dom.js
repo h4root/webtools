@@ -12,7 +12,6 @@ export const passwordInput = document.getElementById('password-input');
 export const modeGuestBtn = document.getElementById('mode-guest');
 export const modeLoginBtn = document.getElementById('mode-login');
 export const modeRegisterBtn = document.getElementById('mode-register');
-export const logoutBtn = document.getElementById('logout-btn');
 export const appEl = document.getElementById('app');
 export const meEl = document.getElementById('me');
 export const channelListEl = document.getElementById('channel-list');

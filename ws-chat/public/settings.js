@@ -148,31 +148,62 @@ export function mountSettings(root, account = {}) {
 
   const outputSupported = typeof HTMLMediaElement !== 'undefined' && 'setSinkId' in HTMLMediaElement.prototype;
 
-  async function render() {
-    const { inputs, outputs } = await listDevices();
-    popup.replaceChildren();
+  const TABS = [
+    { id: 'view', label: 'Вид' },
+    { id: 'sound', label: 'Звук' },
+    { id: 'account', label: 'Аккаунт' },
+  ];
 
-    popup.append(
-      section('Микрофон', deviceSelect(inputs, state.inputId, (v) => set('inputId', v))),
-    );
-    if (outputSupported) {
-      popup.append(section('Динамик', deviceSelect(outputs, state.outputId, (v) => set('outputId', v))));
+  let tab = 'view';
+
+  function tabStrip() {
+    const strip = document.createElement('div');
+    strip.className = 'settings-tabs';
+    for (const item of TABS) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = item.label;
+      b.className = item.id === tab ? 'active' : '';
+      b.addEventListener('click', () => {
+        tab = item.id;
+        void render();
+      });
+      strip.appendChild(b);
     }
-    popup.append(
-      section(
-        'Эффекты',
-        checkbox('Шумоподавление', state.noiseSuppression, (v) => set('noiseSuppression', v)),
-        checkbox('Эхоподавление', state.echoCancellation, (v) => set('echoCancellation', v)),
-        checkbox('Автоусиление', state.autoGainControl, (v) => set('autoGainControl', v)),
-      ),
-    );
-    popup.append(section('Тема', themeSelect()));
-    popup.append(section('Шрифт', fontSelect()));
-    popup.append(section('Анимации', motionSelect()));
-    if (account.canChangePassword?.()) popup.append(section('Пароль', passwordForm()));
+    return strip;
+  }
+
+  async function render() {
+    popup.replaceChildren(tabStrip());
+
+    if (tab === 'view') {
+      popup.append(section('Тема', themeSelect()));
+      popup.append(section('Шрифт', fontSelect()));
+      popup.append(section('Анимации', motionSelect()));
+      return;
+    }
+
+    if (tab === 'sound') {
+      const { inputs, outputs } = await listDevices();
+      popup.append(section('Микрофон', deviceSelect(inputs, state.inputId, (v) => set('inputId', v))));
+      if (outputSupported) {
+        popup.append(section('Динамик', deviceSelect(outputs, state.outputId, (v) => set('outputId', v))));
+      }
+      popup.append(
+        section(
+          'Обработка',
+          checkbox('Шумоподавление', state.noiseSuppression, (v) => set('noiseSuppression', v)),
+          checkbox('Эхоподавление', state.echoCancellation, (v) => set('echoCancellation', v)),
+          checkbox('Автоусиление', state.autoGainControl, (v) => set('autoGainControl', v)),
+        ),
+      );
+      return;
+    }
+
     popup.append(section('Уведомления', notifyRow()));
+    if (account.canChangePassword?.()) popup.append(section('Пароль', passwordForm()));
     if (account.onSessions) popup.append(section('Устройства', fingerprintRow(), linkForm(), deviceList()));
-    if (account.onLogoutEverywhere) popup.append(section('Сессии', logoutEverywhere()));
+    if (account.onLogout) popup.append(section('Выход', logoutRow()));
   }
 
   function passwordForm() {
@@ -252,15 +283,13 @@ export function mountSettings(root, account = {}) {
       const on = settings.notifications();
       button.textContent = on ? 'Выключить' : 'Включить';
       button.classList.toggle('active', on);
-      note.textContent = on
-        ? 'Приходят, когда окно свёрнуто: личные сообщения и упоминания. Остальное из каналов не тревожит.'
-        : 'Пока выключены. Включённые приходят только в свёрнутом окне и только на личное или упоминание.';
+      note.textContent = 'Приходят в свёрнутом окне на личные сообщения и упоминания.';
     };
 
     if (!account.notifications?.supported()) {
       button.disabled = true;
       button.textContent = 'Недоступны';
-      note.textContent = 'Браузер разрешает уведомления только по https или на самом localhost. С телефона по открытому адресу их не будет.';
+      note.textContent = 'Браузер даёт их только по https или на localhost.';
       wrap.append(button, note);
       return wrap;
     }
@@ -273,7 +302,7 @@ export function mountSettings(root, account = {}) {
       }
       const answer = await account.notifications.ask();
       if (answer !== 'granted') {
-        note.textContent = 'Браузер отказал. Разрешение выдаётся в настройках сайта, рядом с адресной строкой.';
+        note.textContent = 'Браузер отказал — разреши в настройках сайта.';
         return;
       }
       settings.setNotifications(true);
@@ -299,7 +328,7 @@ export function mountSettings(root, account = {}) {
 
     const note = document.createElement('p');
     note.className = 'settings-note';
-    note.textContent = 'Сверь его с собеседником другим способом — тогда видно, что переписку никто не подменяет.';
+    note.textContent = 'Сверь с собеседником другим способом.';
 
     wrap.append(label, value, note);
     account.fingerprint().then(
@@ -350,17 +379,30 @@ export function mountSettings(root, account = {}) {
     }
   }
 
-  function logoutEverywhere() {
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.className = 'settings-danger';
-    button.textContent = 'выйти со всех устройств';
-    button.addEventListener('click', () => {
-      if (confirm('Выйти со всех устройств? Войти заново придётся везде, включая это.')) {
-        account.onLogoutEverywhere();
-      }
-    });
-    return button;
+  function logoutRow() {
+    const wrap = document.createElement('div');
+    wrap.className = 'settings-logout';
+
+    const here = document.createElement('button');
+    here.type = 'button';
+    here.className = 'settings-danger';
+    here.textContent = 'выйти на этом устройстве';
+    here.addEventListener('click', () => account.onLogout());
+    wrap.appendChild(here);
+
+    if (account.onLogoutEverywhere) {
+      const all = document.createElement('button');
+      all.type = 'button';
+      all.className = 'settings-danger';
+      all.textContent = 'выйти со всех устройств';
+      all.addEventListener('click', () => {
+        if (confirm('Выйти со всех устройств? Войти заново придётся везде, включая это.')) {
+          account.onLogoutEverywhere();
+        }
+      });
+      wrap.appendChild(all);
+    }
+    return wrap;
   }
 
   function motionSelect() {
@@ -451,11 +493,15 @@ export function mountSettings(root, account = {}) {
     else closePopup();
   });
 
-  document.addEventListener('click', (event) => {
-    if (popup.hidden) return;
-    if (popup.contains(event.target) || toggle.contains(event.target)) return;
-    closePopup();
-  });
+  document.addEventListener(
+    'click',
+    (event) => {
+      if (popup.hidden) return;
+      if (popup.contains(event.target) || toggle.contains(event.target)) return;
+      closePopup();
+    },
+    true,
+  );
 
   document.addEventListener('keydown', (event) => {
     if (event.key === 'Escape') closePopup();
