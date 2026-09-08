@@ -815,6 +815,11 @@ button {
   color: var(--accent);
 }
 
+.chat-keys.sealed {
+  border-color: var(--accent-ring);
+  color: var(--accent);
+}
+
 @media (max-width: 720px) {
   .chat-keys {
     display: none;

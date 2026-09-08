@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { seal, open, ENVELOPE_VERSION } from '../public/e2e.js';
+import { parseClientMessage } from './protocol.ts';
 
 async function device(id) {
   const pair = await crypto.subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, false, ['deriveBits']);
@@ -79,5 +80,26 @@ describe('сквозное шифрование личных сообщений'
     const bob = await device('b1');
     const text = 'привет 👋\nвторая строка';
     expect(await open(await seal(text, [recipient(bob)]), bob)).toBe(text);
+  });
+});
+
+describe('конверт и протокол', () => {
+  it('сервер принимает ровно то, что запечатал клиент', async () => {
+    const bob = await device('b1');
+    const enc = await seal('привет', [recipient(bob)]);
+    const parsed = parseClientMessage(JSON.stringify({ type: 'message', to: 'bob', text: '', enc }));
+    expect(parsed).toMatchObject({ type: 'message', to: 'bob', enc });
+  });
+
+  it('сервер принимает правку с конвертом', async () => {
+    const bob = await device('b1');
+    const enc = await seal('исправлено', [recipient(bob)]);
+    expect(parseClientMessage(JSON.stringify({ type: 'edit', id: 1, text: '', enc }))).toMatchObject({ id: 1, enc });
+  });
+
+  it('конверт на длинный текст и десяток устройств проходит по размерам', async () => {
+    const devices = await Promise.all(Array.from({ length: 10 }, (_, i) => device(`d${i}`)));
+    const enc = await seal('я'.repeat(2000), devices.map(recipient));
+    expect(parseClientMessage(JSON.stringify({ type: 'message', to: 'bob', text: '', enc }))).not.toBeNull();
   });
 });

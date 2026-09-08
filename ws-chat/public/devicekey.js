@@ -47,12 +47,20 @@ export async function deviceKey() {
   db.close();
 
   const digest = await crypto.subtle.digest('SHA-256', record.raw);
+  const published = toBase64(record.raw);
   return {
+    id: await deviceId(published),
     publicKey: record.publicKey,
     privateKey: record.privateKey,
-    published: toBase64(record.raw),
+    published,
     fingerprint: fingerprint(digest),
   };
+}
+
+export async function deviceId(base64) {
+  const raw = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
+  const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', raw));
+  return [...digest.slice(0, 16)].map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
 export async function keyFingerprint(base64) {

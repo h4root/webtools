@@ -52,7 +52,9 @@ import { createCallView } from './callview.js';
 import { keyOf, messageKey, channelSlug } from './keys.js';
 import { appendMention } from './linkify.js';
 import { avatarHue } from './grouping.js';
-import { deviceKey, keyFingerprint } from './devicekey.js';
+import { deviceKey, deviceId, keyFingerprint } from './devicekey.js';
+import { seal, open } from './e2e.js';
+import { recipientsFor } from './recipients.js';
 import { createNotifier } from './notify.js';
 import { emptyLogText } from './empty.js';
 import { createTyping } from './typing.js';
@@ -81,6 +83,11 @@ let callPhase = 'idle';
 let staleClient = false;
 let myKey = null;
 let peerKeys = null;
+let myDevices = [];
+const keysByNick = new Map();
+let intake = Promise.resolve();
+
+const LOCKED_TEXT = 'не удалось расшифровать';
 
 const conversations = new Map();
 const loaded = new Set();
@@ -232,9 +239,22 @@ const notifier = createNotifier({
   onOpen: (msg) => openConversation(...(msg.to !== undefined ? ['dm', msg.from] : ['channel', msg.channel])),
 });
 
+function sendFromLog(message) {
+  if (message.type !== 'edit') {
+    send(message);
+    return;
+  }
+  enqueue(async () => {
+    const msg = findMessage(message.id);
+    const peer = msg?.to === undefined ? null : (msg.from === myNick ? msg.to : msg.from);
+    const enc = peer ? await sealText(peer, message.text) : null;
+    send(enc ? { type: 'edit', id: message.id, text: '', enc } : message);
+  });
+}
+
 const log = createLog({
   getNick: () => myNick,
-  send,
+  send: sendFromLog,
   attachments,
   reactions,
   quote,
@@ -300,9 +320,42 @@ async function publishKey() {
   try {
     myKey = await deviceKey();
     send({ type: 'key-publish', key: myKey.published });
+    send({ type: 'keys', nick: myNick });
   } catch (error) {
     console.warn('ключ устройства не завёлся:', error);
   }
+}
+
+async function rememberKeys({ nick, devices }) {
+  const known = await Promise.all(devices.map(async (item) => ({ ...item, id: await deviceId(item.key) })));
+  keysByNick.set(nick.toLowerCase(), known);
+  if (nick.toLowerCase() === myNick.toLowerCase()) myDevices = known;
+}
+
+function sealingFor(nick) {
+  const peer = keysByNick.get(nick.toLowerCase()) ?? [];
+  if (peer.length === 0 || !myKey) return null;
+  return recipientsFor(peer, myDevices, [{ id: myKey.id, key: myKey.published }]);
+}
+
+async function sealText(nick, text) {
+  const recipients = text ? sealingFor(nick) : null;
+  if (!recipients) return null;
+  try {
+    return await seal(text, recipients);
+  } catch (error) {
+    console.warn('запечатать не вышло:', error);
+    return null;
+  }
+}
+
+async function unseal(msg) {
+  if (msg.enc) msg.text = (await open(msg.enc, myKey ?? {})) ?? LOCKED_TEXT;
+  if (msg.replyTo?.enc) msg.replyTo.text = (await open(msg.replyTo.enc, myKey ?? {})) ?? LOCKED_TEXT;
+}
+
+function enqueue(run) {
+  intake = intake.then(run).catch((error) => console.warn('разбор сообщения не удался:', error));
 }
 
 async function showKeys({ nick, devices }) {
@@ -377,14 +430,16 @@ function handleServer(message) {
       dmPartners = message.list.map((d) => ({ nick: d.nick, ts: d.ts }));
       renderChannels();
       break;
-    case 'history': {
-      const key = markKey(message);
-      conversations.set(key, message.messages);
-      loaded.add(key);
-      historyReady.add(key);
-      if (key === activeKey()) log.render();
+    case 'history':
+      enqueue(async () => {
+        for (const msg of message.messages) await unseal(msg);
+        const key = markKey(message);
+        conversations.set(key, message.messages);
+        loaded.add(key);
+        historyReady.add(key);
+        if (key === activeKey()) log.render();
+      });
       break;
-    }
     case 'search':
       search.renderResults(message.query, message.messages);
       break;
@@ -403,10 +458,17 @@ function handleServer(message) {
       break;
     }
     case 'message':
-      receiveMessage(message.msg);
+      enqueue(async () => {
+        await unseal(message.msg);
+        receiveMessage(message.msg);
+      });
       break;
     case 'edited':
-      applyEdit(message.id, message.text);
+      enqueue(async () => {
+        const copy = { text: message.text, enc: message.enc };
+        await unseal(copy);
+        applyEdit(message.id, copy.text);
+      });
       break;
     case 'deleted':
       applyDelete(message.id);
@@ -430,11 +492,13 @@ function handleServer(message) {
       sessionsNote?.(message.list);
       break;
     case 'keys':
-      void showKeys(message);
-      if (active.kind === 'dm' && active.id.toLowerCase() === message.nick.toLowerCase()) {
-        peerKeys = message.devices;
-        void renderPeerKeys();
-      }
+      enqueue(async () => {
+        await rememberKeys(message);
+        if (active.kind === 'dm' && active.id.toLowerCase() === message.nick.toLowerCase()) {
+          peerKeys = message.devices;
+          await renderPeerKeys();
+        }
+      });
       break;
     case 'link-code':
       gate.showLinkCode(message.code, message.expiresAt);
@@ -669,14 +733,16 @@ async function renderPeerKeys() {
   }
   chatKeys.hidden = false;
   if (peerKeys.length === 0) {
-    chatKeys.textContent = 'без ключей';
-    chatKeys.title = 'У собеседника нет устройств с ключами: сквозного шифрования с ним не будет.';
+    chatKeys.classList.remove('sealed');
+    chatKeys.textContent = 'без шифрования';
+    chatKeys.title = 'У собеседника нет устройств с ключами: сообщения уйдут открытыми.';
     return;
   }
   const prints = await Promise.all(peerKeys.map((item) => keyFingerprint(item.key)));
   const many = peerKeys.length > 1 ? ` · ещё ${peerKeys.length - 1}` : '';
-  chatKeys.textContent = `ключ ${prints[0].slice(0, 9)}…${many}`;
-  chatKeys.title = peerKeys.map((item, i) => `${item.device || 'без имени'}: ${prints[i]}`).join('\n');
+  chatKeys.classList.add('sealed');
+  chatKeys.textContent = `зашифровано · ${prints[0].slice(0, 9)}…${many}`;
+  chatKeys.title = ['Сверь отпечаток с собеседником другим способом.', ...peerKeys.map((item, i) => `${item.device || 'без имени'}: ${prints[i]}`)].join('\n');
 }
 
 function updateCallButton() {
@@ -731,18 +797,26 @@ composer.addEventListener('submit', (event) => {
   const text = textInput.value.trim();
   const files = attachments.pending();
   if (!text && files.length === 0) return;
-  const base = active.kind === 'channel' ? { channel: active.id } : { to: active.id };
-  socket.sendMessage({
-    type: 'message',
-    ...base,
-    text,
-    replyTo: reply.id(),
-    attachments: files.length ? files : undefined,
-    nonce: socket.newNonce(),
-  });
+  const target = active;
+  const replyTo = reply.id();
+  const nonce = socket.newNonce();
   textInput.value = '';
   attachments.clear();
   reply.clear();
+
+  enqueue(async () => {
+    const enc = target.kind === 'dm' ? await sealText(target.id, text) : null;
+    const base = target.kind === 'channel' ? { channel: target.id } : { to: target.id };
+    socket.sendMessage({
+      type: 'message',
+      ...base,
+      text: enc ? '' : text,
+      enc: enc ?? undefined,
+      replyTo,
+      attachments: files.length ? files : undefined,
+      nonce,
+    });
+  });
 });
 
 attachBtn.addEventListener('click', () => fileInput.click());
