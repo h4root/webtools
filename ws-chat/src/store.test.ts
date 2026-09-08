@@ -4,6 +4,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Store, channelKey, dmKey, recipientsOf, CHANNEL_LIMIT, HISTORY_LIMIT } from './store.ts';
 
+const envelope = (ct: string) => ({ v: 1, epk: 'epk', iv: 'iv', ct, to: [{ id: 'd1', iv: 'iv', ct: 'key' }] });
+
 describe('Store', () => {
   let store: Store;
 
@@ -23,6 +25,40 @@ describe('Store', () => {
     const b = store.addChannelMessage('general', 'bob', 'two');
     expect(b.id).toBe(a.id + 1);
     expect(store.history(channelKey('general')).map((m) => m.text)).toEqual(['one', 'two']);
+  });
+
+  it('хранит запечатанное сообщение и отдаёт конверт как есть', () => {
+    const enc = envelope('шифр-один');
+    const dm = store.addDirectMessage('alice', 'bob', '', { enc });
+    expect(dm.text).toBe('');
+    expect(dm.enc).toEqual(enc);
+    expect(store.history(dmKey('alice', 'bob'))[0].enc).toEqual(enc);
+  });
+
+  it('переносит конверт в цитату, иначе ответ на шифровку остаётся пустым', () => {
+    const first = store.addDirectMessage('alice', 'bob', '', { enc: envelope('шифр-один') });
+    const second = store.addDirectMessage('bob', 'alice', '', { enc: envelope('шифр-два'), replyTo: first.id });
+    expect(second.replyTo?.enc).toEqual(envelope('шифр-один'));
+    expect(second.replyTo?.text).toBe('');
+  });
+
+  it('правка заменяет конверт целиком', () => {
+    const dm = store.addDirectMessage('alice', 'bob', '', { enc: envelope('было') });
+    const edited = store.edit(dm.id, 'alice', '', envelope('стало'));
+    expect(edited?.enc).toEqual(envelope('стало'));
+    expect(edited?.edited).toBe(true);
+  });
+
+  it('правка открытым текстом стирает конверт, чтобы не осталось двух версий', () => {
+    const dm = store.addDirectMessage('alice', 'bob', '', { enc: envelope('было') });
+    const edited = store.edit(dm.id, 'alice', 'открыто');
+    expect(edited?.enc).toBeUndefined();
+    expect(edited?.text).toBe('открыто');
+  });
+
+  it('поиск не находит запечатанное: сервер его прочитать не может', () => {
+    store.addDirectMessage('alice', 'bob', '', { enc: envelope('секрет') });
+    expect(store.search('alice', 'секрет')).toHaveLength(0);
   });
 
   it('ключует ЛС по паре ников независимо от порядка', () => {

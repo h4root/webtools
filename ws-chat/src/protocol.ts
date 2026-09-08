@@ -9,10 +9,15 @@ export const ATTACH_SIZE_MAX = 26_214_400;
 export const PASSWORD_LIMIT = 200;
 export const SEARCH_QUERY_MAX = 100;
 export const NONCE_MAX = 64;
+export const ENC_VERSION = 1;
+export const ENC_CT_MAX = 12_000;
+export const ENC_DEVICES_MAX = 32;
+export const ENC_DEVICE_ID_MAX = 64;
 
 const ATTACH_ID = /^[a-f0-9]{32}$/;
 const NONCE = /^[A-Za-z0-9_-]{1,64}$/;
 const DEVICE_KEY = /^[A-Za-z0-9+/]{40,200}={0,2}$/;
+const BASE64 = /^[A-Za-z0-9+/]+={0,2}$/;
 
 export const REACTIONS = ['👍', '❤️', '😂', '🔥', '🎉', '😮', '😢', '👀'];
 
@@ -35,11 +40,26 @@ export interface AttachmentRef {
   mime: string;
 }
 
+export interface SealedFor {
+  id: string;
+  iv: string;
+  ct: string;
+}
+
+export interface Envelope {
+  v: number;
+  epk: string;
+  iv: string;
+  ct: string;
+  to: SealedFor[];
+}
+
 export interface ReplyRef {
   id: number;
   from: string;
   text: string;
   media?: Attachment;
+  enc?: Envelope;
 }
 
 export interface WireMessage {
@@ -54,6 +74,7 @@ export interface WireMessage {
   replyTo?: ReplyRef;
   attachments?: Attachment[];
   nonce?: string;
+  enc?: Envelope;
 }
 
 export type AuthMode = 'guest' | 'register' | 'login' | 'resume';
@@ -97,11 +118,20 @@ export type ClientMessage =
   | { type: 'voice-channel-delete'; name: string }
   | { type: 'key-publish'; key: string }
   | { type: 'keys'; nick: string }
-  | { type: 'message'; channel?: string; to?: string; text: string; replyTo?: number; attachments?: AttachmentRef[]; nonce?: string }
+  | {
+      type: 'message';
+      channel?: string;
+      to?: string;
+      text: string;
+      replyTo?: number;
+      attachments?: AttachmentRef[];
+      nonce?: string;
+      enc?: Envelope;
+    }
   | { type: 'history'; channel?: string; to?: string }
   | { type: 'search'; query: string }
   | { type: 'read'; channel?: string; to?: string; id: number }
-  | { type: 'edit'; id: number; text: string }
+  | { type: 'edit'; id: number; text: string; enc?: Envelope }
   | { type: 'delete'; id: number }
   | { type: 'react'; id: number; emoji: string }
   | { type: 'typing'; channel?: string; to?: string }
@@ -134,7 +164,7 @@ export type ServerMessage =
   | { type: 'search'; query: string; messages: WireMessage[] }
   | { type: 'reads'; list: ReadMark[] }
   | { type: 'read'; channel?: string; to?: string; id: number }
-  | { type: 'edited'; id: number; text: string }
+  | { type: 'edited'; id: number; text: string; enc?: Envelope }
   | { type: 'deleted'; id: number }
   | { type: 'reaction'; id: number; reactions: Reactions }
   | { type: 'typing'; from: string; channel?: string; to?: string }
@@ -188,6 +218,27 @@ function parseAttachments(value: unknown): AttachmentRef[] | null {
     out.push({ id, name, size, mime });
   }
   return out;
+}
+
+function isBase64(value: unknown, max: number): value is string {
+  return typeof value === 'string' && value.length > 0 && value.length <= max && BASE64.test(value);
+}
+
+function parseEnvelope(value: unknown): Envelope | null {
+  if (!isRecord(value) || value.v !== ENC_VERSION) return null;
+  if (!DEVICE_KEY.test(String(value.epk))) return null;
+  if (!isBase64(value.iv, 32) || !isBase64(value.ct, ENC_CT_MAX)) return null;
+  if (!Array.isArray(value.to) || value.to.length === 0 || value.to.length > ENC_DEVICES_MAX) return null;
+
+  const to: SealedFor[] = [];
+  for (const item of value.to) {
+    if (!isRecord(item)) return null;
+    const { id, iv, ct } = item;
+    if (typeof id !== 'string' || id.length === 0 || id.length > ENC_DEVICE_ID_MAX) return null;
+    if (!isBase64(iv, 32) || !isBase64(ct, 256)) return null;
+    to.push({ id, iv, ct });
+  }
+  return { v: ENC_VERSION, epk: value.epk as string, iv: value.iv, ct: value.ct, to };
 }
 
 export function parseClientMessage(raw: string): ClientMessage | null {
@@ -247,8 +298,10 @@ export function parseClientMessage(raw: string): ClientMessage | null {
       if (attachments === null) return null;
       const text = typeof data.text === 'string' ? data.text : '';
       if (text.length > TEXT_MAX) return null;
-      const hasText = text.trim().length > 0;
-      if (!hasText && attachments.length === 0) return null;
+      const enc = data.enc === undefined ? undefined : parseEnvelope(data.enc);
+      if (data.enc !== undefined && (!enc || !('to' in target))) return null;
+      const hasText = !enc && text.trim().length > 0;
+      if (!hasText && !enc && attachments.length === 0) return null;
       const replyTo = typeof data.replyTo === 'number' ? data.replyTo : undefined;
       if (data.nonce !== undefined && (typeof data.nonce !== 'string' || !NONCE.test(data.nonce))) return null;
       return {
@@ -258,6 +311,7 @@ export function parseClientMessage(raw: string): ClientMessage | null {
         replyTo,
         attachments: attachments.length ? attachments : undefined,
         nonce: data.nonce as string | undefined,
+        enc: enc ?? undefined,
       };
     }
     case 'history': {
@@ -275,9 +329,13 @@ export function parseClientMessage(raw: string): ClientMessage | null {
       const target = parseTarget(data);
       return target ? { type: 'typing', ...target } : null;
     }
-    case 'edit':
-      if (typeof data.id !== 'number' || !isBoundedString(data.text, TEXT_MAX)) return null;
-      return { type: 'edit', id: data.id, text: data.text };
+    case 'edit': {
+      if (typeof data.id !== 'number') return null;
+      const enc = data.enc === undefined ? undefined : parseEnvelope(data.enc);
+      if (data.enc !== undefined && !enc) return null;
+      if (enc) return { type: 'edit', id: data.id, text: '', enc };
+      return isBoundedString(data.text, TEXT_MAX) ? { type: 'edit', id: data.id, text: data.text } : null;
+    }
     case 'delete':
       return typeof data.id === 'number' ? { type: 'delete', id: data.id } : null;
     case 'react':

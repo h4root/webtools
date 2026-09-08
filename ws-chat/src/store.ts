@@ -1,7 +1,7 @@
 import { readFileSync, renameSync } from 'node:fs';
 import { writeFileAtomic, writeJsonAtomic } from './jsonfile.ts';
 import { isSealed, openJson, sealJson } from './sealed.ts';
-import type { Attachment, AttachmentRef, Reactions, ReplyRef, WireMessage } from './protocol.ts';
+import type { Attachment, AttachmentRef, Envelope, Reactions, ReplyRef, WireMessage } from './protocol.ts';
 
 export const DEFAULT_CHANNELS = ['general', 'random'];
 export const DEFAULT_VOICE_CHANNELS = ['general', 'games'];
@@ -23,12 +23,14 @@ interface StoredMessage {
   replyTo?: ReplyRef;
   attachments?: AttachmentRef[];
   nonce?: string;
+  enc?: Envelope;
 }
 
 interface MessageExtra {
   replyTo?: number;
   attachments?: AttachmentRef[];
   nonce?: string;
+  enc?: Envelope;
 }
 
 export function channelKey(name: string): string {
@@ -56,6 +58,7 @@ function toWire(message: StoredMessage): WireMessage {
     replyTo: message.replyTo,
     nonce: message.nonce,
     attachments: message.attachments?.map(toAttachment),
+    enc: message.enc,
   };
 }
 
@@ -300,6 +303,7 @@ export class Store {
       from: target.from,
       text: target.text.slice(0, 120),
       media: media && toAttachment(media),
+      enc: target.enc,
     };
   }
 
@@ -338,6 +342,7 @@ export class Store {
       replyTo: this.makeReply(extra.replyTo, key),
       attachments: extra.attachments,
       nonce: extra.nonce,
+      enc: extra.enc,
     });
   }
 
@@ -355,10 +360,12 @@ export class Store {
     return message.from.toLowerCase() === nick.toLowerCase();
   }
 
-  edit(id: number, from: string, text: string): StoredMessage | null {
+  edit(id: number, from: string, text: string, enc?: Envelope): StoredMessage | null {
     const message = this.find(id);
     if (!message || !this.isAuthor(message, from)) return null;
-    message.text = text;
+    message.text = enc ? '' : text;
+    if (enc) message.enc = enc;
+    else delete message.enc;
     message.edited = true;
     this.scheduleSave();
     return message;

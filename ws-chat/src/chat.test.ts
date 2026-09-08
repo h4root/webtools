@@ -39,6 +39,8 @@ function msgCount(client: TestClient, text: string): number {
   return client.inbox.filter((m) => m.type === 'message' && m.msg.text === text).length;
 }
 
+const sealed = (mark: string) => ({ v: 1, epk: 'e'.repeat(88), iv: 'a'.repeat(16), ct: mark.padEnd(64, 'x'), to: [{ id: 'd1', iv: 'a'.repeat(16), ct: 'c'.repeat(64) }] });
+
 function lastMessage(client: TestClient) {
   for (let i = client.inbox.length - 1; i >= 0; i--) {
     const m = client.inbox[i];
@@ -147,6 +149,34 @@ describe('Hub', () => {
 
     expect(lastMessage(laptop)?.text).toBe('только вам двоим');
     expect(lastMessage(phone)?.text).toBe('только вам двоим');
+  });
+
+  it('раздаёт запечатанное личное сообщение обеим сторонам, не заглядывая внутрь', () => {
+    const alice = makeClient('alice');
+    const bob = makeClient('bob');
+    hub.join(alice, 'alice');
+    hub.join(bob, 'bob');
+
+    const enc = sealed('sealedBody');
+    hub.handle(bob, JSON.stringify({ type: 'message', to: 'alice', text: '', enc }));
+
+    expect(lastMessage(alice)?.enc).toEqual(enc);
+    expect(lastMessage(alice)?.text).toBe('');
+    expect(lastMessage(bob)?.enc).toEqual(enc);
+  });
+
+  it('правка запечатанного сообщения разносит новый конверт', () => {
+    const alice = makeClient('alice');
+    const bob = makeClient('bob');
+    hub.join(alice, 'alice');
+    hub.join(bob, 'bob');
+
+    hub.handle(bob, JSON.stringify({ type: 'message', to: 'alice', text: '', enc: sealed('before') }));
+    const id = lastMessage(alice)!.id;
+    hub.handle(bob, JSON.stringify({ type: 'edit', id, text: '', enc: sealed('after') }));
+
+    const edited = alice.inbox.filter((m) => m.type === 'edited').at(-1);
+    expect(edited).toMatchObject({ id, enc: sealed('after') });
   });
 
   it('считает бюджет флуда на аккаунт, а не на сокет', () => {

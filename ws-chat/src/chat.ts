@@ -1,4 +1,4 @@
-import { NICK_MAX, PROTOCOL_VERSION, parseClientMessage, type AttachmentRef, type ClientMessage, type ReadMark, type ServerMessage } from './protocol.ts';
+import { NICK_MAX, PROTOCOL_VERSION, parseClientMessage, type AttachmentRef, type ClientMessage, type Envelope, type ReadMark, type ServerMessage } from './protocol.ts';
 import { Store, channelKey, dmKey, recipientsOf } from './store.ts';
 import { safeDevice, type Auth } from './auth.ts';
 import { LinkCodes } from './linkcodes.ts';
@@ -388,7 +388,7 @@ export class Hub {
         client.send({ type: 'search', query: message.query, messages: this.store.search(client.nick!, message.query) });
         break;
       case 'edit':
-        this.editMessage(client, message.id, message.text);
+        this.editMessage(client, message.id, message.text, message.enc);
         break;
       case 'delete':
         this.deleteMessage(client, message.id);
@@ -486,7 +486,7 @@ export class Hub {
     }
 
     const attachments = this.resolveAttachments(message.attachments);
-    if (!message.text && !attachments) {
+    if (!message.text && !attachments && !message.enc) {
       client.send({ type: 'error', reason: 'Вложение не найдено' });
       return;
     }
@@ -516,6 +516,7 @@ export class Hub {
       replyTo: message.replyTo,
       attachments,
       nonce: message.nonce,
+      enc: message.enc,
     });
     this.sendToNicks([client.nick!, to], { type: 'message', msg: wire });
   }
@@ -529,10 +530,10 @@ export class Hub {
     }
   }
 
-  private editMessage(client: Client, id: number, text: string): void {
-    const message = this.store.edit(id, client.nick!, text);
+  private editMessage(client: Client, id: number, text: string, enc?: Envelope): void {
+    const message = this.store.edit(id, client.nick!, text, enc);
     if (!message) return;
-    this.dispatch(recipientsOf(message), { type: 'edited', id, text });
+    this.dispatch(recipientsOf(message), { type: 'edited', id, text: message.text, enc });
   }
 
   private deleteMessage(client: Client, id: number): void {
