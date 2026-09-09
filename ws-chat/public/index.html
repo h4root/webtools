@@ -10,14 +10,17 @@
   <div id="gate" class="gate">
     <form id="nick-form" class="gate-card">
       <h1 class="gate-title">ws-chat</h1>
-      <p class="gate-sub">Чат в локальной сети: текст, голос и файлы.</p>
       <p id="gate-insecure" class="gate-insecure" hidden></p>
 
       <div class="gate-main" id="gate-main">
         <div class="gate-tabs" id="gate-tabs">
-          <button type="button" id="mode-guest">Гость</button>
           <button type="button" id="mode-login">Вход</button>
           <button type="button" id="mode-register">Регистрация</button>
+        </div>
+
+        <div class="gate-altbox">
+          <button type="button" class="gate-alt" id="mode-link">Войти с другого устройства</button>
+          <div class="gate-or"><span>или</span></div>
         </div>
 
         <div class="gate-fields">
@@ -32,7 +35,6 @@
         </div>
 
         <button type="submit" id="gate-submit">Продолжить</button>
-        <p id="gate-hint" class="gate-hint"></p>
       </div>
 
       <div id="link-box" class="link-box" hidden>
@@ -43,10 +45,6 @@
 
       <p id="gate-error" class="gate-error"></p>
 
-      <div class="gate-altbox" id="gate-altbox">
-        <div class="gate-or"><span>или</span></div>
-        <button type="button" class="gate-alt" id="mode-link">Войти с другого устройства</button>
-      </div>
 
       <div class="gate-foot">
         <button type="button" class="gate-link" id="link-back" hidden>Назад ко входу</button>

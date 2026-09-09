@@ -593,7 +593,7 @@ function returnToGate(reason) {
   gateScreen.hidden = false;
   connBanner.hidden = true;
   gate.setBusy(false);
-  gate.setMode(isGuest ? 'guest' : 'login');
+  gate.setMode('login');
   gate.showError(reason ?? '');
   nickInput.value = myNick;
   nickInput.focus();
@@ -900,7 +900,7 @@ document.addEventListener('keydown', (event) => {
 function initUI() {
   placeSearchField();
   gate.warnIfInsecure();
-  gate.setMode('guest');
+  gate.setMode('login');
   sidebarCloseBtn.appendChild(icon('cross', 18));
   dropCloseBtn.appendChild(icon('cross', 16));
   searchBtn.appendChild(icon('search', 18));

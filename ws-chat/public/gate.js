@@ -5,16 +5,13 @@ import {
   passwordInput,
   passwordField,
   gateError,
-  gateHint,
   gateInsecure,
   gateSubmit,
   gateMain,
   gateTabs,
-  modeGuestBtn,
   modeLoginBtn,
   modeRegisterBtn,
   modeLinkBtn,
-  gateAltBox,
   linkBackBtn,
   linkBox,
   linkCodeEl,
@@ -40,7 +37,7 @@ const MODES = {
 const FLASH_MS = 1800;
 
 export function createGate({ request }) {
-  let mode = 'guest';
+  let mode = 'login';
   let pending = null;
   let timer = null;
   let flashUntil = 0;
@@ -63,7 +60,7 @@ export function createGate({ request }) {
     const linking = next === 'link';
     gateMain.hidden = linking;
     linkBox.hidden = !linking;
-    gateAltBox.hidden = linking;
+    modeLinkBtn.hidden = linking;
     linkBackBtn.hidden = !linking;
 
     if (linking) {
@@ -74,7 +71,6 @@ export function createGate({ request }) {
 
     const needsPassword = next === 'login' || next === 'register';
     gateSubmit.textContent = MODES[next].label;
-    gateHint.textContent = MODES[next].hint;
     passwordField.hidden = !needsPassword;
     passwordInput.autocomplete = next === 'register' ? 'new-password' : 'current-password';
     for (const tab of gateTabs.children) tab.classList.toggle('active', tab.id === `mode-${next}`);
@@ -137,10 +133,9 @@ export function createGate({ request }) {
     passwordInput.value = '';
   });
 
-  modeGuestBtn.addEventListener('click', () => setMode('guest'));
   modeLoginBtn.addEventListener('click', () => setMode('login'));
   modeRegisterBtn.addEventListener('click', () => setMode('register'));
-  linkBackBtn.addEventListener('click', () => setMode('guest'));
+  linkBackBtn.addEventListener('click', () => setMode('login'));
   modeLinkBtn.addEventListener('click', () => {
     setMode('link');
     requestLinkCode();
