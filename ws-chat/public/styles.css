@@ -1,4 +1,32 @@
 @font-face {
+  font-family: 'Source Code Pro';
+  font-weight: 400;
+  font-display: swap;
+  src: url('./fonts/source-code-pro-400-cyrillic.woff2') format('woff2');
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+@font-face {
+  font-family: 'Source Code Pro';
+  font-weight: 400;
+  font-display: swap;
+  src: url('./fonts/source-code-pro-400-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Source Code Pro';
+  font-weight: 700;
+  font-display: swap;
+  src: url('./fonts/source-code-pro-700-cyrillic.woff2') format('woff2');
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+@font-face {
+  font-family: 'Source Code Pro';
+  font-weight: 700;
+  font-display: swap;
+  src: url('./fonts/source-code-pro-700-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
   font-family: 'JetBrains Mono';
   font-weight: 400;
   font-display: swap;
@@ -36,26 +64,31 @@
 }
 
 :root {
-  --font: 'JetBrains Mono', 'Courier New', monospace;
-  --bg: #0c0f0d;
-  --panel: #121613;
-  --line: #1f2a22;
-  --fg: #d7e2d9;
-  --dim: #6f8577;
-  --accent: #35d07f;
-  --mine: #1b3a2a;
-  --warn: #d0a03a;
+  --font: 'Source Code Pro', 'JetBrains Mono', 'Courier New', monospace;
+  --bg: #0f0f0f;
+  --panel: #171717;
+  --surface: #1b1b1b;
+  --line: #383838;
+  --fg: #f6f6f6;
+  --dim: #a3a3a3;
+  --faint: #5c5c5c;
+  --bright: #ffffff;
+  /* Интерфейс монохромный: акцент — не цвет, а вес. Цветные только сигналы. */
+  --accent: #f6f6f6;
+  --ok: #7bff69;
+  --mine: #1b1b1b;
+  --warn: #d4a522;
 
-  --hover: rgba(255, 255, 255, 0.045);
-  --active-bg: rgba(53, 208, 127, 0.14);
-  --radius-item: 8px;
+  --hover: rgba(255, 255, 255, 0.04);
+  --active-bg: #1b1b1b;
+  --radius-item: 2px;
 
-  --scrim: rgba(0, 0, 0, 0.5);
-  --shadow-pop: 0 8px 24px rgba(0, 0, 0, 0.4);
-  --shadow-lift: 0 4px 14px rgb(0 0 0 / 45%);
-  --accent-weak: rgba(53, 208, 127, 0.08);
-  --accent-soft: rgba(53, 208, 127, 0.16);
-  --accent-ring: rgba(53, 208, 127, 0.35);
+  --scrim: rgba(0, 0, 0, 0.6);
+  --shadow-pop: 0 8px 24px rgba(0, 0, 0, 0.55);
+  --shadow-lift: 0 4px 14px rgb(0 0 0 / 55%);
+  --accent-weak: rgba(246, 246, 246, 0.06);
+  --accent-soft: rgba(246, 246, 246, 0.12);
+  --accent-ring: rgba(246, 246, 246, 0.3);
   --glass-blur: none;
   --glass-edge: transparent;
   --glass-sheen: none;
@@ -63,11 +96,11 @@
   --lb-btn: rgba(255, 255, 255, 0.08);
   --lb-btn-hover: rgba(255, 255, 255, 0.18);
   --control: var(--bg);
-  --danger: var(--danger);
-  --on-accent: #05130b;
-  --on-danger: #180605;
-  --scroll-thumb: rgba(215, 226, 217, 0.16);
-  --scroll-thumb-hover: rgba(215, 226, 217, 0.32);
+  --danger: #fe3f3f;
+  --on-accent: #0f0f0f;
+  --on-danger: #170605;
+  --scroll-thumb: rgba(246, 246, 246, 0.14);
+  --scroll-thumb-hover: rgba(246, 246, 246, 0.3);
 }
 
 [data-theme='glass-dark'] {
@@ -227,6 +260,7 @@ body {
   color: var(--fg);
   font-family: var(--font);
   font-size: 14px;
+  letter-spacing: -0.03em;
 }
 
 .icon {
@@ -1072,24 +1106,35 @@ button {
 }
 
 .row {
-  align-self: flex-start;
-  width: fit-content;
-  max-width: 72%;
-  padding: 6px 10px;
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  border-bottom-left-radius: 4px;
+  align-self: stretch;
+  position: relative;
+  max-width: 92ch;
+  padding: 1px 10px 1px 0;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
 
 .row.mine {
-  align-self: flex-end;
-  background: var(--mine);
-  border-color: #275f42;
-  border-radius: 12px;
-  border-bottom-right-radius: 4px;
+  align-self: stretch;
+}
+
+.head {
+  display: block;
+  margin-bottom: 1px;
+  color: var(--faint);
+  font-size: 12px;
+}
+
+.who {
+  color: var(--dim);
+}
+
+.row.mine .who {
+  color: var(--accent);
+}
+
+.head .edited {
+  color: var(--faint);
 }
 
 .row.system {
@@ -1137,33 +1182,22 @@ button {
 .day-sep span {
   display: inline-block;
   padding: 3px 11px;
-  background: color-mix(in srgb, var(--panel) 90%, transparent);
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  color: var(--dim);
+  background: var(--bg);
+  color: var(--faint);
   font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: lowercase;
 }
 
-.who {
-  display: block;
-  margin-bottom: 2px;
-  color: var(--dim);
-  font-size: 11.5px;
-  font-weight: 700;
+.day-sep span::before,
+.day-sep span::after {
+  content: '──────';
+  margin: 0 10px;
+  color: var(--line);
 }
 
 .row.grouped {
   margin-top: -4px;
-  border-top-left-radius: 6px;
-}
-
-[data-theme^='glass'] .row.mine {
-  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
-}
-
-.row.mine.grouped {
-  border-top-left-radius: 12px;
-  border-top-right-radius: 6px;
 }
 
 .composer-area {
@@ -2031,21 +2065,6 @@ html.motion-off *::after {
   color: var(--fg);
 }
 
-.me .avatar {
-  width: 30px;
-  height: 30px;
-  flex-shrink: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 50%;
-  
-  background: hsl(var(--hue, 150) 40% 26%);
-  color: hsl(var(--hue, 150) 65% 78%);
-  font-weight: 600;
-  font-size: 13px;
-}
-
 .me .me-name {
   min-width: 0;
   overflow: hidden;
@@ -2058,10 +2077,19 @@ html.motion-off *::after {
 }
 
 .nav-head {
-  padding: 12px 8px 4px;
+  padding: 14px 8px 5px;
   font-size: 10px;
-  letter-spacing: 0.6px;
-  font-weight: 500;
+  letter-spacing: 0.14em;
+  font-weight: 400;
+  color: var(--faint);
+}
+
+.nav-head > span::before {
+  content: '[ ';
+}
+
+.nav-head > span::after {
+  content: ' ]';
 }
 
 .nav-add {
@@ -2484,23 +2512,12 @@ html.motion-off *::after {
   background: var(--hover);
 }
 
-.m-avatar {
-  width: 26px;
-  height: 26px;
-  flex-shrink: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 50%;
-  background: hsl(var(--hue, 150) 40% 26%);
-  color: hsl(var(--hue, 150) 65% 78%);
-  font-size: 12px;
-  font-weight: 600;
-  transition: box-shadow 0.12s ease;
+.member.speaking .m-name {
+  color: var(--accent);
 }
 
-.member.speaking .m-avatar {
-  box-shadow: 0 0 0 2px var(--accent);
+.member.speaking .m-name::before {
+  content: '2 ';
 }
 
 .m-name {

@@ -1,6 +1,7 @@
 const STORE_KEY = 'ws-chat-settings';
 
 const FONTS = {
+  source: { label: 'Source Code Pro', stack: "'Source Code Pro', monospace" },
   jetbrains: { label: 'JetBrains Mono', stack: "'JetBrains Mono', monospace" },
   victor: { label: 'Victor Mono', stack: "'Victor Mono', monospace" },
   plex: { label: 'IBM Plex Mono', stack: "'IBM Plex Mono', monospace" },
@@ -13,7 +14,7 @@ const DEFAULTS = {
   echoCancellation: true,
   noiseSuppression: true,
   autoGainControl: true,
-  font: 'jetbrains',
+  font: 'source',
   theme: 'og',
   motion: 'system',
   notifications: false,

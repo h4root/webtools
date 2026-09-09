@@ -4,7 +4,7 @@ import { settings } from './settings.js';
 import { splitText, shortenUrl } from './linkify.js';
 import { timeLabel } from './format.js';
 import { sameDay, dayLabel } from './days.js';
-import { sameGroup, avatarHue } from './grouping.js';
+import { sameGroup } from './grouping.js';
 import { logEl, logEmpty, jumpNewBtn } from './dom.js';
 
 const BOTTOM_SLACK_PX = 80;
@@ -76,17 +76,28 @@ export function createLog({ getNick, send, attachments, reactions, quote, onRepl
     return actions;
   }
 
+  function headOf(msg) {
+    const head = document.createElement('span');
+    head.className = 'head';
+
+    const who = document.createElement('span');
+    who.className = 'who';
+    who.textContent = `<${msg.from}>`;
+    head.append(who, ` — [${timeLabel(msg.ts)}]`);
+
+    if (msg.edited) {
+      const edited = document.createElement('span');
+      edited.className = 'edited';
+      edited.textContent = ' изм.';
+      head.appendChild(edited);
+    }
+    return head;
+  }
+
   function fillRow(row, msg) {
     row.replaceChildren();
     if (msg.replyTo) row.appendChild(quote.render(msg.replyTo, scrollTo));
-
-    if (!msg.mine && !msg.grouped) {
-      const who = document.createElement('span');
-      who.className = 'who';
-      who.style.color = `hsl(${avatarHue(msg.from)} 55% 68%)`;
-      who.textContent = msg.from;
-      row.appendChild(who);
-    }
+    row.appendChild(headOf(msg));
 
     let mentionsMe = false;
     if (msg.text) {
@@ -97,11 +108,6 @@ export function createLog({ getNick, send, attachments, reactions, quote, onRepl
     }
 
     if (msg.attachments?.length) row.appendChild(attachments.render(msg.attachments));
-
-    const meta = document.createElement('span');
-    meta.className = 'meta';
-    meta.textContent = (msg.edited ? 'изм. · ' : '') + timeLabel(msg.ts);
-    row.appendChild(meta);
 
     row.classList.toggle('mention', mentionsMe && !msg.mine);
     row.appendChild(actionsOf(msg));

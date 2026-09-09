@@ -1,7 +1,6 @@
 import { icon } from './icons.js';
 import { keyOf } from './keys.js';
 import { isOnline, orderDms } from './roster.js';
-import { avatarHue } from './grouping.js';
 import { NO_DMS } from './empty.js';
 import { channelListEl, dmListEl, membersListEl } from './dom.js';
 
@@ -75,14 +74,10 @@ export function createNav({ getState, send, onOpen }) {
     row.className = 'member';
     row.dataset.nick = nick.toLowerCase();
     row.dataset.name = nick;
-    const av = document.createElement('span');
-    av.className = 'm-avatar';
-    av.style.setProperty('--hue', avatarHue(nick));
-    av.textContent = nick.slice(0, 1).toUpperCase();
     const name = document.createElement('span');
     name.className = 'm-name';
     name.textContent = nick === me ? `${nick} (вы)` : nick;
-    row.append(av, name);
+    row.append(name);
     if (nick !== me) row.addEventListener('click', () => onOpen('dm', nick));
     return row;
   }

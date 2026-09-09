@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { sameGroup, avatarHue } from '../public/grouping.js';
+import { sameGroup } from '../public/grouping.js';
 
 const at = (iso) => new Date(iso).getTime();
 const msg = (over = {}) => ({ id: 2, from: 'alice', text: 'вторая', ts: at('2026-08-28T12:00:30'), ...over });
@@ -34,29 +34,5 @@ describe('sameGroup', () => {
 
   it('ответ начинает группу заново: у него своя цитата сверху', () => {
     expect(sameGroup(prev, msg({ replyTo: { id: 0, from: 'bob', text: 'что?' } }))).toBe(false);
-  });
-});
-
-describe('avatarHue', () => {
-  it('у одного ника цвет всегда один', () => {
-    expect(avatarHue('alice')).toBe(avatarHue('alice'));
-  });
-
-  it('регистр цвет не меняет', () => {
-    expect(avatarHue('Alice')).toBe(avatarHue('alice'));
-  });
-
-  it('разные ники разводятся по кругу', () => {
-    const hues = new Set(['alice', 'bob', 'carol', 'dave', 'eve'].map(avatarHue));
-    expect(hues.size).toBeGreaterThan(3);
-  });
-
-  it('всегда попадает в круг цветов', () => {
-    for (const nick of ['', 'a', 'длинный ник с пробелами', '😀', 'x'.repeat(64)]) {
-      const hue = avatarHue(nick);
-      expect(Number.isInteger(hue)).toBe(true);
-      expect(hue).toBeGreaterThanOrEqual(0);
-      expect(hue).toBeLessThan(360);
-    }
   });
 });
