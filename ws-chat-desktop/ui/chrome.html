@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>ws-chat</title>
+<style>
+  :root {
+    --fg: #e8e8ea;
+    --dim: #9a9aa2;
+    --hover: rgba(255, 255, 255, 0.09);
+    --close: #c42b1c;
+  }
+
+  @media (prefers-color-scheme: light) {
+    :root {
+      --fg: #1a1a1c;
+      --dim: #5a5a62;
+      --hover: rgba(0, 0, 0, 0.07);
+    }
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    height: 100%;
+    overflow: hidden;
+    background: transparent;
+    color: var(--fg);
+    font: 12px/1 "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+    user-select: none;
+    cursor: default;
+  }
+
+  .bar {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    height: 100%;
+  }
+
+  .left { display: flex; padding-left: 4px; }
+
+  .title {
+    padding: 0 12px;
+    color: var(--dim);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .controls { display: flex; height: 100%; }
+
+  button {
+    display: grid;
+    place-items: center;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    cursor: default;
+    padding: 0;
+  }
+
+  .action {
+    width: 32px;
+    height: 26px;
+    border-radius: 5px;
+    font-size: 14px;
+  }
+
+  .action:hover:not(:disabled) { background: var(--hover); }
+  .action:disabled { opacity: 0.35; }
+
+  .control {
+    width: 46px;
+    height: 100%;
+    font-family: "Segoe Fluent Icons", "Segoe MDL2 Assets", sans-serif;
+    font-size: 10px;
+  }
+
+  .control:hover { background: var(--hover); }
+
+  .control.close:hover {
+    background: var(--close);
+    color: #fff;
+  }
+</style>
+</head>
+<body>
+<div class="bar" data-tauri-drag-region>
+  <div class="left">
+    <button class="action" id="back" title="Назад" aria-label="Назад">←</button>
+    <button class="action" id="home" title="Отключиться от сервера" aria-label="Отключиться от сервера">⏏</button>
+  </div>
+  <div class="title" id="title" data-tauri-drag-region>ws-chat</div>
+  <div class="controls">
+    <button class="control" id="min" title="Свернуть" aria-label="Свернуть">&#xE921;</button>
+    <button class="control" id="max" title="Развернуть" aria-label="Развернуть">&#xE922;</button>
+    <button class="control close" id="close" title="Закрыть" aria-label="Закрыть">&#xE8BB;</button>
+  </div>
+</div>
+<script type="module" src="chrome.js"></script>
+</body>
+</html>

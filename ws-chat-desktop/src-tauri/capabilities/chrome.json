@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "chrome",
+  "description": "Полоса заголовка: кнопки окна, назад и отключение. Всегда своя локальная страница.",
+  "webviews": ["chrome"],
+  "permissions": ["core:default"]
+}

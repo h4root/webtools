@@ -1,8 +1,8 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Окно ввода адреса. Странице сервера ничего из этого не достаётся.",
-  "windows": ["main"],
+  "description": "Страница выбора сервера. Странице сервера ничего из этого не достаётся: удалённым origin разрешения не выдаются, секции remote тут нет.",
+  "webviews": ["content"],
   "permissions": [
     "core:default",
     {
