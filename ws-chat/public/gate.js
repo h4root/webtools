@@ -3,6 +3,7 @@ import {
   nickForm,
   nickInput,
   passwordInput,
+  passwordField,
   gateError,
   gateHint,
   gateInsecure,
@@ -13,6 +14,7 @@ import {
   modeLoginBtn,
   modeRegisterBtn,
   modeLinkBtn,
+  gateAltBox,
   linkBackBtn,
   linkBox,
   linkCodeEl,
@@ -61,7 +63,7 @@ export function createGate({ request }) {
     const linking = next === 'link';
     gateMain.hidden = linking;
     linkBox.hidden = !linking;
-    modeLinkBtn.hidden = linking;
+    gateAltBox.hidden = linking;
     linkBackBtn.hidden = !linking;
 
     if (linking) {
@@ -73,7 +75,7 @@ export function createGate({ request }) {
     const needsPassword = next === 'login' || next === 'register';
     gateSubmit.textContent = MODES[next].label;
     gateHint.textContent = MODES[next].hint;
-    passwordInput.hidden = !needsPassword;
+    passwordField.hidden = !needsPassword;
     passwordInput.autocomplete = next === 'register' ? 'new-password' : 'current-password';
     for (const tab of gateTabs.children) tab.classList.toggle('active', tab.id === `mode-${next}`);
 

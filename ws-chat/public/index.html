@@ -21,8 +21,14 @@
         </div>
 
         <div class="gate-fields">
-          <input id="nick-input" placeholder="никнейм" maxlength="24" autocomplete="username" autofocus>
-          <input id="password-input" type="password" placeholder="пароль" maxlength="200" autocomplete="current-password" hidden>
+          <label class="field">
+            <span class="field-label">Имя пользователя</span>
+            <input id="nick-input" placeholder="ваш никнейм" maxlength="24" autocomplete="username" autofocus>
+          </label>
+          <label class="field" id="password-field" hidden>
+            <span class="field-label">Пароль</span>
+            <input id="password-input" type="password" placeholder="········" maxlength="200" autocomplete="current-password">
+          </label>
         </div>
 
         <button type="submit" id="gate-submit">Продолжить</button>
@@ -37,8 +43,12 @@
 
       <p id="gate-error" class="gate-error"></p>
 
+      <div class="gate-altbox" id="gate-altbox">
+        <div class="gate-or"><span>или</span></div>
+        <button type="button" class="gate-alt" id="mode-link">Войти с другого устройства</button>
+      </div>
+
       <div class="gate-foot">
-        <button type="button" class="gate-link" id="mode-link">Войти с другого устройства</button>
         <button type="button" class="gate-link" id="link-back" hidden>Назад ко входу</button>
       </div>
     </form>
