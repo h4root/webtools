@@ -10,6 +10,7 @@ import {
   meEl,
   channelAddBtn,
   chatTitle,
+  chatDot,
   chatKeys,
   typingEl,
   composer,
@@ -725,6 +726,10 @@ function requestHistory(target) {
 
 function updateTitle() {
   chatTitle.textContent = active.kind === 'channel' ? `# ${active.id}` : `@ ${active.id}`;
+  // Статус есть только у собеседника: у канала его быть не может.
+  const dm = active.kind === 'dm';
+  chatDot.hidden = !dm;
+  chatDot.classList.toggle('online', dm && online.some((nick) => nick.toLowerCase() === active.id.toLowerCase()));
 }
 
 async function renderPeerKeys() {

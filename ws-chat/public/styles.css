@@ -935,14 +935,28 @@ button:disabled {
   gap: 12px;
   padding: 14px 18px;
   border-bottom: 1px solid var(--line);
-  color: var(--accent);
+  color: var(--fg);
 }
 
 .chat-who {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 10px;
   min-width: 0;
+}
+
+/* Пустая — офлайн, залитая — в сети. Как в макете. */
+.chat-dot {
+  width: 7px;
+  height: 7px;
+  flex-shrink: 0;
+  border: 1px solid var(--dim);
+  border-radius: 50%;
+}
+
+.chat-dot.online {
+  background: var(--ok);
+  border-color: var(--ok);
 }
 
 .chat-keys {
