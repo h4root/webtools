@@ -1331,14 +1331,43 @@ button:disabled {
   border-top: 1px solid var(--line);
 }
 
+/* Одна обведённая строка: кнопки внутри неё, у поля своей рамки нет. */
 .composer {
   display: flex;
-  gap: 8px;
-  padding: 12px 18px;
+  align-items: center;
+  gap: 2px;
+  margin: 12px 18px;
+  padding: 3px 6px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-item);
+}
+
+.composer:focus-within {
+  border-color: var(--dim);
 }
 
 .composer input {
   flex: 1;
+  padding: 9px 6px;
+  background: transparent;
+  border: 0;
+}
+
+.composer #send-btn {
+  display: inline-flex;
+  flex-shrink: 0;
+  padding: 8px;
+  background: transparent;
+  border: 0;
+  color: var(--dim);
+}
+
+.composer #send-btn:hover:not(:disabled) {
+  color: var(--fg);
+}
+
+.attach-btn:hover {
+  color: var(--fg);
 }
 
 .voice-toggle,
@@ -1869,9 +1898,8 @@ html.motion-off *::after {
 .typing {
   min-height: 18px;
   padding: 0 18px 4px;
-  color: var(--dim);
+  color: var(--faint);
   font-size: 12px;
-  font-style: italic;
 }
 
 /* --- гамбургер + бэкдроп (адаптив) --- */
