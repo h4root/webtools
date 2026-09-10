@@ -96,8 +96,8 @@ export function createLog({ getNick, send, attachments, reactions, quote, onRepl
 
   function fillRow(row, msg) {
     row.replaceChildren();
-    if (msg.replyTo) row.appendChild(quote.render(msg.replyTo, scrollTo));
     row.appendChild(headOf(msg));
+    if (msg.replyTo) row.appendChild(quote.render(msg.replyTo, scrollTo));
 
     let mentionsMe = false;
     if (msg.text) {
