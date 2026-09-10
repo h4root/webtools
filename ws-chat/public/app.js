@@ -57,7 +57,7 @@ import { seal, open } from './e2e.js';
 import { recipientsFor } from './recipients.js';
 import { searchLocal } from './localsearch.js';
 import { createNotifier } from './notify.js';
-import { emptyLogText } from './empty.js';
+import { NO_MESSAGES } from './empty.js';
 import { createTyping } from './typing.js';
 import { createReactions } from './reactions.js';
 import { createDropZone } from './dnd.js';
@@ -166,7 +166,7 @@ const quote = createQuote({ urlOf: (att) => attachments.urlOf(att) });
 
 const lightbox = createLightbox({
   getMessages: () => convOf(activeKey()),
-  emptyText: () => emptyLogText(active),
+  emptyText: () => NO_MESSAGES,
   urlOf: (att) => attachments.urlOf(att),
 });
 
@@ -261,7 +261,7 @@ const log = createLog({
   quote,
   onReply: (msg) => reply.set(msg),
   getMessages: () => convOf(activeKey()),
-  emptyText: () => emptyLogText(active),
+  emptyText: () => NO_MESSAGES,
   onSeen: () => markActiveRead(),
   onRendered: () => search.flushJump(),
 });

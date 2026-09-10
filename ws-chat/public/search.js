@@ -79,7 +79,7 @@ export function createSearch({ send, getNick, openConversation, activeKey, findR
   function show(messages) {
     searchResults.replaceChildren();
     if (messages.length === 0) {
-      searchNote.textContent = 'Ничего не нашлось.';
+      searchNote.textContent = NO_RESULTS;
       return;
     }
     searchNote.textContent = `Нашлось: ${messages.length}`;
