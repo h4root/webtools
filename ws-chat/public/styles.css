@@ -241,7 +241,7 @@
   background: var(--scroll-thumb);
   background-clip: padding-box;
   border: 3px solid transparent;
-  border-radius: 999px;
+  border-radius: var(--radius-item);
 }
 
 ::-webkit-scrollbar-thumb:hover {
@@ -462,7 +462,7 @@ body {
   margin: 0 0 18px;
   padding: 8px 10px;
   border: 1px solid color-mix(in srgb, var(--warn) 40%, transparent);
-  border-radius: 6px;
+  border-radius: var(--radius-item);
   background: color-mix(in srgb, var(--warn) 12%, transparent);
   color: var(--warn);
   font-size: 12px;
@@ -609,7 +609,7 @@ button:disabled {
   padding: 8px;
   background: var(--panel);
   border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: var(--radius-item);
   color: var(--fg);
   font-weight: 500;
 }
@@ -658,7 +658,7 @@ button:disabled {
   align-items: center;
   justify-content: space-between;
   padding: 8px 10px;
-  border-radius: 6px;
+  border-radius: var(--radius-item);
   cursor: pointer;
   color: var(--dim);
 }
@@ -682,7 +682,7 @@ button:disabled {
   height: 18px;
   padding: 0 5px;
   background: var(--accent);
-  border-radius: 9px;
+  border-radius: var(--radius-item);
   color: var(--on-accent);
   font-size: 11px;
   font-weight: 600;
@@ -714,7 +714,7 @@ button:disabled {
   z-index: 5;
   padding: 6px 14px;
   border: 1px solid var(--line);
-  border-radius: 999px;
+  border-radius: var(--radius-item);
   background: var(--panel);
   color: var(--fg);
   font-family: var(--font);
@@ -761,7 +761,7 @@ button:disabled {
 .settings-password input {
   padding: 6px 8px;
   border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: var(--radius-item);
   background: var(--control);
   color: var(--fg);
   font-family: var(--font);
@@ -771,7 +771,7 @@ button:disabled {
 .settings-password button {
   padding: 6px 10px;
   border: 1px solid var(--accent);
-  border-radius: 6px;
+  border-radius: var(--radius-item);
   background: transparent;
   color: var(--accent);
   font-family: var(--font);
@@ -792,7 +792,7 @@ button:disabled {
   gap: 8px;
   padding: 12px;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--radius-item);
   background: var(--panel);
 }
 
@@ -810,7 +810,7 @@ button:disabled {
   text-align: center;
   user-select: all;
   cursor: pointer;
-  border-radius: 6px;
+  border-radius: var(--radius-item);
   padding: 4px 0;
 }
 
@@ -872,7 +872,7 @@ button:disabled {
   gap: 8px;
   padding: 5px 8px;
   border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: var(--radius-item);
 }
 
 .device.current {
@@ -893,7 +893,7 @@ button:disabled {
 .device button {
   padding: 2px 8px;
   border: 1px solid var(--line);
-  border-radius: 5px;
+  border-radius: var(--radius-item);
   background: transparent;
   color: var(--dim);
   font-family: var(--font);
@@ -910,7 +910,7 @@ button:disabled {
   width: 100%;
   padding: 6px 10px;
   border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: var(--radius-item);
   background: transparent;
   color: var(--fg);
   font-family: var(--font);
@@ -963,7 +963,7 @@ button:disabled {
   padding: 2px 8px;
   background: transparent;
   border: 1px solid var(--line);
-  border-radius: 999px;
+  border-radius: var(--radius-item);
   color: var(--dim);
   font: inherit;
   font-size: 11px;
@@ -998,7 +998,7 @@ button:disabled {
   padding: 6px 11px;
   background: var(--control);
   border: 1px solid var(--line);
-  border-radius: 999px;
+  border-radius: var(--radius-item);
   color: var(--fg);
   font: inherit;
   font-size: 12.5px;
@@ -1042,7 +1042,7 @@ button:disabled {
   padding: 6px 12px;
   background: var(--panel);
   border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: var(--radius-item);
   color: var(--fg);
   font-size: 13px;
   cursor: pointer;
@@ -1064,7 +1064,7 @@ button:disabled {
   padding: 12px 16px;
   background: var(--panel);
   border: 1px solid var(--accent);
-  border-radius: 10px;
+  border-radius: var(--radius-item);
   box-shadow: var(--shadow-pop);
   z-index: 20;
 }
@@ -1078,7 +1078,7 @@ button:disabled {
   padding: 6px 12px;
   background: var(--accent);
   border: none;
-  border-radius: 6px;
+  border-radius: var(--radius-item);
   color: var(--on-accent);
   font-weight: 600;
   cursor: pointer;
@@ -1088,7 +1088,7 @@ button:disabled {
   padding: 6px 12px;
   background: transparent;
   border: 1px solid var(--danger);
-  border-radius: 6px;
+  border-radius: var(--radius-item);
   color: var(--danger);
   cursor: pointer;
 }
@@ -1104,7 +1104,7 @@ button:disabled {
   padding: 14px;
   background: var(--panel);
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--radius-item);
   box-shadow: var(--shadow-pop);
   z-index: 20;
 }
@@ -1124,7 +1124,7 @@ button:disabled {
 .party .ring {
   width: 12px;
   height: 12px;
-  border-radius: 50%;
+  border-radius: var(--radius-item);
   border: 2px solid var(--line);
   flex-shrink: 0;
 }
@@ -1145,7 +1145,7 @@ button:disabled {
   flex: 1;
   height: 6px;
   background: var(--line);
-  border-radius: 3px;
+  border-radius: var(--radius-item);
   overflow: hidden;
 }
 
@@ -1200,7 +1200,7 @@ button:disabled {
 .call-hangup {
   flex: 1;
   padding: 8px;
-  border-radius: 6px;
+  border-radius: var(--radius-item);
   cursor: pointer;
   font-weight: 500;
 }
@@ -1397,7 +1397,7 @@ button:disabled {
   width: 36px;
   height: 4px;
   margin: 2px auto 0;
-  border-radius: 2px;
+  border-radius: var(--radius-item);
   background: var(--line);
 }
 
@@ -1414,7 +1414,7 @@ button:disabled {
   padding: 8px;
   background: var(--panel);
   border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: var(--radius-item);
   color: var(--fg);
   cursor: pointer;
 }
@@ -1442,7 +1442,7 @@ button:disabled {
   transition: opacity 0.16s ease, transform 0.16s ease;
   background: var(--panel);
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--radius-item);
   box-shadow: var(--shadow-pop);
   z-index: 25;
 }
@@ -1507,7 +1507,7 @@ button:disabled {
   background: var(--control);
   color: var(--fg);
   border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: var(--radius-item);
   font-family: inherit;
   font-size: 13px;
 }
@@ -1537,7 +1537,7 @@ button:disabled {
   background: var(--control);
   color: var(--fg);
   border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: var(--radius-item);
   cursor: pointer;
 }
 
@@ -1552,7 +1552,7 @@ button:disabled {
   background: var(--control);
   color: var(--fg);
   border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: var(--radius-item);
   cursor: pointer;
 }
 
@@ -1797,7 +1797,7 @@ html.motion-off *::after {
   padding: 0;
   background: transparent;
   border: none;
-  border-radius: 4px;
+  border-radius: var(--radius-item);
   color: var(--dim);
   cursor: pointer;
 }
@@ -1847,7 +1847,7 @@ html.motion-off *::after {
 
 .mention.me {
   background: var(--accent-soft);
-  border-radius: 4px;
+  border-radius: var(--radius-item);
   padding: 0 2px;
 }
 
@@ -1865,7 +1865,7 @@ html.motion-off *::after {
   padding: 2px;
   background: var(--bg);
   border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: var(--radius-item);
 }
 
 .row:hover .row-actions {
@@ -1890,7 +1890,7 @@ html.motion-off *::after {
   padding: 4px 8px;
   background: var(--control);
   border: 1px solid var(--accent);
-  border-radius: 6px;
+  border-radius: var(--radius-item);
   color: var(--fg);
   outline: none;
 }
@@ -1975,7 +1975,7 @@ html.motion-off *::after {
   padding: 1px 7px;
   background: var(--control);
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: var(--radius-item);
   color: var(--fg);
   font-size: 12px;
   line-height: 1.5;
@@ -2020,7 +2020,7 @@ html.motion-off *::after {
   padding: 4px;
   background: var(--panel);
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: var(--radius-item);
   box-shadow: var(--shadow-pop);
   z-index: 40;
   animation: pop-in 0.16s ease;
@@ -2030,7 +2030,7 @@ html.motion-off *::after {
   padding: 3px 5px;
   background: transparent;
   border: none;
-  border-radius: 8px;
+  border-radius: var(--radius-item);
   font-size: 18px;
   line-height: 1;
   cursor: pointer;
@@ -2164,7 +2164,7 @@ html.motion-off *::after {
   gap: 8px;
   padding: 6px 8px;
   background: var(--control);
-  border-radius: 6px;
+  border-radius: var(--radius-item);
 }
 
 .voice-conn {
@@ -2193,7 +2193,7 @@ html.motion-off *::after {
   padding: 5px;
   background: transparent;
   border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: var(--radius-item);
   color: var(--fg);
   cursor: pointer;
   transition: border-color 0.15s ease, color 0.15s ease;
@@ -2248,7 +2248,7 @@ html.motion-off *::after {
 }
 
 .nav-add {
-  border-radius: 6px;
+  border-radius: var(--radius-item);
 }
 
 .channel {
@@ -2325,7 +2325,7 @@ html.motion-off *::after {
   min-width: 0;
   padding: 7px 10px;
   background: var(--control);
-  border-radius: 999px;
+  border-radius: var(--radius-item);
   color: var(--fg);
   font: inherit;
   font-size: 12.5px;
@@ -2421,7 +2421,7 @@ html.motion-off *::after {
 .peer {
   padding: 8px 10px;
   border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: var(--radius-item);
   cursor: pointer;
 }
 
@@ -2433,7 +2433,7 @@ html.motion-off *::after {
 .ask {
   padding: 10px;
   border: 1px solid var(--accent);
-  border-radius: 8px;
+  border-radius: var(--radius-item);
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -2465,7 +2465,7 @@ html.motion-off *::after {
 .ask-actions button {
   padding: 5px 12px;
   border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: var(--radius-item);
   background: transparent;
   color: var(--fg);
   font-family: var(--font);
@@ -2505,7 +2505,7 @@ html.motion-off *::after {
   flex: none;
   padding: 2px 8px;
   border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: var(--radius-item);
   background: transparent;
   color: var(--dim);
   font: inherit;
@@ -2525,7 +2525,7 @@ html.motion-off *::after {
 
 .transfer .bar {
   height: 4px;
-  border-radius: 2px;
+  border-radius: var(--radius-item);
   background: var(--line);
   overflow: hidden;
 }
@@ -2704,7 +2704,7 @@ html.motion-off *::after {
   padding: 3px 8px 3px 7px;
   border: none;
   border-left: 3px solid var(--accent);
-  border-radius: 5px;
+  border-radius: var(--radius-item);
   background: color-mix(in srgb, var(--accent) 12%, transparent);
   color: inherit;
   font: inherit;
@@ -2725,7 +2725,7 @@ div.reply-quote {
   flex: none;
   width: 32px;
   height: 32px;
-  border-radius: 4px;
+  border-radius: var(--radius-item);
   object-fit: cover;
 }
 
@@ -2769,7 +2769,7 @@ div.reply-quote {
   display: block;
   max-width: 100%;
   max-height: 260px;
-  border-radius: 8px;
+  border-radius: var(--radius-item);
 }
 
 .att-file {
@@ -2780,7 +2780,7 @@ div.reply-quote {
   padding: 8px 10px;
   background: var(--control);
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--radius-item);
   color: var(--fg);
   text-decoration: none;
 }
@@ -2858,7 +2858,7 @@ div.reply-quote {
   padding: 3px 4px 3px 8px;
   background: var(--panel);
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--radius-item);
   font-size: 12px;
 }
 
@@ -2919,7 +2919,7 @@ div.reply-quote {
   flex-direction: column;
   background: var(--panel);
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--radius-item);
   box-shadow: var(--shadow-pop);
 }
 
@@ -2933,7 +2933,7 @@ div.reply-quote {
 .ctx-item {
   padding: 7px 10px;
   border: 0;
-  border-radius: 6px;
+  border-radius: var(--radius-item);
   background: transparent;
   color: var(--fg);
   font: inherit;
@@ -2988,7 +2988,7 @@ div.reply-quote {
 .lb-image {
   max-width: 92vw;
   max-height: 84vh;
-  border-radius: 6px;
+  border-radius: var(--radius-item);
   object-fit: contain;
 }
 
@@ -3000,7 +3000,7 @@ div.reply-quote {
   max-width: calc(100% - 32px);
   padding: 5px 12px;
   background: rgba(0, 0, 0, 0.55);
-  border-radius: 999px;
+  border-radius: var(--radius-item);
   color: var(--fg);
   font-size: 12px;
   text-align: center;
@@ -3018,7 +3018,7 @@ div.reply-quote {
   padding: 8px;
   background: var(--lb-btn);
   border: none;
-  border-radius: 50%;
+  border-radius: var(--radius-item);
   color: var(--fg);
   cursor: pointer;
 }
