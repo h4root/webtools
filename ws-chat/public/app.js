@@ -11,6 +11,7 @@ import {
   channelAddBtn,
   chatTitle,
   chatDot,
+  chatMenuBtn,
   chatKeys,
   typingEl,
   composer,
@@ -181,7 +182,7 @@ function copy(text, done) {
   );
 }
 
-createContextMenu({
+const chatMenu = createContextMenu({
   getNick: () => myNick,
   findMessage: (id) => findMessage(id),
   channelCount: () => channels.length,
@@ -884,6 +885,16 @@ searchBtn.addEventListener('click', () => {
   showPanel(search.isOpen() ? null : 'search');
 });
 
+chatMenuBtn.addEventListener('click', (event) => {
+  // Меню закрывается по клику на документе, а этот клик туда всплывает.
+  event.stopPropagation();
+  const context =
+    active.kind === 'channel'
+      ? { channel: { name: active.id, last: channels.length <= 1 } }
+      : { nick: active.id };
+  chatMenu.openFor(context, chatMenuBtn);
+});
+
 searchInput.addEventListener('input', () => {
   if (searchInput.value.trim()) showPanel('search');
   else search.setPanel(false);
@@ -913,6 +924,7 @@ function initUI() {
   searchNote.textContent = search.hint;
   setButton(sendBtn, 'chevron-right');
   setButton(attachBtn, 'paperclip');
+  setButton(chatMenuBtn, 'menu');
   channelAddBtn.appendChild(icon('plus', 16));
   voiceAddBtn.appendChild(icon('plus', 16));
   menuBtn.appendChild(icon('menu', 20));

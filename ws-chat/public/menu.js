@@ -80,6 +80,15 @@ export function createContextMenu({ getNick, findMessage, channelCount, voiceCur
     place(node, x, y);
   }
 
+  // Меню открывает и кнопка в шапке: у неё нет предков, из которых
+  // targetAt вывел бы цель, поэтому цель приходит готовой.
+  function openFor(context, anchor) {
+    const items = planMenu({ ...context, me: getNick(), canCopy: canCopy() });
+    if (items.length === 0) return;
+    const box = anchor.getBoundingClientRect();
+    open(box.left, box.bottom + 4, items, context);
+  }
+
   document.addEventListener('contextmenu', (event) => {
     if (event.target.closest('input, textarea')) return;
 
@@ -100,5 +109,5 @@ export function createContextMenu({ getNick, findMessage, channelCount, voiceCur
     if (event.key === 'Escape') close();
   });
 
-  return { close, isOpen: () => Boolean(node) };
+  return { close, isOpen: () => Boolean(node), openFor };
 }
