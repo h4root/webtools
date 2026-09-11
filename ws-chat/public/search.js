@@ -1,14 +1,16 @@
 import { timeLabel, isNarrow } from './format.js';
 import { keyOf, targetOf } from './keys.js';
 import { searchBtn, searchPanel, searchInput, searchNote, searchResults } from './dom.js';
+import { mergeHits } from './localsearch.js';
 
-const HINT = 'Каналы и личные переписки.';
+const HINT = 'Каналы ищет сервер, личные — это устройство среди открытых переписок.';
 const DEBOUNCE_MS = 250;
 
-export function createSearch({ send, getNick, openConversation, activeKey, findRow, scrollToMessage, historyArrived }) {
+export function createSearch({ send, getNick, openConversation, activeKey, findRow, scrollToMessage, historyArrived, localHits }) {
   let query = '';
   let timer = null;
   let jump = null;
+  let mine = [];
 
   function setPanel(open) {
     searchPanel.hidden = !open;
@@ -19,6 +21,7 @@ export function createSearch({ send, getNick, openConversation, activeKey, findR
   function clear() {
     searchInput.value = '';
     query = '';
+    mine = [];
     searchResults.replaceChildren();
     setPanel(false);
   }
@@ -30,11 +33,13 @@ export function createSearch({ send, getNick, openConversation, activeKey, findR
   function run() {
     query = searchInput.value.trim();
     if (!query) {
+      mine = [];
       searchResults.replaceChildren();
       searchNote.textContent = HINT;
       return;
     }
-    searchNote.textContent = 'Ищем…';
+    mine = localHits(query);
+    show(mine);
     send({ type: 'search', query });
   }
 
@@ -71,16 +76,19 @@ export function createSearch({ send, getNick, openConversation, activeKey, findR
     return li;
   }
 
-  function renderResults(forQuery, messages) {
-    if (forQuery !== query) return;
+  function show(messages) {
     searchResults.replaceChildren();
-
     if (messages.length === 0) {
       searchNote.textContent = 'Ничего не нашлось.';
       return;
     }
     searchNote.textContent = `Нашлось: ${messages.length}`;
     for (const msg of messages) searchResults.append(hitNode(msg));
+  }
+
+  function renderResults(forQuery, messages) {
+    if (forQuery !== query) return;
+    show(mergeHits(messages, mine));
   }
 
   function flushJump() {
@@ -100,6 +108,7 @@ export function createSearch({ send, getNick, openConversation, activeKey, findR
     clearTimeout(timer);
     query = '';
     jump = null;
+    mine = [];
     searchInput.value = '';
     searchResults.replaceChildren();
     searchNote.textContent = HINT;

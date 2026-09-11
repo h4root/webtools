@@ -55,6 +55,7 @@ import { avatarHue } from './grouping.js';
 import { deviceKey, deviceId, keyFingerprint } from './devicekey.js';
 import { seal, open } from './e2e.js';
 import { recipientsFor } from './recipients.js';
+import { searchLocal } from './localsearch.js';
 import { createNotifier } from './notify.js';
 import { emptyLogText } from './empty.js';
 import { createTyping } from './typing.js';
@@ -278,6 +279,7 @@ const search = createSearch({
   findRow: (id) => log.rowOf(id),
   scrollToMessage: (id) => log.scrollTo(id),
   historyArrived: (key) => historyReady.has(key),
+  localHits: (query) => searchLocal(conversations, myNick, query),
 });
 
 function sendHello() {
@@ -350,7 +352,11 @@ async function sealText(nick, text) {
 }
 
 async function unseal(msg) {
-  if (msg.enc) msg.text = (await open(msg.enc, myKey ?? {})) ?? LOCKED_TEXT;
+  if (msg.enc) {
+    const text = await open(msg.enc, myKey ?? {});
+    msg.text = text ?? LOCKED_TEXT;
+    msg.locked = text === null;
+  }
   if (msg.replyTo?.enc) msg.replyTo.text = (await open(msg.replyTo.enc, myKey ?? {})) ?? LOCKED_TEXT;
 }
 
