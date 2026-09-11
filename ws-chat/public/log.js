@@ -5,6 +5,7 @@ import { splitText, shortenUrl } from './linkify.js';
 import { timeLabel } from './format.js';
 import { sameDay, dayLabel } from './days.js';
 import { sameGroup } from './grouping.js';
+import { paintNick } from './nickcolor.js';
 import { logEl, logEmpty, jumpNewBtn } from './dom.js';
 
 const BOTTOM_SLACK_PX = 80;
@@ -28,6 +29,7 @@ export function createLog({ getNick, send, attachments, reactions, quote, onRepl
         const span = document.createElement('span');
         span.className = 'mention';
         span.textContent = part.value;
+        paintNick(span, part.value.slice(1));
         if (part.value.slice(1).toLowerCase() === getNick().toLowerCase()) {
           span.classList.add('me');
           mentionsMe = true;
@@ -83,6 +85,7 @@ export function createLog({ getNick, send, attachments, reactions, quote, onRepl
     const who = document.createElement('span');
     who.className = 'who';
     who.textContent = `<${msg.from}>`;
+    paintNick(who, msg.from);
     head.append(who, ` — [${timeLabel(msg.ts)}]`);
 
     if (msg.edited) {

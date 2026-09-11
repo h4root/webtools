@@ -1,4 +1,5 @@
 import { icon } from './icons.js';
+import { paintNick } from './nickcolor.js';
 import { keyOf } from './keys.js';
 import { isOnline, orderDms } from './roster.js';
 import { NO_DMS } from './empty.js';
@@ -77,6 +78,7 @@ export function createNav({ getState, send, onOpen }) {
     const name = document.createElement('span');
     name.className = 'm-name';
     name.textContent = nick === me ? `${nick} (вы)` : nick;
+    paintNick(name, nick);
     row.append(name);
     if (nick !== me) row.addEventListener('click', () => onOpen('dm', nick));
     return row;

@@ -1253,11 +1253,7 @@ button:disabled {
 }
 
 .who {
-  color: var(--dim);
-}
-
-.row.mine .who {
-  color: var(--accent);
+  font-weight: 600;
 }
 
 .head .edited {
@@ -1846,7 +1842,6 @@ html.motion-off *::after {
 }
 
 .mention {
-  color: var(--accent);
   font-weight: 600;
 }
 
@@ -2756,7 +2751,6 @@ div.reply-quote {
 }
 
 .rq-who {
-  color: var(--accent);
   font-size: 11.5px;
   font-weight: 700;
   overflow: hidden;

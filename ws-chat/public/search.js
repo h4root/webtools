@@ -1,5 +1,6 @@
 import { timeLabel, isNarrow } from './format.js';
 import { keyOf, targetOf } from './keys.js';
+import { paintNick } from './nickcolor.js';
 import { searchBtn, searchPanel, searchInput, searchNote, searchResults } from './dom.js';
 import { mergeHits } from './localsearch.js';
 
@@ -65,7 +66,11 @@ export function createSearch({ send, getNick, openConversation, activeKey, findR
 
     const body = document.createElement('div');
     body.className = 'search-hit-body';
-    body.textContent = `${msg.from}: ${msg.text}`;
+    const who = document.createElement('span');
+    who.className = 'hit-who';
+    who.textContent = `${msg.from}: `;
+    paintNick(who, msg.from);
+    body.append(who, msg.text);
 
     li.append(head, body);
     li.addEventListener('click', () => {

@@ -1,4 +1,5 @@
 import { isImage, replyPreview } from './media.js';
+import { paintNick } from './nickcolor.js';
 
 export function createQuote({ urlOf }) {
   function thumb(media) {
@@ -32,6 +33,7 @@ export function createQuote({ urlOf }) {
     const who = document.createElement('span');
     who.className = 'rq-who';
     who.textContent = ref.from;
+    paintNick(who, ref.from);
     const text = document.createElement('span');
     text.className = 'rq-text';
     text.textContent = replyPreview(ref);

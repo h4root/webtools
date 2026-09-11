@@ -29,6 +29,7 @@ export function createVoiceView({ voice, send, getState, onError }) {
     const item = document.createElement('li');
     const label = document.createElement('span');
     label.textContent = nick === me ? `${nick} (вы)` : nick;
+    paintNick(label, nick);
     item.appendChild(label);
     if (channel === joined && voice.isMuted(nick)) {
       item.classList.add('muted');

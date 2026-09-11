@@ -57,6 +57,7 @@ import { deviceKey, deviceId, keyFingerprint } from './devicekey.js';
 import { seal, open } from './e2e.js';
 import { recipientsFor } from './recipients.js';
 import { searchLocal } from './localsearch.js';
+import { paintNick } from './nickcolor.js';
 import { createNotifier } from './notify.js';
 import { NO_MESSAGES } from './empty.js';
 import { createTyping } from './typing.js';
@@ -629,6 +630,7 @@ function enterApp() {
   const name = document.createElement('span');
   name.className = isGuest ? 'me-name guest' : 'me-name';
   name.textContent = `@${myNick}`;
+  paintNick(name, myNick);
   meEl.replaceChildren(name);
   renderChannels();
   updateTitle();
