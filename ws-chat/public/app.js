@@ -429,6 +429,7 @@ function handleServer(message) {
       online = message.users.filter((nick) => nick !== myNick);
       renderChannels();
       nav.renderMembers();
+      updateTitle();
       call.handlePresence(message.users);
       break;
     case 'dms':
