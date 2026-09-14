@@ -179,6 +179,20 @@ describe('Hub', () => {
     expect(edited).toMatchObject({ id, enc: sealed('after') });
   });
 
+  it('не даёт запечатать правкой сообщение в канале: там его никто не расшифрует', () => {
+    const alice = makeClient('alice');
+    const bob = makeClient('bob');
+    hub.join(alice, 'alice');
+    hub.join(bob, 'bob');
+
+    hub.handle(bob, JSON.stringify({ type: 'message', channel: 'general', text: 'открытым текстом' }));
+    const id = lastMessage(alice)!.id;
+    hub.handle(bob, JSON.stringify({ type: 'edit', id, text: '', enc: sealed('sealedEdit') }));
+
+    expect(alice.inbox.filter((m) => m.type === 'edited')).toHaveLength(0);
+    expect(lastMessage(alice)?.text).toBe('открытым текстом');
+  });
+
   it('считает бюджет флуда на аккаунт, а не на сокет', () => {
     const laptop = makeClient('laptop');
     const phone = makeClient('phone');

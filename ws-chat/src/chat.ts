@@ -531,6 +531,7 @@ export class Hub {
   }
 
   private editMessage(client: Client, id: number, text: string, enc?: Envelope): void {
+    if (enc && this.store.find(id)?.to === undefined) return;
     const message = this.store.edit(id, client.nick!, text, enc);
     if (!message) return;
     this.dispatch(recipientsOf(message), { type: 'edited', id, text: message.text, enc });
