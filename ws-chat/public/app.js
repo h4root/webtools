@@ -57,6 +57,7 @@ import { deviceKey, deviceId, keyFingerprint } from './devicekey.js';
 import { seal, open } from './e2e.js';
 import { recipientsFor } from './recipients.js';
 import { searchLocal } from './localsearch.js';
+import { createKeyCache } from './keycache.js';
 import { paintNick } from './nickcolor.js';
 import { createNotifier } from './notify.js';
 import { NO_MESSAGES } from './empty.js';
@@ -87,7 +88,7 @@ let staleClient = false;
 let myKey = null;
 let peerKeys = null;
 let myDevices = [];
-const keysByNick = new Map();
+const keyCache = createKeyCache({ request: (nick) => send({ type: 'keys', nick }) });
 let intake = Promise.resolve();
 
 const LOCKED_TEXT = 'не удалось расшифровать';
@@ -332,19 +333,15 @@ async function publishKey() {
 
 async function rememberKeys({ nick, devices }) {
   const known = await Promise.all(devices.map(async (item) => ({ ...item, id: await deviceId(item.key) })));
-  keysByNick.set(nick.toLowerCase(), known);
+  keyCache.remember(nick, known);
   if (nick.toLowerCase() === myNick.toLowerCase()) myDevices = known;
 }
 
-function sealingFor(nick) {
-  const peer = keysByNick.get(nick.toLowerCase()) ?? [];
-  if (peer.length === 0 || !myKey) return null;
-  return recipientsFor(peer, myDevices, [{ id: myKey.id, key: myKey.published }]);
-}
-
 async function sealText(nick, text) {
-  const recipients = text ? sealingFor(nick) : null;
-  if (!recipients) return null;
+  if (!text || !myKey) return null;
+  const peer = await keyCache.get(nick);
+  if (peer.length === 0) return null;
+  const recipients = recipientsFor(peer, myDevices, [{ id: myKey.id, key: myKey.published }]);
   try {
     return await seal(text, recipients);
   } catch (error) {
@@ -500,13 +497,13 @@ function handleServer(message) {
       sessionsNote?.(message.list);
       break;
     case 'keys':
-      enqueue(async () => {
+      void (async () => {
         await rememberKeys(message);
         if (active.kind === 'dm' && active.id.toLowerCase() === message.nick.toLowerCase()) {
           peerKeys = message.devices;
           await renderPeerKeys();
         }
-      });
+      })();
       break;
     case 'link-code':
       gate.showLinkCode(message.code, message.expiresAt);
@@ -584,6 +581,7 @@ function returnToGate(reason) {
   renderDocumentTitle();
   dmPartners = [];
   online = [];
+  keyCache.clear();
   attachments.releaseUrls();
   lightbox.close();
   log.clear();
@@ -708,7 +706,7 @@ function openConversation(kind, id) {
   active = { kind, id };
   peerKeys = null;
   chatKeys.hidden = true;
-  if (kind === 'dm') send({ type: 'keys', nick: id });
+  if (kind === 'dm') void keyCache.get(id);
   unread.set(activeKey(), 0);
   updateTitle();
   renderChannels();
