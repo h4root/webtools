@@ -220,6 +220,10 @@ function parseAttachments(value: unknown): AttachmentRef[] | null {
   return out;
 }
 
+function isMessageId(value: unknown): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value > 0;
+}
+
 function isBase64(value: unknown, max: number): value is string {
   return typeof value === 'string' && value.length > 0 && value.length <= max && BASE64.test(value);
 }
@@ -323,7 +327,7 @@ export function parseClientMessage(raw: string): ClientMessage | null {
       return isBoundedString(data.query, SEARCH_QUERY_MAX) ? { type: 'search', query: data.query.trim() } : null;
     case 'read': {
       const target = parseTarget(data);
-      if (!target || typeof data.id !== 'number' || !Number.isInteger(data.id) || data.id <= 0) return null;
+      if (!target || !isMessageId(data.id)) return null;
       return { type: 'read', ...target, id: data.id };
     }
     case 'typing': {
@@ -331,16 +335,16 @@ export function parseClientMessage(raw: string): ClientMessage | null {
       return target ? { type: 'typing', ...target } : null;
     }
     case 'edit': {
-      if (typeof data.id !== 'number') return null;
+      if (!isMessageId(data.id)) return null;
       const enc = data.enc === undefined ? undefined : parseEnvelope(data.enc);
       if (data.enc !== undefined && !enc) return null;
       if (enc) return { type: 'edit', id: data.id, text: '', enc };
       return isBoundedString(data.text, TEXT_MAX) ? { type: 'edit', id: data.id, text: data.text } : null;
     }
     case 'delete':
-      return typeof data.id === 'number' ? { type: 'delete', id: data.id } : null;
+      return isMessageId(data.id) ? { type: 'delete', id: data.id } : null;
     case 'react':
-      if (typeof data.id !== 'number' || typeof data.emoji !== 'string' || !REACTIONS.includes(data.emoji)) return null;
+      if (!isMessageId(data.id) || typeof data.emoji !== 'string' || !REACTIONS.includes(data.emoji)) return null;
       return { type: 'react', id: data.id, emoji: data.emoji };
     case 'voice-channel-create':
       return isValidChannelName(data.name) ? { type: 'voice-channel-create', name: data.name } : null;
