@@ -1,6 +1,6 @@
 import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes } from 'node:crypto';
 import { gzipSync, gunzipSync } from 'node:zlib';
-import { chmodSync, mkdirSync, readFileSync, readdirSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
+import { chmodSync, closeSync, mkdirSync, openSync, readFileSync, readSync, readdirSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 const MAGIC = Buffer.from('WSC1');
@@ -78,10 +78,37 @@ export class BlobStore {
 
   stat(id: string): BlobMeta | null {
     if (!BLOB_ID.test(id)) return null;
+
+    let file: number;
     try {
-      const head = readFileSync(this.pathFor(id));
-      const meta = this.readMeta(head);
+      file = openSync(this.pathFor(id), 'r');
+    } catch {
+      return null;
+    }
+
+    try {
+      const head = Buffer.alloc(HEAD_LEN);
+      if (readSync(file, head, 0, HEAD_LEN, 0) < HEAD_LEN) return null;
+      if (!head.subarray(0, MAGIC.length).equals(MAGIC)) return null;
+
+      const metaLen = head.readUInt16BE(MAGIC.length);
+      const metaBuf = Buffer.alloc(metaLen);
+      if (readSync(file, metaBuf, 0, metaLen, HEAD_LEN) < metaLen) return null;
+
+      const meta = this.parseMeta(metaBuf);
       return meta && { id, size: meta.size, mime: meta.mime };
+    } catch {
+      return null;
+    } finally {
+      closeSync(file);
+    }
+  }
+
+  private parseMeta(raw: Buffer): StoredMeta | null {
+    try {
+      const meta = JSON.parse(raw.toString('utf8'));
+      if (typeof meta?.mime !== 'string' || typeof meta?.size !== 'number') return null;
+      return { mime: meta.mime, size: meta.size, gz: Boolean(meta.gz) };
     } catch {
       return null;
     }
@@ -91,13 +118,7 @@ export class BlobStore {
     if (raw.length < HEAD_LEN || !raw.subarray(0, MAGIC.length).equals(MAGIC)) return null;
     const metaLen = raw.readUInt16BE(MAGIC.length);
     if (raw.length < HEAD_LEN + metaLen + IV_LEN + TAG_LEN) return null;
-    try {
-      const meta = JSON.parse(raw.subarray(HEAD_LEN, HEAD_LEN + metaLen).toString('utf8'));
-      if (typeof meta?.mime !== 'string' || typeof meta?.size !== 'number') return null;
-      return { mime: meta.mime, size: meta.size, gz: Boolean(meta.gz) };
-    } catch {
-      return null;
-    }
+    return this.parseMeta(raw.subarray(HEAD_LEN, HEAD_LEN + metaLen));
   }
 
   open(id: string): { data: Buffer; meta: BlobMeta } | null {

@@ -98,6 +98,17 @@ describe('BlobStore', () => {
     expect(blobs.stat('a'.repeat(32))).toBeNull();
   });
 
+  it('stat обходится заголовком, не трогая тело блоба', () => {
+    const big = randomBytes(256 * 1024);
+    const { id } = blobs.put(big, 'application/octet-stream');
+    const file = join(dir, id);
+    const whole = readFileSync(file);
+    writeFileSync(file, whole.subarray(0, 6 + whole.readUInt16BE(4)));
+
+    expect(blobs.stat(id)).toEqual({ id, size: big.length, mime: 'application/octet-stream' });
+    expect(blobs.open(id)).toBeNull();
+  });
+
   it('sweep выносит только то, на что не осталось ссылок', () => {
     const keep = blobs.put(Buffer.from('нужный'), 'text/plain').id;
     const drop = blobs.put(Buffer.from('осиротевший'), 'text/plain').id;
