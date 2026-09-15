@@ -226,7 +226,8 @@ function isBase64(value: unknown, max: number): value is string {
 
 function parseEnvelope(value: unknown): Envelope | null {
   if (!isRecord(value) || value.v !== ENC_VERSION) return null;
-  if (!DEVICE_KEY.test(String(value.epk))) return null;
+  const epk = value.epk;
+  if (typeof epk !== 'string' || !DEVICE_KEY.test(epk)) return null;
   if (!isBase64(value.iv, 32) || !isBase64(value.ct, ENC_CT_MAX)) return null;
   if (!Array.isArray(value.to) || value.to.length === 0 || value.to.length > ENC_DEVICES_MAX) return null;
 
@@ -238,7 +239,7 @@ function parseEnvelope(value: unknown): Envelope | null {
     if (!isBase64(iv, 32) || !isBase64(ct, 256)) return null;
     to.push({ id, iv, ct });
   }
-  return { v: ENC_VERSION, epk: value.epk as string, iv: value.iv, ct: value.ct, to };
+  return { v: ENC_VERSION, epk, iv: value.iv, ct: value.ct, to };
 }
 
 export function parseClientMessage(raw: string): ClientMessage | null {
