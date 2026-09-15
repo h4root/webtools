@@ -10,6 +10,7 @@ const KEY_LEN = 32;
 const HEAD_LEN = MAGIC.length + 2;
 
 export const BLOB_ID = /^[a-f0-9]{32}$/;
+const BLOB_TMP = /^[a-f0-9]{32}\.tmp$/;
 
 const GZIP_MIN_GAIN = 0.95;
 
@@ -166,7 +167,8 @@ export class BlobStore {
     }
     const cutoff = Date.now() - minAgeMs;
     for (const name of names) {
-      if (!BLOB_ID.test(name) || keep.has(name)) continue;
+      const orphan = BLOB_TMP.test(name) || (BLOB_ID.test(name) && !keep.has(name));
+      if (!orphan) continue;
       try {
         if (minAgeMs > 0 && statSync(join(this.dir, name)).mtimeMs > cutoff) continue;
         unlinkSync(join(this.dir, name));

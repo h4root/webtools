@@ -118,6 +118,15 @@ describe('BlobStore', () => {
     expect(blobs.open(drop)).toBeNull();
   });
 
+  it('sweep убирает огрызки от прерванной записи', () => {
+    const keep = blobs.put(Buffer.from('нужный'), 'text/plain').id;
+    const half = join(dir, `${'b'.repeat(32)}.tmp`);
+    writeFileSync(half, 'недописанное');
+
+    expect(blobs.sweep(new Set([keep]))).toBe(1);
+    expect(readdirSync(dir)).toEqual([keep]);
+  });
+
   it('sweep щадит свежезалитое, на что ссылок ещё нет', () => {
     const pending = blobs.put(Buffer.from('ещё не отправлено'), 'text/plain').id;
 
