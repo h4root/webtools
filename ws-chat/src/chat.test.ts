@@ -1306,6 +1306,24 @@ describe('Hub: вход и выход', () => {
     expect(after?.type === 'sessions' && after.list).toHaveLength(1);
   });
 
+  it('отзыв собственной сессии выбрасывает и само соединение', async () => {
+    const laptop = makeClient('laptop');
+    await auth(laptop, { mode: 'register', nick: 'alice', password: 'достаточно-длинный', device: 'Mac' });
+    const laptopToken = welcomeOf(laptop)!.token;
+
+    hub.handle(laptop, JSON.stringify({ type: 'sessions' }));
+    const list = laptop.inbox.filter((m) => m.type === 'sessions').at(-1);
+    const mine = list?.type === 'sessions' ? list.list.find((s) => s.current)! : null;
+    hub.handle(laptop, JSON.stringify({ type: 'session-revoke', id: mine!.id }));
+
+    expect(laptop.closed).toBe(true);
+    expect(laptop.inbox.some((m) => m.type === 'logged-out')).toBe(true);
+
+    const returning = makeClient('returning');
+    await auth(returning, { mode: 'resume', token: laptopToken });
+    expect(returning.nick).toBeNull();
+  });
+
   it('не даёт отозвать чужую сессию', async () => {
     const alice = makeClient('alice');
     await auth(alice, { mode: 'register', nick: 'alice', password: 'достаточно-длинный', device: 'Mac' });

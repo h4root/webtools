@@ -207,14 +207,15 @@ export class Hub {
   private revokeSession(client: Client, id: string): void {
     if (!this.auth?.revokeSession(client.nick!, id)) return;
 
+    const lower = client.nick!.toLowerCase();
     for (const peer of [...this.clients]) {
-      if (peer === client || peer.nick?.toLowerCase() !== client.nick!.toLowerCase()) continue;
+      if (peer.nick?.toLowerCase() !== lower) continue;
       if (this.auth.sessionIdFor(peer.token)) continue;
       peer.send({ type: 'logged-out', reason: 'Сессия отозвана' });
       this.leave(peer);
       peer.close?.();
     }
-    this.sendSessions(client);
+    if (this.clients.has(client)) this.sendSessions(client);
   }
 
   private disconnectOthers(nick: string, client: Client, reason: string): void {
