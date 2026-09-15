@@ -315,6 +315,7 @@ function shutdown(): void {
   store.flush();
   clearInterval(heartbeat);
   clearInterval(sweeper);
+  clearInterval(accountSweeper);
   for (const ws of wss.clients) ws.close();
   for (const ws of dropWss.clients) ws.close();
   server.close(() => process.exit(0));
